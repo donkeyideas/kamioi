@@ -33,7 +33,6 @@ import { TutorialProvider } from './context/TutorialContext'
 import GoogleAnalyticsTracker from './components/common/GoogleAnalyticsTracker'
 import NotificationManager from './components/common/NotificationManager'
 import AdminRoute from './components/AdminRoute'
-import ClearAuthButton from './components/ClearAuthButton'
 
 // 🚀 PERFORMANCE FIX: React Query client for caching and request deduplication
 const queryClient = new QueryClient({
@@ -368,7 +367,6 @@ function App() {
                       v7_relativeSplatPath: true
                     }}
                   >
-                    <ClearAuthButton />
                     <Suspense fallback={<LoadingSpinner />}>
                       <AppRoutes />
                     </Suspense>
