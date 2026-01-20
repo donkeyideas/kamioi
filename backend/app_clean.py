@@ -5249,7 +5249,7 @@ def admin_financial_account_categories():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/admin/financial/transactions', methods={'GET'])
+@app.route('/api/admin/financial/transactions', methods=['GET'])
 def admin_financial_transactions():
     try:
         auth_header = request.headers.get('Authorization')
