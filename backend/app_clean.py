@@ -5278,7 +5278,36 @@ def admin_journal_entries_stub():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
-        return jsonify({'success': True, 'data': {'entries': []}})
+        return jsonify({
+            'success': True,
+            'data': {
+                'journal_entries': [],
+                'total_entries': 0
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/receipts/llm-mappings', methods=['GET'])
+def receipts_llm_mappings():
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 5, type=int)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'mappings': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'pages': 0
+            }
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
