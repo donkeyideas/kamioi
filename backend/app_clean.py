@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, make_response
 from flask_cors import CORS, cross_origin
 import sqlite3
 import os
@@ -59,7 +59,15 @@ CORS(
 @app.before_request
 def handle_cors_preflight():
     if request.method == 'OPTIONS':
-        return ('', 200)
+        response = make_response('', 200)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Admin-Token, X-User-Token, X-Requested-With, Accept, Origin'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
 # Normalize user token format (token_ -> user_token_)
 @app.before_request
