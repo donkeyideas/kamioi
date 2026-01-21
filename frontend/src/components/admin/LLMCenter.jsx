@@ -1530,55 +1530,81 @@ const LLMCenter = () => {
         })
       }, 2000)
 
+      // Create FormData with file
+      const formData = new FormData()
+      formData.append('file', file)
+
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       // Add cache-busting parameter to force fresh request and bypass Cloudflare cache
       const cacheBuster = `?t=${Date.now()}`
-      const response = await fetch(`${apiBaseUrl}/api/admin/bulk-upload${cacheBuster}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData,
-        cache: 'no-cache',
-        mode: 'cors'
-      })
-
-      clearInterval(progressInterval)
-
-      const result = await response.json()
-      if (result.success) {
-        // Support both data and stats fields for backward compatibility
-        const processed = result.data?.processed_rows || result.stats?.processed || 0
-        const errorCount = result.data?.error_count || result.data?.errors?.length || result.stats?.errors || 0
-        const processingTime = result.data?.processing_time || result.data?.processing_time_seconds || result.stats?.processing_time_seconds || 0
-        const rowsPerSecond = result.data?.rows_per_second || result.data?.records_per_second || result.stats?.records_per_second || 0
+      
+      // Use XMLHttpRequest as fallback to avoid CORS preflight issues with fetch
+      const xhr = new XMLHttpRequest()
+      
+      // Set up response handler
+      xhr.onload = function() {
+        clearInterval(progressInterval)
         
-        setGlassModal({ 
-          isOpen: true, 
-          title: 'Bulk Upload Complete!', 
-          message: `Upload completed successfully!
-          
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const result = JSON.parse(xhr.responseText)
+          if (result.success) {
+            const processed = result.data?.processed_rows || result.stats?.processed || 0
+            const errorCount = result.data?.error_count || result.data?.errors?.length || result.stats?.errors || 0
+            const processingTime = result.data?.processing_time || result.data?.processing_time_seconds || result.stats?.processing_time_seconds || 0
+            const rowsPerSecond = result.data?.rows_per_second || result.data?.records_per_second || result.stats?.records_per_second || 0
+            
+            setGlassModal({ 
+              isOpen: true, 
+              title: 'Bulk Upload Complete!', 
+              message: `Upload completed successfully!
+              
 Processed: ${processed.toLocaleString()} rows
 Time: ${processingTime}s
 Speed: ${rowsPerSecond.toLocaleString()} rows/sec
 Errors: ${errorCount}`, 
-          type: 'success' 
-        })
-        setShowBulkUpload(false)
-        await fetchLLMData() // Refresh data
-      } else {
+              type: 'success' 
+            })
+            setShowBulkUpload(false)
+            fetchLLMData() // Refresh data
+          } else {
+            setGlassModal({ 
+              isOpen: true, 
+              title: 'Error', 
+              message: result.error, 
+              type: 'error' 
+            })
+          }
+        } else {
+          setGlassModal({ 
+            isOpen: true, 
+            title: 'Error', 
+            message: `Upload failed with status ${xhr.status}`, 
+            type: 'error' 
+          })
+        }
+      }
+      
+      xhr.onerror = function() {
+        clearInterval(progressInterval)
         setGlassModal({ 
           isOpen: true, 
           title: 'Error', 
-          message: result.error, 
+          message: 'Network error occurred during upload', 
           type: 'error' 
         })
       }
+      
+      // Open connection and set headers
+      xhr.open('POST', `${apiBaseUrl}/api/admin/bulk-upload${cacheBuster}`, true)
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      
+      // Send request
+      xhr.send(formData)
     } catch (error) {
       setGlassModal({ 
         isOpen: true, 
         title: 'Error', 
-        message: 'Bulk upload failed', 
+        message: 'Bulk upload failed: ' + (error.message || 'Unknown error'), 
         type: 'error' 
       })
     }
