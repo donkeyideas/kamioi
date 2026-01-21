@@ -65,6 +65,18 @@ def handle_cors_preflight():
     if request.method == 'OPTIONS':
         return ('', 200)
 
+# Normalize user token format (token_ -> user_token_)
+@app.before_request
+def normalize_user_token():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return
+
+    token = auth_header.split(' ')[1]
+    if token.startswith('token_'):
+        user_id = token.replace('token_', '', 1)
+        request.environ['HTTP_AUTHORIZATION'] = f"Bearer user_token_{user_id}"
+
 # Admin dashboard overview
 @app.route('/api/admin/dashboard/overview', methods=['GET'])
 def admin_dashboard_overview():
