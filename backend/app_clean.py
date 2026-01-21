@@ -5450,15 +5450,62 @@ def auth_check_all():
         admin_token = request.headers.get('X-Admin-Token')
         user_token = request.headers.get('X-User-Token')
 
-        has_admin = bool(admin_token or (auth_header.startswith('Bearer ') and auth_header.split(' ')[1]))
-        has_user = bool(user_token and user_token != admin_token)
+        # Prefer explicit headers when provided
+        header_token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+        if header_token and not user_token and not admin_token:
+            # If only Authorization header present, treat it as user or admin token
+            if header_token.startswith('admin_token_'):
+                admin_token = header_token
+            else:
+                user_token = header_token
+
+        # Normalize user token format (token_ -> user_token_)
+        if user_token and user_token.startswith('token_'):
+            user_token = f"user_token_{user_token.replace('token_', '', 1)}"
+
+        has_user = False
+        user_data = None
+        has_admin = False
+        admin_data = None
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        if user_token and user_token.startswith('user_token_'):
+            user_id = user_token.replace('user_token_', '')
+            cursor.execute("SELECT id, email, name, role, account_type FROM users WHERE id = ?", (user_id,))
+            user = cursor.fetchone()
+            if user:
+                has_user = True
+                user_data = {
+                    'id': user['id'],
+                    'email': user['email'],
+                    'name': user['name'],
+                    'role': user['role'],
+                    'account_type': user['account_type']
+                }
+
+        if admin_token and admin_token.startswith('admin_token_'):
+            admin_id = admin_token.replace('admin_token_', '')
+            cursor.execute("SELECT id, email, name, role FROM admins WHERE id = ?", (admin_id,))
+            admin = cursor.fetchone()
+            if admin:
+                has_admin = True
+                admin_data = {
+                    'id': admin['id'],
+                    'email': admin['email'],
+                    'name': admin['name'],
+                    'role': admin['role']
+                }
+
+        conn.close()
 
         return jsonify({
             'success': True,
             'has_user': has_user,
-            'user': None,
+            'user': user_data,
             'has_admin': has_admin,
-            'admin': {'id': 1, 'role': 'admin', 'email': 'info@kamioi.com', 'name': 'Admin User'} if has_admin else None
+            'admin': admin_data
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
