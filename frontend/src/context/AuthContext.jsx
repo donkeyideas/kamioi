@@ -58,9 +58,19 @@ export const AuthProvider = ({ children }) => {
               console.log('?? AuthContext - Setting user from check-all:', data.user);
               setUser(data.user);
             } else if (userToken && !data.has_user) {
-              // User token exists but is invalid - clear it
-              console.log('?? AuthContext - User token invalid, clearing...');
-              clearToken(ROLES.USER);
+              // Try user token directly before clearing it
+              try {
+                const { data: meData } = await AuthAPI.meUser();
+                if (meData && meData.user) {
+                  setUser(meData.user);
+                } else {
+                  console.log('?? AuthContext - User token invalid, clearing...');
+                  clearToken(ROLES.USER);
+                }
+              } catch (error) {
+                console.log('?? AuthContext - User token invalid, clearing...');
+                clearToken(ROLES.USER);
+              }
             }
             
             // Set admin if token is valid

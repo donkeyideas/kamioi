@@ -1954,16 +1954,28 @@ def user_transactions():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
+        if token.startswith('token_'):
+            token = f"user_token_{token.replace('token_', '', 1)}"
+        if not token.startswith('user_token_'):
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
         user_id = token.replace('user_token_', '')
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
-            FROM transactions 
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        """, (user_id,))
+        try:
+            cursor.execute("""
+                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
+                FROM transactions 
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            """, (user_id,))
+        except sqlite3.OperationalError:
+            cursor.execute("""
+                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit
+                FROM transactions 
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            """, (user_id,))
         transactions = cursor.fetchall()
         conn.close()
         
@@ -1981,7 +1993,7 @@ def user_transactions():
                 'round_up': txn['round_up'],
                 'fee': txn['fee'],
                 'total_debit': txn['total_debit'],
-                'ticker': txn['ticker']
+                'ticker': txn['ticker'] if 'ticker' in txn.keys() else None
             })
         
         return jsonify({
