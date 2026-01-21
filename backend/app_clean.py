@@ -249,6 +249,50 @@ def initialize_database():
             cursor.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+        # Seed test users if missing (for demo/login verification)
+        test_users = [
+            {
+                'email': 'ind.test@kamioi.com',
+                'name': 'Individual Test',
+                'account_type': 'individual',
+                'role': 'individual'
+            },
+            {
+                'email': 'family.test@kamioi.com',
+                'name': 'Family Test',
+                'account_type': 'family',
+                'role': 'family'
+            },
+            {
+                'email': 'business.test@kamioi.com',
+                'name': 'Business Test',
+                'account_type': 'business',
+                'role': 'business'
+            }
+        ]
+
+        for test_user in test_users:
+            cursor.execute("SELECT id FROM users WHERE email = ?", (test_user['email'],))
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT INTO users (email, password, name, role, account_type, round_up_amount, risk_tolerance,
+                                       investment_goals, terms_agreed, privacy_agreed, marketing_agreed, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    test_user['email'],
+                    'Test@1234',
+                    test_user['name'],
+                    test_user['role'],
+                    test_user['account_type'],
+                    1.00,
+                    'moderate',
+                    '[]',
+                    1,
+                    1,
+                    0,
+                    datetime.now().isoformat()
+                ))
         
         # Create user_settings table if it doesn't exist
         cursor.execute("""
