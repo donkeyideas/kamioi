@@ -1537,7 +1537,15 @@ const LLMCenter = () => {
       const cacheBuster = `?t=${Date.now()}`
       const proxyUrl = `/api/admin/bulk-upload-v2${cacheBuster}`
       const directUrl = `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
-      const initialUrl = import.meta.env.PROD ? proxyUrl : directUrl
+      const prefersDirect = import.meta.env.PROD && file.size >= 3.5 * 1024 * 1024
+      const initialUrl = import.meta.env.PROD ? (prefersDirect ? directUrl : proxyUrl) : directUrl
+
+      const buildFormData = () => {
+        const payload = new FormData()
+        payload.append('file', file)
+        payload.append('admin_token', token)
+        return payload
+      }
 
       const sendBulkUpload = (url, allowRetry) => {
         const xhr = new XMLHttpRequest()
@@ -1548,10 +1556,11 @@ const LLMCenter = () => {
             setGlassModal({ 
               isOpen: true, 
               title: 'Retrying Upload', 
-              message: 'Proxy returned an error. Retrying direct upload...', 
+              message: 'Upload gateway error. Retrying with alternate route...', 
               type: 'info' 
             })
-            sendBulkUpload(directUrl, false)
+            const fallbackUrl = url === proxyUrl ? directUrl : proxyUrl
+            sendBulkUpload(fallbackUrl, false)
             return
           }
 
@@ -1601,10 +1610,11 @@ Errors: ${errorCount}`,
             setGlassModal({ 
               isOpen: true, 
               title: 'Retrying Upload', 
-              message: 'Proxy failed. Retrying direct upload...', 
+              message: 'Upload failed. Retrying with alternate route...', 
               type: 'info' 
             })
-            sendBulkUpload(directUrl, false)
+            const fallbackUrl = url === proxyUrl ? directUrl : proxyUrl
+            sendBulkUpload(fallbackUrl, false)
             return
           }
           clearInterval(progressInterval)
@@ -1618,7 +1628,7 @@ Errors: ${errorCount}`,
 
         // No Authorization header: token sent in formData to avoid CORS preflight (simple POST)
         xhr.open('POST', url, true)
-        xhr.send(formData)
+        xhr.send(buildFormData())
       }
 
       sendBulkUpload(initialUrl, true)
