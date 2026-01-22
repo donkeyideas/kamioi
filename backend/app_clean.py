@@ -181,40 +181,8 @@ def initialize_database():
     conn = get_db_connection()
     cursor = get_db_cursor(conn)
     
+    # Create tables first, then indexes
     try:
-        # OPTIMIZATION: Create indexes for LLM Center performance
-        print("Creating database indexes for performance optimization...")
-        
-        # Indexes for llm_mappings table (only if table exists)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_status ON llm_mappings(status)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_created_at ON llm_mappings(created_at)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_confidence ON llm_mappings(confidence)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_merchant_name ON llm_mappings(merchant_name)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_category ON llm_mappings(category)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_admin_approved ON llm_mappings(admin_approved)
-        """)
-        
-        # Composite indexes for common queries
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_mappings_status_created ON llm_mappings(status, created_at)
-        """)
-        
-        conn.commit()
-        print("✅ Database indexes created successfully")
-        
-    except Exception as e:
-        print(f"Warning: Could not create indexes: {e}")
     
     try:
         # Create users table if it doesn't exist (PostgreSQL syntax)
@@ -500,10 +468,56 @@ def initialize_database():
         """)
         
         conn.commit()
-        print("Database initialized successfully")
+        print("✅ Database tables created successfully")
+        
+        # Now create indexes (tables must exist first)
+        try:
+            print("Creating database indexes for performance optimization...")
+            
+            # Check if llm_mappings table exists before creating indexes
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'llm_mappings'
+                )
+            """)
+            if cursor.fetchone()[0]:
+                # Indexes for llm_mappings table
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_status ON llm_mappings(status)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_created_at ON llm_mappings(created_at)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_confidence ON llm_mappings(confidence)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_merchant_name ON llm_mappings(merchant_name)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_category ON llm_mappings(category)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_admin_approved ON llm_mappings(admin_approved)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_llm_mappings_status_created ON llm_mappings(status, created_at)
+                """)
+                conn.commit()
+                print("✅ Database indexes created successfully")
+        except Exception as index_error:
+            print(f"Warning: Could not create indexes: {index_error}")
+            conn.rollback()
+        
+        print("✅ Database initialized successfully")
         
     except Exception as e:
         print(f"Database initialization error: {e}")
+        import traceback
+        traceback.print_exc()
+        conn.rollback()
     finally:
         conn.close()
 
