@@ -5979,8 +5979,15 @@ def get_company_name_from_ticker(ticker_symbol):
 @cross_origin(origins='*', methods=['POST', 'OPTIONS'], allow_headers=['Content-Type', 'Authorization', 'X-Admin-Token', 'X-User-Token', 'X-Requested-With', 'Accept', 'Origin'])
 def admin_bulk_upload():
     try:
+        # Accept token from Authorization header OR form (form avoids CORS preflight)
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        form_token = request.form.get('admin_token', '').strip() if request.form else ''
+        token = None
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ', 1)[1].strip()
+        if not token and form_token:
+            token = form_token
+        if not token or not str(token).startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         # Check if file is present

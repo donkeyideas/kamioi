@@ -1487,9 +1487,6 @@ const LLMCenter = () => {
     const file = event.target.files[0]
     if (!file) return
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
       // Get authentication token with fallback
       const { getToken, ROLES } = await import('../../services/apiService')
@@ -1530,15 +1527,18 @@ const LLMCenter = () => {
         })
       }, 2000)
 
-      // Create FormData with file
+      // Create FormData with file and token (token in form avoids Authorization header → no CORS preflight)
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('admin_token', token)
 
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-      // Add cache-busting parameter to force fresh request and bypass Cloudflare cache
+      // Add cache-busting parameter to force fresh request and bypass CDN cache
       const cacheBuster = `?t=${Date.now()}`
+      const uploadUrl = import.meta.env.PROD
+        ? `/api/admin/bulk-upload-v2${cacheBuster}`
+        : `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
       
-      // Use XMLHttpRequest as fallback to avoid CORS preflight issues with fetch
       const xhr = new XMLHttpRequest()
       
       // Set up response handler
@@ -1594,12 +1594,8 @@ Errors: ${errorCount}`,
         })
       }
       
-      // Open connection and set headers
-      // Use v2 endpoint to bypass browser's cached CORS preflight
-      xhr.open('POST', `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`, true)
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-      
-      // Send request
+      // No Authorization header: token sent in formData to avoid CORS preflight (simple POST)
+      xhr.open('POST', uploadUrl, true)
       xhr.send(formData)
     } catch (error) {
       setGlassModal({ 
