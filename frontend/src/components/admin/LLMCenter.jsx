@@ -1535,68 +1535,93 @@ const LLMCenter = () => {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       // Add cache-busting parameter to force fresh request and bypass CDN cache
       const cacheBuster = `?t=${Date.now()}`
-      const uploadUrl = import.meta.env.PROD
-        ? `/api/admin/bulk-upload-v2${cacheBuster}`
-        : `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
-      
-      const xhr = new XMLHttpRequest()
-      
-      // Set up response handler
-      xhr.onload = function() {
-        clearInterval(progressInterval)
-        
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const result = JSON.parse(xhr.responseText)
-          if (result.success) {
-            const processed = result.data?.processed_rows || result.stats?.processed || 0
-            const errorCount = result.data?.error_count || result.data?.errors?.length || result.stats?.errors || 0
-            const processingTime = result.data?.processing_time || result.data?.processing_time_seconds || result.stats?.processing_time_seconds || 0
-            const rowsPerSecond = result.data?.rows_per_second || result.data?.records_per_second || result.stats?.records_per_second || 0
-            
+      const proxyUrl = `/api/admin/bulk-upload-v2${cacheBuster}`
+      const directUrl = `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
+      const initialUrl = import.meta.env.PROD ? proxyUrl : directUrl
+
+      const sendBulkUpload = (url, allowRetry) => {
+        const xhr = new XMLHttpRequest()
+
+        xhr.onload = function() {
+          const isGatewayError = xhr.status === 502 || xhr.status === 504
+          if (allowRetry && import.meta.env.PROD && isGatewayError) {
             setGlassModal({ 
               isOpen: true, 
-              title: 'Bulk Upload Complete!', 
-              message: `Upload completed successfully!
+              title: 'Retrying Upload', 
+              message: 'Proxy returned an error. Retrying direct upload...', 
+              type: 'info' 
+            })
+            sendBulkUpload(directUrl, false)
+            return
+          }
+
+          clearInterval(progressInterval)
+
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const result = JSON.parse(xhr.responseText)
+            if (result.success) {
+              const processed = result.data?.processed_rows || result.stats?.processed || 0
+              const errorCount = result.data?.error_count || result.data?.errors?.length || result.stats?.errors || 0
+              const processingTime = result.data?.processing_time || result.data?.processing_time_seconds || result.stats?.processing_time_seconds || 0
+              const rowsPerSecond = result.data?.rows_per_second || result.data?.records_per_second || result.stats?.records_per_second || 0
               
+              setGlassModal({ 
+                isOpen: true, 
+                title: 'Bulk Upload Complete!', 
+                message: `Upload completed successfully!
+                
 Processed: ${processed.toLocaleString()} rows
 Time: ${processingTime}s
 Speed: ${rowsPerSecond.toLocaleString()} rows/sec
 Errors: ${errorCount}`, 
-              type: 'success' 
-            })
-            setShowBulkUpload(false)
-            fetchLLMData() // Refresh data
+                type: 'success' 
+              })
+              setShowBulkUpload(false)
+              fetchLLMData() // Refresh data
+            } else {
+              setGlassModal({ 
+                isOpen: true, 
+                title: 'Error', 
+                message: result.error, 
+                type: 'error' 
+              })
+            }
           } else {
             setGlassModal({ 
               isOpen: true, 
               title: 'Error', 
-              message: result.error, 
+              message: `Upload failed with status ${xhr.status}`, 
               type: 'error' 
             })
           }
-        } else {
+        }
+
+        xhr.onerror = function() {
+          if (allowRetry && import.meta.env.PROD) {
+            setGlassModal({ 
+              isOpen: true, 
+              title: 'Retrying Upload', 
+              message: 'Proxy failed. Retrying direct upload...', 
+              type: 'info' 
+            })
+            sendBulkUpload(directUrl, false)
+            return
+          }
+          clearInterval(progressInterval)
           setGlassModal({ 
             isOpen: true, 
             title: 'Error', 
-            message: `Upload failed with status ${xhr.status}`, 
+            message: 'Network error occurred during upload', 
             type: 'error' 
           })
         }
+
+        // No Authorization header: token sent in formData to avoid CORS preflight (simple POST)
+        xhr.open('POST', url, true)
+        xhr.send(formData)
       }
-      
-      xhr.onerror = function() {
-        clearInterval(progressInterval)
-        setGlassModal({ 
-          isOpen: true, 
-          title: 'Error', 
-          message: 'Network error occurred during upload', 
-          type: 'error' 
-        })
-      }
-      
-      // No Authorization header: token sent in formData to avoid CORS preflight (simple POST)
-      xhr.open('POST', uploadUrl, true)
-      xhr.send(formData)
+
+      sendBulkUpload(initialUrl, true)
     } catch (error) {
       setGlassModal({ 
         isOpen: true, 
