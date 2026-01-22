@@ -513,10 +513,26 @@ initialize_database()
 # Health check
 @app.route('/api/health')
 def health():
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat()
-    })
+    try:
+        # Test database connection
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        conn.close()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 # Admin authentication
 @app.route('/api/admin/auth/login', methods=['POST'])
@@ -529,12 +545,21 @@ def admin_login():
         if not email or not password:
             return jsonify({'success': False, 'error': 'Email and password are required'}), 400
         
-        conn = get_db_connection()
-        cursor = get_db_cursor(conn)
+        try:
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+        except Exception as db_error:
+            print(f"Database connection error: {db_error}")
+            return jsonify({'success': False, 'error': f'Database connection failed: {str(db_error)}'}), 500
         
-        # Check admin table first
-        cursor.execute("SELECT id, email, name, role, password FROM admins WHERE email = %s", (email,))
-        admin = cursor.fetchone()
+        try:
+            # Check admin table first
+            cursor.execute("SELECT id, email, name, role, password FROM admins WHERE email = %s", (email,))
+            admin = cursor.fetchone()
+        except Exception as query_error:
+            print(f"Database query error: {query_error}")
+            conn.close()
+            return jsonify({'success': False, 'error': f'Database query failed: {str(query_error)}'}), 500
         
         if admin:
             # Admin found in admins table
@@ -559,7 +584,10 @@ def admin_login():
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Admin login error: {error_trace}")
+        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/api/admin/auth/me')
 def admin_auth_me():
