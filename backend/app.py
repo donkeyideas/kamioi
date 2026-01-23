@@ -16683,36 +16683,71 @@ def blog_posts():
     """Get blog posts for public consumption"""
     try:
         limit = request.args.get('limit', None, type=int)
+        category = request.args.get('category', None)
+        if category is not None and str(category).strip() == '':
+            category = None
+
+        def normalize_tags(raw_tags):
+            if not raw_tags:
+                return []
+            if isinstance(raw_tags, (list, tuple)):
+                return list(raw_tags)
+            if isinstance(raw_tags, str):
+                try:
+                    return json.loads(raw_tags)
+                except Exception:
+                    return []
+            return []
         
         conn = db_manager.get_connection()
-        cursor = conn.cursor()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
         
         # Get published blog posts from database
-        if limit:
-            cursor.execute("""
+        if use_postgresql:
+            from sqlalchemy import text
+            where_clauses = ["status = 'published'"]
+            params = {}
+            if category:
+                where_clauses.append("category = :category")
+                params['category'] = category
+            where_sql = " AND ".join(where_clauses)
+            query = f"""
                 SELECT id, title, slug, content, excerpt, featured_image, status, 
                        author_name, category, tags, seo_title, seo_description, 
                        seo_keywords, read_time, word_count, views, published_at, 
                        created_at, updated_at
                 FROM blog_posts 
-                WHERE status = 'published'
+                WHERE {where_sql}
                 ORDER BY published_at DESC
-                LIMIT ?
-            """, (limit,))
+            """
+            if limit:
+                query += " LIMIT :limit"
+                params['limit'] = limit
+            result = conn.execute(text(query), params)
+            posts = result.fetchall()
+            db_manager.release_connection(conn)
         else:
-            # If no limit specified, get all published posts
-            cursor.execute("""
+            cursor = conn.cursor()
+            where_clause = "WHERE status = 'published'"
+            params = []
+            if category:
+                where_clause += " AND category = ?"
+                params.append(category)
+            query = f"""
                 SELECT id, title, slug, content, excerpt, featured_image, status, 
                        author_name, category, tags, seo_title, seo_description, 
                        seo_keywords, read_time, word_count, views, published_at, 
                        created_at, updated_at
                 FROM blog_posts 
-                WHERE status = 'published'
+                {where_clause}
                 ORDER BY published_at DESC
-            """)
-        
-        posts = cursor.fetchall()
-        conn.close()
+            """
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            cursor.execute(query, params)
+            posts = cursor.fetchall()
+            conn.close()
         
         # Format the posts for public consumption
         blog_posts = []
@@ -16727,7 +16762,7 @@ def blog_posts():
                 'status': post[6],
                 'author': post[7] or 'Admin',
                 'category': post[8] or '',
-                'tags': json.loads(post[9]) if post[9] else [],
+                'tags': normalize_tags(post[9]),
                 'seo_title': post[10] or '',
                 'seo_description': post[11] or '',
                 'seo_keywords': post[12] or '',
@@ -16755,29 +16790,63 @@ def blog_posts():
 def get_blog_post(slug):
     """Get a single blog post by slug for public consumption"""
     try:
+        def normalize_tags(raw_tags):
+            if not raw_tags:
+                return []
+            if isinstance(raw_tags, (list, tuple)):
+                return list(raw_tags)
+            if isinstance(raw_tags, str):
+                try:
+                    return json.loads(raw_tags)
+                except Exception:
+                    return []
+            return []
+
         conn = db_manager.get_connection()
-        cursor = conn.cursor()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
         
-        # Get blog post by slug
-        cursor.execute("""
-            SELECT id, title, slug, content, excerpt, featured_image, status, 
-                   author_name, category, tags, seo_title, seo_description, 
-                   seo_keywords, read_time, word_count, views, published_at, 
-                   created_at, updated_at
-            FROM blog_posts 
-            WHERE slug = ? AND status = 'published'
-        """, (slug,))
-        
-        post = cursor.fetchone()
-        
-        if not post:
+        if use_postgresql:
+            from sqlalchemy import text
+            result = conn.execute(text("""
+                SELECT id, title, slug, content, excerpt, featured_image, status, 
+                       author_name, category, tags, seo_title, seo_description, 
+                       seo_keywords, read_time, word_count, views, published_at, 
+                       created_at, updated_at
+                FROM blog_posts 
+                WHERE slug = :slug AND status = 'published'
+            """), {'slug': slug})
+            post = result.fetchone()
+            
+            if not post:
+                db_manager.release_connection(conn)
+                return jsonify({'success': False, 'error': 'Blog post not found'}), 404
+            
+            conn.execute(text("UPDATE blog_posts SET views = COALESCE(views, 0) + 1 WHERE id = :post_id"), {'post_id': post[0]})
+            conn.commit()
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            
+            # Get blog post by slug
+            cursor.execute("""
+                SELECT id, title, slug, content, excerpt, featured_image, status, 
+                       author_name, category, tags, seo_title, seo_description, 
+                       seo_keywords, read_time, word_count, views, published_at, 
+                       created_at, updated_at
+                FROM blog_posts 
+                WHERE slug = ? AND status = 'published'
+            """, (slug,))
+            
+            post = cursor.fetchone()
+            
+            if not post:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Blog post not found'}), 404
+            
+            # Increment view count
+            cursor.execute("UPDATE blog_posts SET views = views + 1 WHERE id = ?", (post[0],))
+            conn.commit()
             conn.close()
-            return jsonify({'success': False, 'error': 'Blog post not found'}), 404
-        
-        # Increment view count
-        cursor.execute("UPDATE blog_posts SET views = views + 1 WHERE id = ?", (post[0],))
-        conn.commit()
-        conn.close()
         
         # Format the post for public consumption
         blog_post = {
@@ -16790,7 +16859,7 @@ def get_blog_post(slug):
             'status': post[6],
             'author': post[7] or 'Admin',
             'category': post[8] or '',
-            'tags': json.loads(post[9]) if post[9] else [],
+            'tags': normalize_tags(post[9]),
             'seo_title': post[10] or '',
             'seo_description': post[11] or '',
             'seo_keywords': post[12] or '',

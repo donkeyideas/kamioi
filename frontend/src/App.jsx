@@ -347,7 +347,8 @@ const AppRoutes = () => {
         <Route path="/dashboard/unknown/*" element={<Navigate to="/login" replace />} />
         <Route path="/dashboard/unknown" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
-        <Route path="/tx-test" element={<TransactionsTest />} />`r`n</Routes>
+        <Route path="/tx-test" element={<TransactionsTest />} />
+      </Routes>
     </div>
   )
 }
