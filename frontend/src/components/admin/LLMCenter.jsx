@@ -94,6 +94,9 @@ const getCompanyNameFromTicker = (ticker) => {
 const LLMCenter = () => {
   const { addNotification } = useNotifications()
   const queryClient = useQueryClient() // 🚀 PERFORMANCE FIX: For cache invalidation
+  const backendBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+  const proxyBaseUrl = import.meta.env.PROD ? '' : backendBaseUrl
+  const buildApiUrl = (path) => (proxyBaseUrl ? `${proxyBaseUrl}${path}` : path)
   
   // State management
   const [activeTab, setActiveTab] = useState('flow')
@@ -293,16 +296,13 @@ const LLMCenter = () => {
       }
 
       // First, try to fetch from dedicated automation endpoints
-      const apiBaseUrl = import.meta.env.PROD
-        ? ''
-        : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111')
       const [realTimeRes, batchRes, learningRes, merchantRes, thresholdRes, multiModelRes] = await Promise.allSettled([
-        fetch(`${apiBaseUrl}/api/admin/llm-center/automation/realtime`, { headers }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/automation/batch`, { headers }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/automation/learning`, { headers }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/automation/merchants`, { headers }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/automation/thresholds`, { headers }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/automation/multi-model`, { headers })
+        fetch(buildApiUrl('/api/admin/llm-center/automation/realtime'), { headers }),
+        fetch(buildApiUrl('/api/admin/llm-center/automation/batch'), { headers }),
+        fetch(buildApiUrl('/api/admin/llm-center/automation/learning'), { headers }),
+        fetch(buildApiUrl('/api/admin/llm-center/automation/merchants'), { headers }),
+        fetch(buildApiUrl('/api/admin/llm-center/automation/thresholds'), { headers }),
+        fetch(buildApiUrl('/api/admin/llm-center/automation/multi-model'), { headers })
       ])
 
       // Update state with fetched data if endpoints exist
@@ -579,11 +579,9 @@ const LLMCenter = () => {
         }
       }
       
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-      
       // Try aggregated endpoint first
       try {
-        const response = await fetch(`${apiBaseUrl}/api/admin/llm-center/dashboard`, {
+        const response = await fetch(buildApiUrl('/api/admin/llm-center/dashboard'), {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -602,13 +600,13 @@ const LLMCenter = () => {
       
       // Fallback: Fetch individual endpoints
       const [mappingsRes, analyticsRes, assetsRes] = await Promise.allSettled([
-        fetch(`${apiBaseUrl}/api/admin/llm-center/mappings?status=pending&limit=7`, {
+        fetch(buildApiUrl('/api/admin/llm-center/mappings?status=pending&limit=7'), {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/analytics`, {
+        fetch(buildApiUrl('/api/admin/llm-center/analytics'), {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`${apiBaseUrl}/api/admin/llm-center/data-assets`, {
+        fetch(buildApiUrl('/api/admin/llm-center/data-assets'), {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ])
@@ -767,7 +765,7 @@ const LLMCenter = () => {
         search: search
       })
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-center/mappings?${params}`, {
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mappings?${params}`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -816,7 +814,7 @@ const LLMCenter = () => {
         'Content-Type': 'application/json'
       }
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-center/dashboard`, { headers })
+      const response = await fetch(buildApiUrl('/api/admin/llm-center/dashboard'), { headers })
       if (!response.ok) return null
       
       const data = await response.json()
@@ -956,7 +954,7 @@ const LLMCenter = () => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-center/mapping/${mapping.id}`, {
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mapping/${mapping.id}`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -1034,7 +1032,7 @@ const LLMCenter = () => {
     
     try {
       const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('adminToken') || 'admin_token_3'
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-center/mapping/${mappingId}/delete`, {
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mapping/${mappingId}/delete`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1083,7 +1081,7 @@ const LLMCenter = () => {
     
     try {
       const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('adminToken') || 'admin_token_3'
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-center/mapping/${selectedMapping.id}/update`, {
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mapping/${selectedMapping.id}/update`), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1178,7 +1176,7 @@ const LLMCenter = () => {
         return
       }
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-center/mappings?search=${encodeURIComponent(searchQuery)}&limit=10&page=${pageNum}&t=${Date.now()}`, {
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mappings?search=${encodeURIComponent(searchQuery)}&limit=10&page=${pageNum}&t=${Date.now()}`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -1447,7 +1445,7 @@ const LLMCenter = () => {
       })
       
       const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3' || 'admin_token_3' || 'admin_token_3'
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/llm-mappings/remove-duplicates`, {
+      const response = await fetch(buildApiUrl('/api/admin/llm-mappings/remove-duplicates'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1529,12 +1527,11 @@ const LLMCenter = () => {
         })
       }, 2000)
 
-      const apiBaseUrl = import.meta.env.PROD
-        ? ''
-        : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111')
       // Add cache-busting parameter to force fresh request and bypass CDN cache
       const cacheBuster = `?t=${Date.now()}`
-      const uploadUrl = `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
+      const proxyUrl = buildApiUrl(`/api/admin/bulk-upload-v2${cacheBuster}`)
+      const directUrl = `${backendBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
+      const initialUrl = import.meta.env.PROD ? proxyUrl : directUrl
 
       const buildFormData = () => {
         const payload = new FormData()
@@ -1544,12 +1541,9 @@ const LLMCenter = () => {
       }
 
       const buildProgressUrl = (jobId) => {
-        const baseUrl = import.meta.env.PROD
-          ? ''
-          : apiBaseUrl
         const safeJobId = encodeURIComponent(jobId)
         const safeToken = encodeURIComponent(token)
-        return `${baseUrl}/api/admin/bulk-upload/progress?job_id=${safeJobId}&admin_token=${safeToken}`
+        return buildApiUrl(`/api/admin/bulk-upload/progress?job_id=${safeJobId}&admin_token=${safeToken}`)
       }
 
       const startProgressPolling = (jobId) => {
@@ -1613,10 +1607,22 @@ Errors: ${errorCount}`,
         poll()
       }
 
-      const sendBulkUpload = (url) => {
+      const sendBulkUpload = (url, allowRetry) => {
         const xhr = new XMLHttpRequest()
 
         xhr.onload = function() {
+          const isGatewayError = xhr.status === 502 || xhr.status === 504
+          if (allowRetry && import.meta.env.PROD && isGatewayError) {
+            setGlassModal({ 
+              isOpen: true, 
+              title: 'Error', 
+              message: 'Upload gateway error. Please retry in a moment.', 
+              type: 'error' 
+            })
+            clearInterval(progressInterval)
+            return
+          }
+
           clearInterval(progressInterval)
 
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -1687,6 +1693,16 @@ Errors: ${errorCount}`,
         }
 
         xhr.onerror = function() {
+          if (allowRetry && import.meta.env.PROD) {
+            clearInterval(progressInterval)
+            setGlassModal({ 
+              isOpen: true, 
+              title: 'Error', 
+              message: 'Upload failed. Please retry in a moment.', 
+              type: 'error' 
+            })
+            return
+          }
           clearInterval(progressInterval)
           setGlassModal({ 
             isOpen: true, 
@@ -1701,7 +1717,7 @@ Errors: ${errorCount}`,
         xhr.send(buildFormData())
       }
 
-      sendBulkUpload(uploadUrl)
+      sendBulkUpload(initialUrl, true)
     } catch (error) {
       setGlassModal({ 
         isOpen: true, 
@@ -2553,10 +2569,9 @@ Errors: ${errorCount}`,
       
       console.log('🔑 LLMCenter - Using token:', token ? `${token.substring(0, 10)}...` : 'NONE')
       
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       // 🚀 FIX: Use backend pagination instead of fetching all and paginating client-side
       const itemsPerPage = 5
-      const url = `${apiBaseUrl}/api/receipts/llm-mappings?page=${receiptMappingsCurrentPage}&limit=${itemsPerPage}`
+      const url = buildApiUrl(`/api/receipts/llm-mappings?page=${receiptMappingsCurrentPage}&limit=${itemsPerPage}`)
       
       // Add timeout to prevent hanging - increased to 30 seconds for slow queries
       const controller = new AbortController()
@@ -4206,8 +4221,7 @@ Errors: ${errorCount}`,
                         timestamp: new Date()
                       })
 
-                      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-                      const url = `${apiBaseUrl}/api/admin/llm-center/process-mapping/${selectedMapping.id}`
+                      const url = buildApiUrl(`/api/admin/llm-center/process-mapping/${selectedMapping.id}`)
                       console.log('📡 Making API call to:', url)
                       
                       // Add timeout to prevent hanging
@@ -4278,8 +4292,7 @@ Errors: ${errorCount}`,
                             
                             console.log('🔄 Refresh token available:', !!token)
                             
-                            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-                            const refreshResponse = await fetch(`${apiBaseUrl}/api/admin/llm-center/mapping/${selectedMapping.id}`, {
+                            const refreshResponse = await fetch(buildApiUrl(`/api/admin/llm-center/mapping/${selectedMapping.id}`), {
                               headers: {
                                 'Authorization': `Bearer ${token}`,
                                 'Content-Type': 'application/json'
@@ -4430,8 +4443,7 @@ Errors: ${errorCount}`,
                       timestamp: new Date()
                     })
 
-                    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-                    const url = `${apiBaseUrl}/api/admin/llm-center/process-mapping/${mappingId}`
+                    const url = buildApiUrl(`/api/admin/llm-center/process-mapping/${mappingId}`)
                     console.log('📡 Making API call to:', url)
                     
                     // Add timeout to prevent hanging

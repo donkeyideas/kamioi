@@ -110,8 +110,8 @@ def _process_bulk_upload_job(job_id, file_path):
 
         csv_reader = csv.DictReader(io.StringIO(file_content))
 
-        # OPTIMIZED: Process in much larger batches for maximum speed
-        batch_size = 100000  # Increased from 50k for faster bulk insert
+        # OPTIMIZED: Process in larger batches with execute_values for speed
+        batch_size = 20000  # Balanced size for faster inserts and progress updates
         processed_rows = 0
         errors = []
 
@@ -209,12 +209,12 @@ def _process_bulk_upload_job(job_id, file_path):
                     psycopg2.extras.execute_values(
                         cursor,
                         '''
-                        INSERT INTO llm_mappings
+                        INSERT INTO llm_mappings 
                         (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
                         VALUES %s
                         ''',
                         batch_data,
-                        page_size=batch_size
+                        page_size=5000
                     )
                     conn.commit()
                     batch_data = []
@@ -239,12 +239,12 @@ def _process_bulk_upload_job(job_id, file_path):
             psycopg2.extras.execute_values(
                 cursor,
                 '''
-                INSERT INTO llm_mappings
+                INSERT INTO llm_mappings 
                 (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
                 VALUES %s
                 ''',
                 batch_data,
-                page_size=len(batch_data)
+                page_size=min(5000, len(batch_data))
             )
             conn.commit()
 
