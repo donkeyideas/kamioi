@@ -293,7 +293,9 @@ const LLMCenter = () => {
       }
 
       // First, try to fetch from dedicated automation endpoints
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const apiBaseUrl = import.meta.env.PROD
+        ? ''
+        : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111')
       const [realTimeRes, batchRes, learningRes, merchantRes, thresholdRes, multiModelRes] = await Promise.allSettled([
         fetch(`${apiBaseUrl}/api/admin/llm-center/automation/realtime`, { headers }),
         fetch(`${apiBaseUrl}/api/admin/llm-center/automation/batch`, { headers }),
@@ -1527,13 +1529,12 @@ const LLMCenter = () => {
         })
       }, 2000)
 
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const apiBaseUrl = import.meta.env.PROD
+        ? ''
+        : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111')
       // Add cache-busting parameter to force fresh request and bypass CDN cache
       const cacheBuster = `?t=${Date.now()}`
-      const proxyUrl = `/api/admin/bulk-upload-v2${cacheBuster}`
-      const directUrl = `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
-      const prefersDirect = import.meta.env.PROD && file.size >= 3.5 * 1024 * 1024
-      const initialUrl = import.meta.env.PROD ? (prefersDirect ? directUrl : proxyUrl) : directUrl
+      const uploadUrl = `${apiBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
 
       const buildFormData = () => {
         const payload = new FormData()
@@ -1612,23 +1613,10 @@ Errors: ${errorCount}`,
         poll()
       }
 
-      const sendBulkUpload = (url, allowRetry) => {
+      const sendBulkUpload = (url) => {
         const xhr = new XMLHttpRequest()
 
         xhr.onload = function() {
-          const isGatewayError = xhr.status === 502 || xhr.status === 504
-          if (allowRetry && import.meta.env.PROD && isGatewayError) {
-            setGlassModal({ 
-              isOpen: true, 
-              title: 'Retrying Upload', 
-              message: 'Upload gateway error. Retrying with alternate route...', 
-              type: 'info' 
-            })
-            const fallbackUrl = url === proxyUrl ? directUrl : proxyUrl
-            sendBulkUpload(fallbackUrl, false)
-            return
-          }
-
           clearInterval(progressInterval)
 
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -1699,17 +1687,6 @@ Errors: ${errorCount}`,
         }
 
         xhr.onerror = function() {
-          if (allowRetry && import.meta.env.PROD) {
-            setGlassModal({ 
-              isOpen: true, 
-              title: 'Retrying Upload', 
-              message: 'Upload failed. Retrying with alternate route...', 
-              type: 'info' 
-            })
-            const fallbackUrl = url === proxyUrl ? directUrl : proxyUrl
-            sendBulkUpload(fallbackUrl, false)
-            return
-          }
           clearInterval(progressInterval)
           setGlassModal({ 
             isOpen: true, 
@@ -1724,7 +1701,7 @@ Errors: ${errorCount}`,
         xhr.send(buildFormData())
       }
 
-      sendBulkUpload(initialUrl, true)
+      sendBulkUpload(uploadUrl)
     } catch (error) {
       setGlassModal({ 
         isOpen: true, 

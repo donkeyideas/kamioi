@@ -111,7 +111,7 @@ def _process_bulk_upload_job(job_id, file_path):
         csv_reader = csv.DictReader(io.StringIO(file_content))
 
         # OPTIMIZED: Process in much larger batches for maximum speed
-        batch_size = 50000  # Increased from 5000 for 10x speed improvement
+        batch_size = 100000  # Increased from 50k for faster bulk insert
         processed_rows = 0
         errors = []
 
@@ -206,11 +206,16 @@ def _process_bulk_upload_job(job_id, file_path):
 
                 # Process batch when it reaches batch_size
                 if len(batch_data) >= batch_size:
-                    cursor.executemany('''
-                        INSERT INTO llm_mappings 
+                    psycopg2.extras.execute_values(
+                        cursor,
+                        '''
+                        INSERT INTO llm_mappings
                         (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', batch_data)
+                        VALUES %s
+                        ''',
+                        batch_data,
+                        page_size=batch_size
+                    )
                     conn.commit()
                     batch_data = []
 
@@ -231,11 +236,16 @@ def _process_bulk_upload_job(job_id, file_path):
 
         # Process remaining batch
         if batch_data:
-            cursor.executemany('''
-                INSERT INTO llm_mappings 
+            psycopg2.extras.execute_values(
+                cursor,
+                '''
+                INSERT INTO llm_mappings
                 (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ''', batch_data)
+                VALUES %s
+                ''',
+                batch_data,
+                page_size=len(batch_data)
+            )
             conn.commit()
 
         # Close connection

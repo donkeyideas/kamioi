@@ -345,11 +345,17 @@ export const DataProvider = ({ children }) => {
 
   // Background polling for automatic transaction syncing
   useEffect(() => {
+    const demoToken = localStorage.getItem('kamioi_demo_token')
     const userToken = getToken(ROLES.USER)
     const adminToken = getToken(ROLES.ADMIN)
     
     if (!userToken && !adminToken) {
       return // No user logged in, no need to poll
+    }
+
+    // Skip user transaction polling for admin-only sessions
+    if (adminToken && !userToken && !demoToken) {
+      return
     }
 
     console.log('DataContext - Starting background polling for automatic transaction sync')
