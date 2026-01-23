@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Moon, Sun, Link, Settings as SettingsIcon, User, Bell, Shield, FileText, Cloud, Calendar, MapPin, CreditCard, Trash2, Plus, Download, Eye, EyeOff, Filter } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'

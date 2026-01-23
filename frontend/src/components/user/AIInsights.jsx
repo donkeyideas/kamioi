@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Brain, TrendingUp, CheckCircle, XCircle, Clock, Star, Target, BarChart3, Trophy, Users, Zap, ShoppingBag, Upload, Filter, User, X } from 'lucide-react'
 import CompanyLogo from '../common/CompanyLogo'
 import { useTheme } from '../../context/ThemeContext'

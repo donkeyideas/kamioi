@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react'
+import React, { useState } from 'react'
 import { ArrowUpRight, TrendingUp, PieChart, DollarSign, MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react'
 import RechartsChart from '../common/RechartsChart'
 import UserAnalytics from './UserAnalytics'

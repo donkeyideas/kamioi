@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Brain, Zap, Target, TrendingUp, Upload, Shield, RefreshCw, Lightbulb } from 'lucide-react'
 import RechartsChart from '../common/RechartsChart'
 import { useData } from '../../context/DataContext'

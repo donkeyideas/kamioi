@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Settings, Save, DollarSign, Users, Building2, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 

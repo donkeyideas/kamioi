@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { LayoutDashboard, DollarSign, FileText, Brain, Users, Settings, Bell, Award, Megaphone, Globe, CreditCard, Zap, MessageSquare, Database, LogOut, Home, Building2, UserCog, TrendingUp, Cog, GripVertical, BookOpen, Activity, User } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import prefetchRegistry from '../../services/prefetchRegistry'

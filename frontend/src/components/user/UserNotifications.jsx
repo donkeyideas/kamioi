@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Bell, CheckCircle, AlertTriangle, Info, X } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useNotifications } from '../../hooks/useNotifications'
