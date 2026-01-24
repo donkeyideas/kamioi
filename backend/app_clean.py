@@ -6988,33 +6988,25 @@ def admin_bulk_upload():
 
 
 # =============================================================================
-# FAST BULK UPLOAD - Uses PostgreSQL COPY for 50-100x faster imports
+# FAST BULK UPLOAD - Memory-efficient version for Render's 512MB limit
+# Uses streaming to disk instead of loading everything into RAM
 # =============================================================================
 
 def _process_fast_bulk_upload(job_id, file_path):
     """
-    FAST bulk upload using PostgreSQL COPY command.
-    Expected speed: 50,000-100,000 rows/sec (vs 824 rows/sec with INSERT)
+    Memory-efficient bulk upload using PostgreSQL COPY command.
+    Streams data to a temp file instead of loading into memory.
+    Works within Render's 512MB memory limit.
     """
-    import io
     import csv
 
     start_time = time.time()
     _update_bulk_upload_job(job_id, status='processing', started_at=start_time, method='COPY')
+    copy_temp_path = None
 
     try:
         print(f"[FastBulkUpload] Starting job {job_id}")
-
-        # Read and pre-process the CSV
-        try:
-            with open(file_path, 'rb') as f:
-                content = f.read().decode('utf-8')
-        except UnicodeDecodeError:
-            with open(file_path, 'rb') as f:
-                content = f.read().decode('utf-8', errors='ignore')
-
-        # Parse CSV and prepare data for COPY
-        reader = csv.DictReader(io.StringIO(content))
+        print(f"[FastBulkUpload] Using STREAMING mode (memory-efficient)")
 
         # Helper for flexible column names
         def get_col(row, *names):
@@ -7026,66 +7018,74 @@ def _process_fast_bulk_upload(job_id, file_path):
                         return row[k].strip() if row[k] else ''
             return ''
 
-        # Pre-process all rows into COPY format
-        print(f"[FastBulkUpload] Pre-processing CSV data...")
-        rows_buffer = io.StringIO()
-        writer = csv.writer(rows_buffer, delimiter='\t', quoting=csv.QUOTE_MINIMAL)
-
+        # Stream CSV to a temp file in COPY format (uses disk, not RAM)
+        print(f"[FastBulkUpload] Streaming CSV to COPY format...")
         row_count = 0
         errors = []
 
-        for row in reader:
-            row_count += 1
-            try:
-                merchant_name = get_col(row, 'Merchant Name', 'merchant_name', 'merchant', 'name')
-                if not merchant_name:
-                    errors.append(f"Row {row_count}: Missing merchant name")
+        # Create temp file for COPY data
+        copy_temp_path = file_path + '.copy'
+
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile, \
+             open(copy_temp_path, 'w', encoding='utf-8', newline='') as outfile:
+
+            reader = csv.DictReader(infile)
+            writer = csv.writer(outfile, delimiter='\t', quoting=csv.QUOTE_MINIMAL)
+
+            for row in reader:
+                row_count += 1
+                try:
+                    merchant_name = get_col(row, 'Merchant Name', 'merchant_name', 'merchant', 'name')
+                    if not merchant_name:
+                        errors.append(f"Row {row_count}: Missing merchant name")
+                        continue
+
+                    # Handle confidence
+                    confidence_str = get_col(row, 'Confidence', 'confidence', 'conf', 'score') or '0'
+                    try:
+                        if confidence_str.endswith('%'):
+                            confidence = float(confidence_str[:-1]) / 100.0
+                        else:
+                            confidence = float(confidence_str) if confidence_str else 0.0
+                    except:
+                        confidence = 0.0
+
+                    ticker = get_col(row, 'Ticker Symbol', 'ticker_symbol', 'ticker', 'symbol')
+                    company = get_col(row, 'Company Name', 'company_name', 'company') or get_company_name_from_ticker(ticker)
+                    category = get_col(row, 'Category', 'category', 'cat', 'type')
+                    notes = get_col(row, 'Notes', 'notes', 'note', 'description')
+
+                    # Write tab-separated row for COPY
+                    writer.writerow([
+                        merchant_name,
+                        category,
+                        notes,
+                        ticker,
+                        confidence,
+                        'approved',
+                        1,  # admin_approved
+                        'admin_fast_upload',
+                        company
+                    ])
+
+                    # Progress update every 100K rows
+                    if row_count % 100000 == 0:
+                        print(f"[FastBulkUpload] Streamed {row_count:,} rows...")
+                        _update_bulk_upload_job(job_id, processed_rows=row_count)
+
+                except Exception as e:
+                    errors.append(f"Row {row_count}: {str(e)}")
                     continue
 
-                # Handle confidence
-                confidence_str = get_col(row, 'Confidence', 'confidence', 'conf', 'score') or '0'
-                try:
-                    if confidence_str.endswith('%'):
-                        confidence = float(confidence_str[:-1]) / 100.0
-                    else:
-                        confidence = float(confidence_str) if confidence_str else 0.0
-                except:
-                    confidence = 0.0
-
-                ticker = get_col(row, 'Ticker Symbol', 'ticker_symbol', 'ticker', 'symbol')
-                company = get_col(row, 'Company Name', 'company_name', 'company') or get_company_name_from_ticker(ticker)
-                category = get_col(row, 'Category', 'category', 'cat', 'type')
-                notes = get_col(row, 'Notes', 'notes', 'note', 'description')
-
-                # Write tab-separated row for COPY
-                writer.writerow([
-                    merchant_name,
-                    category,
-                    notes,
-                    ticker,
-                    confidence,
-                    'approved',
-                    1,  # admin_approved
-                    'admin_fast_upload',
-                    company
-                ])
-
-            except Exception as e:
-                errors.append(f"Row {row_count}: {str(e)}")
-                continue
-
-        print(f"[FastBulkUpload] Pre-processed {row_count:,} rows")
+        print(f"[FastBulkUpload] Streamed {row_count:,} rows to temp file")
         _update_bulk_upload_job(job_id, total_rows=row_count, phase='copying')
 
-        # Reset buffer position for reading
-        rows_buffer.seek(0)
-
-        # Connect and use COPY command
+        # Connect to database
         conn = get_db_connection()
         cursor = conn.cursor()
 
         # Drop indexes temporarily for faster insert
-        print(f"[FastBulkUpload] Temporarily dropping indexes...")
+        print(f"[FastBulkUpload] Dropping indexes...")
         index_drop_start = time.time()
         try:
             cursor.execute("DROP INDEX IF EXISTS idx_llm_admin_approved")
@@ -7104,17 +7104,18 @@ def _process_fast_bulk_upload(job_id, file_path):
             print(f"[FastBulkUpload] Index drop warning: {idx_err}")
             conn.rollback()
 
-        # Use COPY FROM for maximum speed
+        # Use COPY FROM file (stream from disk)
         print(f"[FastBulkUpload] Starting COPY command...")
         copy_start = time.time()
 
-        cursor.copy_expert(
-            """
-            COPY llm_mappings (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
-            FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', QUOTE '"', NULL '')
-            """,
-            rows_buffer
-        )
+        with open(copy_temp_path, 'r', encoding='utf-8') as copy_file:
+            cursor.copy_expert(
+                """
+                COPY llm_mappings (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
+                FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', QUOTE '"', NULL '')
+                """,
+                copy_file
+            )
         conn.commit()
 
         copy_time = time.time() - copy_start
@@ -7180,9 +7181,14 @@ def _process_fast_bulk_upload(job_id, file_path):
             finished_at=end_time
         )
     finally:
-        # Clean up temp file
+        # Clean up temp files
         try:
             os.unlink(file_path)
+        except:
+            pass
+        try:
+            if copy_temp_path:
+                os.unlink(copy_temp_path)
         except:
             pass
 
