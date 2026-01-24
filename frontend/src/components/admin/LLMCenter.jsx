@@ -182,6 +182,8 @@ const LLMCenter = () => {
   const [selectedMapping, setSelectedMapping] = useState(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showManualSubmit, setShowManualSubmit] = useState(false)
+  const [skipIndexes, setSkipIndexes] = useState(false)
+  const [rebuildingIndexes, setRebuildingIndexes] = useState(false)
   const [filters, setFilters] = useState({
     category: '',
     confidence: '',
@@ -1529,6 +1531,9 @@ const LLMCenter = () => {
         const payload = new FormData()
         payload.append('file', file)
         payload.append('admin_token', token)
+        if (skipIndexes) {
+          payload.append('skip_indexes', '1')
+        }
         return payload
       }
 
@@ -1783,6 +1788,70 @@ Errors: ${errorCount}`,
     }
   }
 
+  // Rebuild indexes after skip_indexes upload
+  const handleRebuildIndexes = async () => {
+    try {
+      const { getToken, ROLES } = await import('../../services/apiService')
+      const token = getToken(ROLES.ADMIN) ||
+                   localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+
+      if (!token) {
+        setGlassModal({
+          isOpen: true,
+          title: 'Authentication Error',
+          message: 'No authentication token found',
+          type: 'error'
+        })
+        return
+      }
+
+      setRebuildingIndexes(true)
+      setGlassModal({
+        isOpen: true,
+        title: 'Rebuilding Indexes',
+        message: 'Creating database indexes... This may take a minute for large datasets.',
+        type: 'info'
+      })
+
+      const response = await fetch(buildApiUrl('/api/admin/llm-center/rebuild-indexes'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+      setRebuildingIndexes(false)
+
+      if (result.success) {
+        const created = result.data?.created?.length || 0
+        const elapsed = result.data?.elapsed_seconds || 0
+        setGlassModal({
+          isOpen: true,
+          title: 'Indexes Rebuilt',
+          message: `Successfully created ${created} indexes in ${elapsed}s. Search and filtering are now optimized.`,
+          type: 'success'
+        })
+      } else {
+        setGlassModal({
+          isOpen: true,
+          title: 'Error',
+          message: result.error || 'Failed to rebuild indexes',
+          type: 'error'
+        })
+      }
+    } catch (error) {
+      setRebuildingIndexes(false)
+      setGlassModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Failed to rebuild indexes: ' + (error.message || 'Unknown error'),
+        type: 'error'
+      })
+    }
+  }
+
   const handleManualSubmitForm = async (event) => {
     event.preventDefault()
     const formData = new FormData(event.target)
@@ -1791,11 +1860,11 @@ Errors: ${errorCount}`,
     try {
       // Get authentication token with fallback
       const { getToken, ROLES } = await import('../../services/apiService')
-      const token = getToken(ROLES.ADMIN) || 
-                   localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3' || 'admin_token_3' || 
-                   localStorage.getItem('kamioi_token') || 
+      const token = getToken(ROLES.ADMIN) ||
+                   localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3' || 'admin_token_3' ||
+                   localStorage.getItem('kamioi_token') ||
                    localStorage.getItem('authToken')
-      
+
       if (!token) {
         setGlassModal({ 
           isOpen: true, 
@@ -4744,10 +4813,49 @@ Errors: ${errorCount}`,
                 </label>
               </div>
               
+              {/* Speed Options */}
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                <h4 className="text-yellow-400 font-medium mb-2">Speed Options:</h4>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={skipIndexes}
+                    onChange={(e) => setSkipIndexes(e.target.checked)}
+                    className="w-4 h-4 accent-yellow-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    <strong>Skip Index Rebuild</strong> (~2x faster upload)
+                    <span className="text-gray-500 ml-1">- Rebuild indexes separately after upload completes</span>
+                  </span>
+                </label>
+                {skipIndexes && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      onClick={handleRebuildIndexes}
+                      disabled={rebuildingIndexes}
+                      className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-600/50 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                    >
+                      {rebuildingIndexes ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          Rebuilding...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4" />
+                          Rebuild Indexes Now
+                        </>
+                      )}
+                    </button>
+                    <span className="text-xs text-gray-500">Use after upload is complete</span>
+                  </div>
+                )}
+              </div>
+
               <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
                 <h4 className="text-green-400 font-medium mb-2">Note:</h4>
                 <p className="text-sm text-gray-300">
-                  Bulk uploads are processed directly to the database as <strong>approved mappings</strong>. 
+                  Bulk uploads are processed directly to the database as <strong>approved mappings</strong>.
                   This bypasses the normal approval process for high-volume data ingestion.
                 </p>
               </div>

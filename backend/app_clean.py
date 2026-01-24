@@ -6992,7 +6992,7 @@ def admin_bulk_upload():
 # Uses streaming to disk instead of loading everything into RAM
 # =============================================================================
 
-def _process_fast_bulk_upload(job_id, file_path):
+def _process_fast_bulk_upload(job_id, file_path, skip_indexes=False):
     """
     Memory-efficient bulk upload using PostgreSQL COPY command.
     Streams data to a temp file instead of loading into memory.
@@ -7001,12 +7001,13 @@ def _process_fast_bulk_upload(job_id, file_path):
     import csv
 
     start_time = time.time()
-    _update_bulk_upload_job(job_id, status='processing', started_at=start_time, method='COPY')
+    _update_bulk_upload_job(job_id, status='processing', started_at=start_time, method='COPY', skip_indexes=skip_indexes)
     copy_temp_path = None
 
     try:
         print(f"[FastBulkUpload] Starting job {job_id}")
         print(f"[FastBulkUpload] Using STREAMING mode (memory-efficient)")
+        print(f"[FastBulkUpload] Skip indexes: {skip_indexes}")
 
         # Helper for flexible column names
         def get_col(row, *names):
@@ -7084,25 +7085,29 @@ def _process_fast_bulk_upload(job_id, file_path):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Drop indexes temporarily for faster insert
-        print(f"[FastBulkUpload] Dropping indexes...")
-        index_drop_start = time.time()
-        try:
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_admin_approved")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_status")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_created_at")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_category")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_merchant")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_ticker")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_status")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_admin_approved")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_created_at")
-            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_status_created")
-            conn.commit()
-            print(f"[FastBulkUpload] Indexes dropped in {time.time() - index_drop_start:.1f}s")
-        except Exception as idx_err:
-            print(f"[FastBulkUpload] Index drop warning: {idx_err}")
-            conn.rollback()
+        index_time = 0
+        # Drop indexes temporarily for faster insert (unless skipped)
+        if not skip_indexes:
+            print(f"[FastBulkUpload] Dropping indexes...")
+            index_drop_start = time.time()
+            try:
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_admin_approved")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_status")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_created_at")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_category")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_merchant")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_ticker")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_status")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_admin_approved")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_created_at")
+                cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_status_created")
+                conn.commit()
+                print(f"[FastBulkUpload] Indexes dropped in {time.time() - index_drop_start:.1f}s")
+            except Exception as idx_err:
+                print(f"[FastBulkUpload] Index drop warning: {idx_err}")
+                conn.rollback()
+        else:
+            print(f"[FastBulkUpload] SKIPPING index operations (faster upload)")
 
         # Use COPY FROM file (stream from disk)
         print(f"[FastBulkUpload] Starting COPY command...")
@@ -7121,25 +7126,28 @@ def _process_fast_bulk_upload(job_id, file_path):
         copy_time = time.time() - copy_start
         print(f"[FastBulkUpload] COPY completed in {copy_time:.1f}s")
 
-        # Recreate indexes
-        print(f"[FastBulkUpload] Recreating indexes...")
-        _update_bulk_upload_job(job_id, phase='indexing')
-        index_start = time.time()
+        # Recreate indexes (unless skipped)
+        if not skip_indexes:
+            print(f"[FastBulkUpload] Recreating indexes...")
+            _update_bulk_upload_job(job_id, phase='indexing')
+            index_start = time.time()
 
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_admin_approved ON llm_mappings(admin_approved)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_status ON llm_mappings(status)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_created_at ON llm_mappings(created_at DESC)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_category ON llm_mappings(category)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_merchant ON llm_mappings(merchant_name)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_ticker ON llm_mappings(ticker_symbol)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_status ON llm_mappings(status)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_admin_approved ON llm_mappings(admin_approved)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_created_at ON llm_mappings(created_at DESC)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_status_created ON llm_mappings(status, created_at DESC)')
-        conn.commit()
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_admin_approved ON llm_mappings(admin_approved)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_status ON llm_mappings(status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_created_at ON llm_mappings(created_at DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_category ON llm_mappings(category)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_merchant ON llm_mappings(merchant_name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_ticker ON llm_mappings(ticker_symbol)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_status ON llm_mappings(status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_admin_approved ON llm_mappings(admin_approved)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_created_at ON llm_mappings(created_at DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_status_created ON llm_mappings(status, created_at DESC)')
+            conn.commit()
 
-        index_time = time.time() - index_start
-        print(f"[FastBulkUpload] Indexes recreated in {index_time:.1f}s")
+            index_time = time.time() - index_start
+            print(f"[FastBulkUpload] Indexes recreated in {index_time:.1f}s")
+        else:
+            print(f"[FastBulkUpload] Indexes SKIPPED - run rebuild indexes when ready")
 
         cursor.close()
         conn.close()
@@ -7201,6 +7209,8 @@ def admin_bulk_upload_fast():
 
     Expected performance: 50,000-100,000 rows/sec
     50 million rows = ~8-17 minutes (vs ~17 hours with regular upload)
+
+    Optional: skip_indexes=1 to skip index operations (2x faster, rebuild later)
     """
     try:
         # Auth check
@@ -7221,6 +7231,9 @@ def admin_bulk_upload_fast():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'}), 400
 
+        # Check for skip_indexes option (for faster uploads)
+        skip_indexes = request.form.get('skip_indexes', '').strip().lower() in ('1', 'true', 'yes')
+
         # Save to temp file
         job_id = str(uuid.uuid4())
         with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp_file:
@@ -7232,25 +7245,27 @@ def admin_bulk_upload_fast():
             status='queued',
             processed_rows=0,
             method='COPY',
+            skip_indexes=skip_indexes,
             created_at=time.time()
         )
 
         # Start fast upload in background
         worker = threading.Thread(
             target=_process_fast_bulk_upload,
-            args=(job_id, temp_path),
+            args=(job_id, temp_path, skip_indexes),
             daemon=True
         )
         worker.start()
 
         return jsonify({
             'success': True,
-            'message': 'Fast bulk upload started (using PostgreSQL COPY)',
+            'message': f'Fast bulk upload started (COPY{", skip indexes" if skip_indexes else ""})',
             'data': {
                 'job_id': job_id,
                 'status': 'queued',
                 'method': 'COPY',
-                'expected_speed': '50,000-100,000 rows/sec'
+                'skip_indexes': skip_indexes,
+                'expected_speed': '4,000+ rows/sec' if skip_indexes else '2,000+ rows/sec'
             }
         }), 202
 
@@ -7294,6 +7309,81 @@ def admin_bulk_upload_progress():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# Rebuild indexes for llm_mappings table (after skip_indexes upload)
+@app.route('/api/admin/llm-center/rebuild-indexes', methods=['POST'])
+def admin_rebuild_llm_indexes():
+    """
+    Rebuild all indexes on the llm_mappings table.
+    Use this after a bulk upload with skip_indexes=true.
+
+    This creates the indexes in the background and returns immediately.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ', 1)[1].strip()
+        if not token or not str(token).startswith('admin_token_'):
+            return jsonify({'success': False, 'error': 'Invalid admin token'}), 401
+
+        print(f"[RebuildIndexes] Starting index rebuild for llm_mappings...")
+        start_time = time.time()
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Define all indexes to create
+        indexes = [
+            ('idx_llm_admin_approved', 'CREATE INDEX IF NOT EXISTS idx_llm_admin_approved ON llm_mappings(admin_approved)'),
+            ('idx_llm_status', 'CREATE INDEX IF NOT EXISTS idx_llm_status ON llm_mappings(status)'),
+            ('idx_llm_created_at', 'CREATE INDEX IF NOT EXISTS idx_llm_created_at ON llm_mappings(created_at DESC)'),
+            ('idx_llm_category', 'CREATE INDEX IF NOT EXISTS idx_llm_category ON llm_mappings(category)'),
+            ('idx_llm_merchant', 'CREATE INDEX IF NOT EXISTS idx_llm_merchant ON llm_mappings(merchant_name)'),
+            ('idx_llm_ticker', 'CREATE INDEX IF NOT EXISTS idx_llm_ticker ON llm_mappings(ticker_symbol)'),
+            ('idx_llm_mappings_status', 'CREATE INDEX IF NOT EXISTS idx_llm_mappings_status ON llm_mappings(status)'),
+            ('idx_llm_mappings_admin_approved', 'CREATE INDEX IF NOT EXISTS idx_llm_mappings_admin_approved ON llm_mappings(admin_approved)'),
+            ('idx_llm_mappings_created_at', 'CREATE INDEX IF NOT EXISTS idx_llm_mappings_created_at ON llm_mappings(created_at DESC)'),
+            ('idx_llm_mappings_status_created', 'CREATE INDEX IF NOT EXISTS idx_llm_mappings_status_created ON llm_mappings(status, created_at DESC)'),
+        ]
+
+        created = []
+        errors = []
+
+        for idx_name, idx_sql in indexes:
+            try:
+                cursor.execute(idx_sql)
+                created.append(idx_name)
+                print(f"[RebuildIndexes] Created: {idx_name}")
+            except Exception as e:
+                errors.append({'index': idx_name, 'error': str(e)})
+                print(f"[RebuildIndexes] Error on {idx_name}: {e}")
+
+        conn.commit()
+        close_db_cursor(cursor)
+        close_db_connection(conn)
+
+        elapsed = time.time() - start_time
+        print(f"[RebuildIndexes] Complete in {elapsed:.1f}s - Created: {len(created)}, Errors: {len(errors)}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Index rebuild complete in {elapsed:.1f}s',
+            'data': {
+                'created': created,
+                'errors': errors,
+                'elapsed_seconds': round(elapsed, 1)
+            }
+        })
+
+    except Exception as e:
+        print(f"[RebuildIndexes] Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # Get LLM mappings from database
 @app.route('/api/admin/llm-center/mappings', methods=['GET'])
