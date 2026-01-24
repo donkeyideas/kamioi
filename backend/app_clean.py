@@ -1295,34 +1295,34 @@ def admin_employee_operations(employee_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Check if employee exists
-        cursor.execute("SELECT id, email FROM admins WHERE id = ?", (employee_id,))
+        # Check if employee exists - PostgreSQL uses %s placeholders
+        cursor.execute("SELECT id, email FROM admins WHERE id = %s", (employee_id,))
         employee = cursor.fetchone()
-        
+
         if not employee:
             conn.close()
             return jsonify({'success': False, 'error': 'Employee not found'}), 404
-        
+
         if request.method == 'DELETE':
-            # Delete the employee
-            cursor.execute("DELETE FROM admins WHERE id = ?", (employee_id,))
+            # Delete the employee - PostgreSQL uses %s placeholders
+            cursor.execute("DELETE FROM admins WHERE id = %s", (employee_id,))
             conn.commit()
             conn.close()
-            
+
             return jsonify({
                 'success': True,
                 'message': f'Employee {employee[1]} deleted successfully'
             })
-        
+
         elif request.method == 'PUT':
             # Update employee
             data = request.get_json()
-            
-            # Update employee data
+
+            # Update employee data - PostgreSQL uses %s placeholders
             cursor.execute('''
-                UPDATE admins 
-                SET email = ?, name = ?, role = ?, permissions = ?
-                WHERE id = ?
+                UPDATE admins
+                SET email = %s, name = %s, role = %s, permissions = %s
+                WHERE id = %s
             ''', (
                 data.get('email'),
                 data.get('name'),
@@ -1330,13 +1330,13 @@ def admin_employee_operations(employee_id):
                 json.dumps(data.get('permissions', {})),
                 employee_id
             ))
-            
+
             # Update password if provided
             if data.get('password'):
                 cursor.execute('''
-                    UPDATE admins 
-                    SET password = ? 
-                    WHERE id = ?
+                    UPDATE admins
+                    SET password = %s
+                    WHERE id = %s
                 ''', (data.get('password'), employee_id))
             
             conn.commit()
@@ -1402,28 +1402,28 @@ def admin_llm_queue():
         # Get total count
         cursor.execute('SELECT COUNT(*) FROM llm_mappings')
         total_items = cursor.fetchone()[0]
-        
-        # Get pending count (status = 'pending')
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status = ?', ('pending',))
+
+        # Get pending count (status = 'pending') - PostgreSQL uses %s placeholders
+        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status = %s', ('pending',))
         pending_count = cursor.fetchone()[0]
-        
-        # Get processing count (status = 'processing')
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status = ?', ('processing',))
+
+        # Get processing count (status = 'processing') - PostgreSQL uses %s placeholders
+        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status = %s', ('processing',))
         processing_count = cursor.fetchone()[0]
-        
-        # Get completed count (status = 'approved' or 'completed')
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status IN (?, ?)', ('approved', 'completed'))
+
+        # Get completed count (status = 'approved' or 'completed') - PostgreSQL uses %s
+        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status IN (%s, %s)', ('approved', 'completed'))
         completed_count = cursor.fetchone()[0]
-        
-        # Get recent queue items with proper date handling
+
+        # Get recent queue items with proper date handling - PostgreSQL uses %s
         limit = int(request.args.get('limit', 10))
         cursor.execute('''
-            SELECT id, transaction_id, merchant_name, ticker, category, confidence, 
-                   status, admin_approved, ai_processed, company_name, user_id, 
+            SELECT id, transaction_id, merchant_name, ticker, category, confidence,
+                   status, admin_approved, ai_processed, company_name, user_id,
                    created_at, notes, ticker_symbol, admin_id, processed_at
-            FROM llm_mappings 
-            ORDER BY created_at DESC 
-            LIMIT ?
+            FROM llm_mappings
+            ORDER BY created_at DESC
+            LIMIT %s
         ''', (limit,))
         
         queue_items = []
@@ -2802,36 +2802,39 @@ def user_profile():
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, email, role, created_at FROM users WHERE id = ?", (user_id,))
+            # PostgreSQL uses %s placeholders
+            cursor.execute("SELECT id, name, email, role, created_at FROM users WHERE id = %s", (user_id,))
             user = cursor.fetchone()
             conn.close()
-            
+
             if user:
+                # psycopg2 returns tuples: (id, name, email, role, created_at)
                 return jsonify({
                     'success': True,
                     'profile': {
-                        'id': user['id'],
-                        'name': user['name'],
-                        'email': user['email'],
-                        'role': user['role'],
-                        'created_at': user['created_at']
+                        'id': user[0],
+                        'name': user[1],
+                        'email': user[2],
+                        'role': user[3],
+                        'created_at': str(user[4]) if user[4] else None
                     }
                 })
             else:
                 return jsonify({'success': False, 'error': 'User not found'}), 404
-        
+
         elif request.method == 'PUT':
             data = request.get_json() or {}
             name = data.get('fullName', '').strip() or data.get('name', '').strip()
             email = data.get('email', '').strip().lower()
             round_up_preference = data.get('roundUpPreference', 1)
-            
+
             if not name or not email:
                 return jsonify({'success': False, 'error': 'Name and email are required'}), 400
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET name = ?, email = ?, round_up_amount = ? WHERE id = ?", 
+            # PostgreSQL uses %s placeholders
+            cursor.execute("UPDATE users SET name = %s, email = %s, round_up_amount = %s WHERE id = %s",
                          (name, email, round_up_preference, user_id))
             conn.commit()
             conn.close()
@@ -2943,6 +2946,42 @@ def user_ai_recommendations():
             ]
         })
         
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/subscriptions', methods=['GET'])
+def user_subscriptions():
+    """Stub endpoint for user subscriptions - returns empty for now"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        return jsonify({
+            'success': True,
+            'subscription': None,
+            'has_subscription': False,
+            'message': 'No active subscription'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/bank-connections', methods=['GET'])
+def user_bank_connections():
+    """Stub endpoint for user bank connections - returns empty for now"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        return jsonify({
+            'success': True,
+            'connections': [],
+            'has_connections': False,
+            'message': 'No bank connections linked'
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -3241,31 +3280,32 @@ def family_login():
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Check users table for family role
-        cursor.execute("SELECT id, email, name, role, password FROM users WHERE email = ? AND role = 'family'", (email,))
+
+        # Check users table for family role - PostgreSQL uses %s placeholders
+        cursor.execute("SELECT id, email, name, role, password FROM users WHERE email = %s AND role = 'family'", (email,))
         user = cursor.fetchone()
-        
+
         if user:
-            # Family user found
-            if user['password'] == password:  # Simple password check for now
-                token = f"family_token_{user['id']}"
+            # psycopg2 returns tuples: (id, email, name, role, password)
+            from werkzeug.security import check_password_hash
+            if check_password_hash(user[4], password):  # user[4] is password
+                token = f"family_token_{user[0]}"  # user[0] is id
                 conn.close()
-                
+
                 return jsonify({
                     'success': True,
                     'token': token,
                     'user': {
-                        'id': user['id'],
-                        'email': user['email'],
-                        'name': user['name'],
-                        'role': user['role']
+                        'id': user[0],
+                        'email': user[1],
+                        'name': user[2],
+                        'role': user[3]
                     }
                 })
-        
+
         conn.close()
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -3275,32 +3315,34 @@ def family_auth_me():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
         if not token.startswith('family_token_'):
             return jsonify({'success': False, 'error': 'Invalid token format'}), 401
-        
+
         user_id = token.replace('family_token_', '')
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, email, name, role FROM users WHERE id = ? AND role = 'family'", (user_id,))
+        # PostgreSQL uses %s placeholders
+        cursor.execute("SELECT id, email, name, role FROM users WHERE id = %s AND role = 'family'", (user_id,))
         user = cursor.fetchone()
         conn.close()
-        
+
         if user:
+            # psycopg2 returns tuples: (id, email, name, role)
             return jsonify({
                 'success': True,
                 'user': {
-                    'id': user['id'],
-                    'email': user['email'],
-                    'name': user['name'],
-                    'role': user['role']
+                    'id': user[0],
+                    'email': user[1],
+                    'name': user[2],
+                    'role': user[3]
                 }
             })
         else:
             return jsonify({'success': False, 'error': 'Family user not found'}), 404
-            
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -3311,7 +3353,7 @@ def family_transactions():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
         # Handle both user_token_ and family_token_ prefixes
         if token.startswith('family_token_'):
@@ -3320,34 +3362,36 @@ def family_transactions():
             family_id = token.replace('user_token_', '')
         else:
             return jsonify({'success': False, 'error': 'Invalid token format'}), 401
-        
+
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
+            # PostgreSQL uses %s placeholders
             cursor.execute("""
                 SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
-                FROM transactions 
-                WHERE user_id = ? OR user_id = ?
+                FROM transactions
+                WHERE user_id = %s OR user_id = %s
                 ORDER BY created_at DESC
             """, (family_id, f"user_{family_id}"))
             transactions = cursor.fetchall()
             conn.close()
-            
+
             transaction_list = []
             for txn in transactions:
+                # psycopg2 returns tuples: (id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker)
                 transaction_list.append({
-                    'id': txn['id'],
-                    'amount': txn['amount'],
-                    'status': txn['status'],
-                    'created_at': txn['created_at'],
-                    'description': txn['description'],
-                    'merchant': txn['merchant'],
-                    'category': txn['category'],
-                    'date': txn['date'],
-                    'round_up': txn['round_up'],
-                    'fee': txn['fee'],
-                    'total_debit': txn['total_debit'],
-                    'ticker': txn['ticker']
+                    'id': txn[0],
+                    'amount': txn[1],
+                    'status': txn[2],
+                    'created_at': str(txn[3]) if txn[3] else None,
+                    'description': txn[4],
+                    'merchant': txn[5],
+                    'category': txn[6],
+                    'date': str(txn[7]) if txn[7] else None,
+                    'round_up': txn[8],
+                    'fee': txn[9],
+                    'total_debit': txn[10],
+                    'ticker': txn[11]
                 })
             
             return jsonify({
@@ -3371,33 +3415,35 @@ def family_transactions():
             # Get user's flat investment preference and account type
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT role FROM users WHERE id = ?", (family_id,))
+            # PostgreSQL uses %s placeholders
+            cursor.execute("SELECT role FROM users WHERE id = %s", (family_id,))
             user_data = cursor.fetchone()
             flat_investment = 1.0  # Default round-up amount
-            account_type = user_data['role'] if user_data else 'family'
-            
+            # psycopg2 returns tuples
+            account_type = user_data[0] if user_data else 'family'
+
             # Calculate flat investment amount (always the same regardless of purchase amount)
             investment_amount = float(flat_investment)
             fee = calculate_fee_for_account_type(account_type, investment_amount)
             total_debit = amount + investment_amount + fee
-            
-            # Insert transaction
+
+            # Insert transaction - PostgreSQL uses %s placeholders
             cursor.execute("""
                 INSERT INTO transactions (user_id, amount, merchant, category, date, description, round_up, fee, total_debit, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
             """, (family_id, amount, merchant, category, date, description, investment_amount, fee, total_debit, datetime.now().isoformat()))
-            
+
             transaction_id = cursor.lastrowid
-            
+
             # Auto-process with AI mapping
             ai_result = auto_process_transaction(cursor, family_id, description, merchant)
-            
-            # Update transaction with AI results
+
+            # Update transaction with AI results - PostgreSQL uses %s
             if ai_result and ai_result['confidence'] > 0.8:
                 cursor.execute("""
-                    UPDATE transactions 
-                    SET category = ?, merchant = ?, status = 'mapped', ticker = ?
-                    WHERE id = ?
+                    UPDATE transactions
+                    SET category = %s, merchant = %s, status = 'mapped', ticker = %s
+                    WHERE id = %s
                 """, (ai_result['category'], ai_result['merchant'], ai_result['suggestedTicker'], transaction_id))
             
             conn.commit()
@@ -3437,15 +3483,15 @@ def family_portfolio():
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get family portfolio summary
-        cursor.execute("SELECT COUNT(*) FROM transactions WHERE user_id = ? AND status = 'mapped'", (family_id,))
+
+        # Get family portfolio summary - PostgreSQL uses %s placeholders
+        cursor.execute("SELECT COUNT(*) FROM transactions WHERE user_id = %s AND status = 'mapped'", (family_id,))
         total_investments = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT SUM(round_up) FROM transactions WHERE user_id = ? AND status = 'mapped'", (family_id,))
+
+        cursor.execute("SELECT SUM(round_up) FROM transactions WHERE user_id = %s AND status = 'mapped'", (family_id,))
         total_roundups = cursor.fetchone()[0] or 0
-        
-        cursor.execute("SELECT SUM(fee) FROM transactions WHERE user_id = ?", (family_id,))
+
+        cursor.execute("SELECT SUM(fee) FROM transactions WHERE user_id = %s", (family_id,))
         total_fees = cursor.fetchone()[0] or 0
         
         conn.close()
@@ -3477,25 +3523,27 @@ def family_notifications():
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        # PostgreSQL uses %s placeholders
         cursor.execute("""
             SELECT id, title, message, type, created_at, read
-            FROM notifications 
-            WHERE user_id = ?
+            FROM notifications
+            WHERE user_id = %s
             ORDER BY created_at DESC
             LIMIT 50
         """, (family_id,))
         notifications = cursor.fetchall()
         conn.close()
-        
+
         notification_list = []
         for notif in notifications:
+            # psycopg2 returns tuples: (id, title, message, type, created_at, read)
             notification_list.append({
-                'id': notif['id'],
-                'title': notif['title'],
-                'message': notif['message'],
-                'type': notif['type'],
-                'created_at': notif['created_at'],
-                'read': bool(notif['read'])
+                'id': notif[0],
+                'title': notif[1],
+                'message': notif[2],
+                'type': notif[3],
+                'created_at': str(notif[4]) if notif[4] else None,
+                'read': bool(notif[5])
             })
         
         return jsonify({
@@ -3534,23 +3582,25 @@ def family_roundups():
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        # PostgreSQL uses %s placeholders
         cursor.execute("""
             SELECT id, amount, round_up, created_at, description
-            FROM transactions 
-            WHERE user_id = ? AND round_up > 0
+            FROM transactions
+            WHERE user_id = %s AND round_up > 0
             ORDER BY created_at DESC
         """, (family_id,))
         roundups = cursor.fetchall()
         conn.close()
-        
+
         roundup_list = []
         for rup in roundups:
+            # psycopg2 returns tuples: (id, amount, round_up, created_at, description)
             roundup_list.append({
-                'id': rup['id'],
-                'amount': rup['amount'],
-                'round_up': rup['round_up'],
-                'created_at': rup['created_at'],
-                'description': rup['description']
+                'id': rup[0],
+                'amount': rup[1],
+                'round_up': rup[2],
+                'created_at': str(rup[3]) if rup[3] else None,
+                'description': rup[4]
             })
         
         return jsonify({
@@ -3573,23 +3623,25 @@ def family_fees():
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        # PostgreSQL uses %s placeholders
         cursor.execute("""
             SELECT id, amount, fee, created_at, description
-            FROM transactions 
-            WHERE user_id = ? AND fee > 0
+            FROM transactions
+            WHERE user_id = %s AND fee > 0
             ORDER BY created_at DESC
         """, (family_id,))
         fees = cursor.fetchall()
         conn.close()
-        
+
         fee_list = []
-        for fee in fees:
+        for fee_row in fees:
+            # psycopg2 returns tuples: (id, amount, fee, created_at, description)
             fee_list.append({
-                'id': fee['id'],
-                'amount': fee['amount'],
-                'fee': fee['fee'],
-                'created_at': fee['created_at'],
-                'description': fee['description']
+                'id': fee_row[0],
+                'amount': fee_row[1],
+                'fee': fee_row[2],
+                'created_at': str(fee_row[3]) if fee_row[3] else None,
+                'description': fee_row[4]
             })
         
         return jsonify({
@@ -3606,19 +3658,22 @@ def family_ai_insights():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
+        token = auth_header.split(' ')[1]
+        family_id = token.replace('family_token_', '')
+
         # Get family-submitted mappings from database
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get family's mapping history
+
+        # Get family's mapping history - PostgreSQL uses %s placeholders
         cursor.execute('''
-            SELECT id, merchant_name, ticker_symbol, category, status, 
+            SELECT id, merchant_name, ticker_symbol, category, status,
                    admin_approved, confidence, notes, created_at, processed_at
-            FROM llm_mappings 
-            WHERE user_id = ? AND dashboard_type = 'family'
+            FROM llm_mappings
+            WHERE user_id = %s AND dashboard_type = 'family'
             ORDER BY created_at DESC
-        ''', (user_id,))
+        ''', (family_id,))
         
         mappings = cursor.fetchall()
         conn.close()
@@ -3698,37 +3753,40 @@ def family_profile():
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, email, role, created_at FROM users WHERE id = ?", (family_id,))
+            # PostgreSQL uses %s placeholders
+            cursor.execute("SELECT id, name, email, role, created_at FROM users WHERE id = %s", (family_id,))
             user = cursor.fetchone()
             conn.close()
-            
+
             if user:
+                # psycopg2 returns tuples: (id, name, email, role, created_at)
                 return jsonify({
                     'success': True,
                     'profile': {
-                        'id': user['id'],
-                        'name': user['name'],
-                        'email': user['email'],
-                        'role': user['role'],
-                        'created_at': user['created_at'],
+                        'id': user[0],
+                        'name': user[1],
+                        'email': user[2],
+                        'role': user[3],
+                        'created_at': str(user[4]) if user[4] else None,
                         'family_size': 0,
                         'family_members': []
                     }
                 })
             else:
                 return jsonify({'success': False, 'error': 'Family not found'}), 404
-        
+
         elif request.method == 'PUT':
             data = request.get_json() or {}
             name = data.get('name', '').strip()
             email = data.get('email', '').strip().lower()
-            
+
             if not name or not email:
                 return jsonify({'success': False, 'error': 'Name and email are required'}), 400
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET name = ?, email = ? WHERE id = ?", (name, email, family_id))
+            # PostgreSQL uses %s placeholders
+            cursor.execute("UPDATE users SET name = %s, email = %s WHERE id = %s", (name, email, family_id))
             conn.commit()
             conn.close()
             
@@ -3779,13 +3837,13 @@ def family_settings():
             budget_alerts = bool(data.get('budget_alerts', False))
             spending_limits = data.get('spending_limits', {})
             
-            # Update user's round-up amount
+            # Update user's round-up amount - PostgreSQL uses %s placeholders
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET round_up_amount = ? WHERE id = ?", (roundup_multiplier, family_id))
+            cursor.execute("UPDATE users SET round_up_amount = %s WHERE id = %s", (roundup_multiplier, family_id))
             conn.commit()
             conn.close()
-            
+
             return jsonify({'success': True, 'message': 'Family settings updated successfully'})
         
     except Exception as e:
@@ -3938,31 +3996,32 @@ def business_login():
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Check users table for business role
-        cursor.execute("SELECT id, email, name, role, password FROM users WHERE email = ? AND role = 'business'", (email,))
+
+        # Check users table for business role - PostgreSQL uses %s placeholders
+        cursor.execute("SELECT id, email, name, role, password FROM users WHERE email = %s AND role = 'business'", (email,))
         user = cursor.fetchone()
-        
+
         if user:
-            # Business user found
-            if user['password'] == password:  # Simple password check for now
-                token = f"business_token_{user['id']}"
+            # psycopg2 returns tuples: (id, email, name, role, password)
+            from werkzeug.security import check_password_hash
+            if check_password_hash(user[4], password):  # user[4] is password
+                token = f"business_token_{user[0]}"  # user[0] is id
                 conn.close()
-                
+
                 return jsonify({
                     'success': True,
                     'token': token,
                     'user': {
-                        'id': user['id'],
-                        'email': user['email'],
-                        'name': user['name'],
-                        'role': user['role']
+                        'id': user[0],
+                        'email': user[1],
+                        'name': user[2],
+                        'role': user[3]
                     }
                 })
-        
+
         conn.close()
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -3972,32 +4031,34 @@ def business_auth_me():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
         if not token.startswith('business_token_'):
             return jsonify({'success': False, 'error': 'Invalid token format'}), 401
-        
+
         user_id = token.replace('business_token_', '')
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, email, name, role FROM users WHERE id = ? AND role = 'business'", (user_id,))
+        # PostgreSQL uses %s placeholders
+        cursor.execute("SELECT id, email, name, role FROM users WHERE id = %s AND role = 'business'", (user_id,))
         user = cursor.fetchone()
         conn.close()
-        
+
         if user:
+            # psycopg2 returns tuples: (id, email, name, role)
             return jsonify({
                 'success': True,
                 'user': {
-                    'id': user['id'],
-                    'email': user['email'],
-                    'name': user['name'],
-                    'role': user['role']
+                    'id': user[0],
+                    'email': user[1],
+                    'name': user[2],
+                    'role': user[3]
                 }
             })
         else:
             return jsonify({'success': False, 'error': 'Business user not found'}), 404
-            
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4021,81 +4082,84 @@ def business_transactions():
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
+            # PostgreSQL uses %s placeholders
             cursor.execute("""
                 SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit
-                FROM transactions 
-                WHERE user_id = ?
+                FROM transactions
+                WHERE user_id = %s
                 ORDER BY created_at DESC
             """, (business_id,))
             transactions = cursor.fetchall()
             conn.close()
-            
+
             transaction_list = []
             for txn in transactions:
+                # psycopg2 returns tuples: (id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit)
                 transaction_list.append({
-                    'id': txn['id'],
-                    'amount': txn['amount'],
-                    'status': txn['status'],
-                    'created_at': txn['created_at'],
-                    'description': txn['description'],
-                    'merchant': txn['merchant'],
-                    'category': txn['category'],
-                    'date': txn['date'],
-                    'round_up': txn['round_up'],
-                    'fee': txn['fee'],
-                    'total_debit': txn['total_debit']
+                    'id': txn[0],
+                    'amount': txn[1],
+                    'status': txn[2],
+                    'created_at': str(txn[3]) if txn[3] else None,
+                    'description': txn[4],
+                    'merchant': txn[5],
+                    'category': txn[6],
+                    'date': str(txn[7]) if txn[7] else None,
+                    'round_up': txn[8],
+                    'fee': txn[9],
+                    'total_debit': txn[10]
                 })
-            
+
             # Return empty transactions if none found (no hardcoded data)
-            
+
             return jsonify({
                 'success': True,
                 'data': transaction_list
             })
-            
+
         elif request.method == 'POST':
             # Add new business transaction
             data = request.get_json()
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
-            
+
             # Extract transaction data
             amount = float(data.get('amount', 0))
             merchant = data.get('merchant', 'Unknown Merchant')
             category = data.get('category', 'General')
             date = data.get('date', datetime.now().isoformat().split('T')[0])
             description = data.get('description', '')
-            
-            # Get user's flat investment preference and account type
+
+            # Get user's flat investment preference and account type - PostgreSQL uses %s
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT role FROM users WHERE id = ?", (business_id,))
+            cursor.execute("SELECT role FROM users WHERE id = %s", (business_id,))
             user_data = cursor.fetchone()
             flat_investment = 1.0  # Default round-up amount
-            account_type = user_data['role'] if user_data else 'business'
-            
+            # psycopg2 returns tuples
+            account_type = user_data[0] if user_data else 'business'
+
             # Calculate flat investment amount (always the same regardless of purchase amount)
             investment_amount = float(flat_investment)
             fee = calculate_fee_for_account_type(account_type, investment_amount)
             total_debit = amount + investment_amount + fee
-            
-            # Insert transaction
+
+            # Insert transaction - PostgreSQL uses %s placeholders
             cursor.execute("""
                 INSERT INTO transactions (user_id, amount, merchant, category, date, description, round_up, fee, total_debit, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
             """, (business_id, amount, merchant, category, date, description, investment_amount, fee, total_debit, datetime.now().isoformat()))
-            
+
             transaction_id = cursor.lastrowid
-            
+
             # Auto-process with AI mapping
             ai_result = auto_process_transaction(cursor, business_id, description, merchant)
-            
-            # Update transaction with AI results
+
+            # Update transaction with AI results - PostgreSQL uses %s
             if ai_result and ai_result['confidence'] > 0.8:
                 cursor.execute("""
-                    UPDATE transactions 
-                    SET category = ?, merchant = ?, status = 'mapped', ticker = ?
-                    WHERE id = ?
+                    UPDATE transactions
+                    SET category = %s, merchant = %s, status = 'mapped', ticker = %s
+                    WHERE id = %s
                 """, (ai_result['category'], ai_result['merchant'], ai_result['suggestedTicker'], transaction_id))
             
             conn.commit()
@@ -4135,15 +4199,15 @@ def business_portfolio():
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get business portfolio summary
-        cursor.execute("SELECT COUNT(*) FROM transactions WHERE user_id = ? AND status = 'mapped'", (business_id,))
+
+        # Get business portfolio summary - PostgreSQL uses %s placeholders
+        cursor.execute("SELECT COUNT(*) FROM transactions WHERE user_id = %s AND status = 'mapped'", (business_id,))
         total_investments = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT SUM(round_up) FROM transactions WHERE user_id = ? AND status = 'mapped'", (business_id,))
+
+        cursor.execute("SELECT SUM(round_up) FROM transactions WHERE user_id = %s AND status = 'mapped'", (business_id,))
         total_roundups = cursor.fetchone()[0] or 0
-        
-        cursor.execute("SELECT SUM(fee) FROM transactions WHERE user_id = ?", (business_id,))
+
+        cursor.execute("SELECT SUM(fee) FROM transactions WHERE user_id = %s", (business_id,))
         total_fees = cursor.fetchone()[0] or 0
         
         conn.close()
@@ -4182,32 +4246,34 @@ def business_notifications():
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        # PostgreSQL uses %s placeholders
         cursor.execute("""
             SELECT id, title, message, type, created_at, read
-            FROM notifications 
-            WHERE user_id = ?
+            FROM notifications
+            WHERE user_id = %s
             ORDER BY created_at DESC
             LIMIT 50
         """, (business_id,))
         notifications = cursor.fetchall()
         conn.close()
-        
+
         notification_list = []
         for notif in notifications:
+            # psycopg2 returns tuples: (id, title, message, type, created_at, read)
             notification_list.append({
-                'id': notif['id'],
-                'title': notif['title'],
-                'message': notif['message'],
-                'type': notif['type'],
-                'created_at': notif['created_at'],
-                'read': bool(notif['read'])
+                'id': notif[0],
+                'title': notif[1],
+                'message': notif[2],
+                'type': notif[3],
+                'created_at': str(notif[4]) if notif[4] else None,
+                'read': bool(notif[5])
             })
-        
+
         return jsonify({
             'success': True,
             'notifications': notification_list
         })
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4239,48 +4305,51 @@ def business_notifications_manage():
             
             conn = get_db_connection()
             cursor = conn.cursor()
+            # PostgreSQL uses %s placeholders and NOW() instead of datetime('now')
             cursor.execute("""
                 INSERT INTO notifications (user_id, title, message, type, created_at, read)
-                VALUES (?, ?, ?, ?, datetime('now'), 0)
+                VALUES (%s, %s, %s, %s, NOW(), 0)
             """, (business_id, title, message, notification_type))
             conn.commit()
             conn.close()
-            
+
             return jsonify({'success': True, 'message': 'Notification created successfully'})
-        
+
         elif request.method == 'PUT':
             # Mark notification as read
             data = request.get_json() or {}
             notification_id = data.get('id')
-            
+
             if not notification_id:
                 return jsonify({'success': False, 'error': 'Notification ID is required'}), 400
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
+            # PostgreSQL uses %s placeholders
             cursor.execute("""
-                UPDATE notifications 
-                SET read = 1 
-                WHERE id = ? AND user_id = ?
+                UPDATE notifications
+                SET read = 1
+                WHERE id = %s AND user_id = %s
             """, (notification_id, business_id))
             conn.commit()
             conn.close()
-            
+
             return jsonify({'success': True, 'message': 'Notification marked as read'})
-        
+
         elif request.method == 'DELETE':
             # Delete notification
             data = request.get_json() or {}
             notification_id = data.get('id')
-            
+
             if not notification_id:
                 return jsonify({'success': False, 'error': 'Notification ID is required'}), 400
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
+            # PostgreSQL uses %s placeholders
             cursor.execute("""
-                DELETE FROM notifications 
-                WHERE id = ? AND user_id = ?
+                DELETE FROM notifications
+                WHERE id = %s AND user_id = %s
             """, (notification_id, business_id))
             conn.commit()
             conn.close()
@@ -4318,30 +4387,32 @@ def business_roundups():
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        # PostgreSQL uses %s placeholders
         cursor.execute("""
             SELECT id, amount, round_up, created_at, description
-            FROM transactions 
-            WHERE user_id = ? AND round_up > 0
+            FROM transactions
+            WHERE user_id = %s AND round_up > 0
             ORDER BY created_at DESC
         """, (business_id,))
         roundups = cursor.fetchall()
         conn.close()
-        
+
         roundup_list = []
         for rup in roundups:
+            # psycopg2 returns tuples: (id, amount, round_up, created_at, description)
             roundup_list.append({
-                'id': rup['id'],
-                'amount': rup['amount'],
-                'round_up': rup['round_up'],
-                'created_at': rup['created_at'],
-                'description': rup['description']
+                'id': rup[0],
+                'amount': rup[1],
+                'round_up': rup[2],
+                'created_at': str(rup[3]) if rup[3] else None,
+                'description': rup[4]
             })
-        
+
         return jsonify({
             'success': True,
             'roundups': roundup_list
         })
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4351,29 +4422,31 @@ def business_fees():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
         business_id = token.replace('business_token_', '')
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
+        # PostgreSQL uses %s placeholders
         cursor.execute("""
             SELECT id, amount, fee, created_at, description
-            FROM transactions 
-            WHERE user_id = ? AND fee > 0
+            FROM transactions
+            WHERE user_id = %s AND fee > 0
             ORDER BY created_at DESC
         """, (business_id,))
         fees = cursor.fetchall()
         conn.close()
-        
+
         fee_list = []
-        for fee in fees:
+        for fee_row in fees:
+            # psycopg2 returns tuples: (id, amount, fee, created_at, description)
             fee_list.append({
-                'id': fee['id'],
-                'amount': fee['amount'],
-                'fee': fee['fee'],
-                'created_at': fee['created_at'],
-                'description': fee['description']
+                'id': fee_row[0],
+                'amount': fee_row[1],
+                'fee': fee_row[2],
+                'created_at': str(fee_row[3]) if fee_row[3] else None,
+                'description': fee_row[4]
             })
         
         return jsonify({
@@ -4390,19 +4463,22 @@ def business_ai_insights():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
+        token = auth_header.split(' ')[1]
+        business_id = token.replace('business_token_', '')
+
         # Get business-submitted mappings from database
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get business's mapping history
+
+        # Get business's mapping history - PostgreSQL uses %s placeholders
         cursor.execute('''
-            SELECT id, merchant_name, ticker_symbol, category, status, 
+            SELECT id, merchant_name, ticker_symbol, category, status,
                    admin_approved, confidence, notes, created_at, processed_at
-            FROM llm_mappings 
-            WHERE user_id = ? AND dashboard_type = 'business'
+            FROM llm_mappings
+            WHERE user_id = %s AND dashboard_type = 'business'
             ORDER BY created_at DESC
-        ''', (user_id,))
+        ''', (business_id,))
         
         mappings = cursor.fetchall()
         conn.close()
@@ -4485,45 +4561,45 @@ def process_pending_mappings():
             # Low confidence (< 0.5) get rejected
             
             if confidence >= 0.8:
-                # Auto-approve high confidence mappings
+                # Auto-approve high confidence mappings - PostgreSQL uses %s
                 cursor.execute('''
-                    UPDATE llm_mappings 
+                    UPDATE llm_mappings
                     SET status = 'approved', admin_approved = 1, processed_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    WHERE id = %s
                 ''', (mapping_id,))
-                
-                # Update the original transaction status
+
+                # Update the original transaction status - PostgreSQL uses %s
                 cursor.execute('''
-                    UPDATE transactions 
-                    SET status = 'mapped', ticker = ?, category = ?
-                    WHERE id = ?
+                    UPDATE transactions
+                    SET status = 'mapped', ticker = %s, category = %s
+                    WHERE id = %s
                 ''', (ticker_symbol, category, transaction_id))
-                
+
                 auto_approved_count += 1
-                
+
             elif confidence >= 0.5:
-                # Send to admin review queue
+                # Send to admin review queue - PostgreSQL uses %s
                 cursor.execute('''
-                    UPDATE llm_mappings 
+                    UPDATE llm_mappings
                     SET status = 'admin_review', processed_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    WHERE id = %s
                 ''', (mapping_id,))
-                
+
                 admin_review_count += 1
-                
+
             else:
-                # Reject low confidence mappings
+                # Reject low confidence mappings - PostgreSQL uses %s
                 cursor.execute('''
-                    UPDATE llm_mappings 
+                    UPDATE llm_mappings
                     SET status = 'rejected', processed_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    WHERE id = %s
                 ''', (mapping_id,))
-                
-                # Update transaction status to rejected
+
+                # Update transaction status to rejected - PostgreSQL uses %s
                 cursor.execute('''
-                    UPDATE transactions 
+                    UPDATE transactions
                     SET status = 'rejected'
-                    WHERE id = ?
+                    WHERE id = %s
                 ''', (transaction_id,))
             
             processed_count += 1
@@ -4560,41 +4636,42 @@ def admin_approve_mapping(mapping_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get mapping details
+        # Get mapping details - PostgreSQL uses %s
         cursor.execute('''
             SELECT user_id, transaction_id, ticker_symbol, category
-            FROM llm_mappings WHERE id = ?
+            FROM llm_mappings WHERE id = %s
         ''', (mapping_id,))
-        
+
         mapping = cursor.fetchone()
         if not mapping:
             return jsonify({'success': False, 'error': 'Mapping not found'}), 404
-        
+
         user_id, transaction_id, ticker_symbol, category = mapping
-        
-        # Approve the mapping
+
+        # Approve the mapping - PostgreSQL uses %s
         cursor.execute('''
-            UPDATE llm_mappings 
+            UPDATE llm_mappings
             SET status = 'approved', admin_approved = 1, processed_at = CURRENT_TIMESTAMP,
-                notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || ' | ' || ? END
-            WHERE id = ?
+                notes = CASE WHEN notes IS NULL OR notes = '' THEN %s ELSE notes || ' | ' || %s END
+            WHERE id = %s
         ''', (admin_notes, admin_notes, mapping_id))
         
         # Update the original transaction
+        # PostgreSQL uses %s placeholders
         cursor.execute('''
-            UPDATE transactions 
-            SET status = 'mapped', ticker = ?, category = ?
-            WHERE id = ?
+            UPDATE transactions
+            SET status = 'mapped', ticker = %s, category = %s
+            WHERE id = %s
         ''', (ticker_symbol, category, transaction_id))
-        
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'message': 'Mapping approved successfully'
         })
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4605,41 +4682,41 @@ def admin_reject_mapping(mapping_id):
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
         if token not in ['kamioi_admin_token', 'admin_token_3']:
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
-        
+
         data = request.get_json()
         admin_notes = data.get('notes', '')
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get mapping details
+
+        # Get mapping details - PostgreSQL uses %s
         cursor.execute('''
-            SELECT transaction_id FROM llm_mappings WHERE id = ?
+            SELECT transaction_id FROM llm_mappings WHERE id = %s
         ''', (mapping_id,))
-        
+
         mapping = cursor.fetchone()
         if not mapping:
             return jsonify({'success': False, 'error': 'Mapping not found'}), 404
-        
+
         transaction_id = mapping[0]
-        
-        # Reject the mapping
+
+        # Reject the mapping - PostgreSQL uses %s
         cursor.execute('''
-            UPDATE llm_mappings 
+            UPDATE llm_mappings
             SET status = 'rejected', admin_approved = -1, processed_at = CURRENT_TIMESTAMP,
-                notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || ' | ' || ? END
-            WHERE id = ?
+                notes = CASE WHEN notes IS NULL OR notes = '' THEN %s ELSE notes || ' | ' || %s END
+            WHERE id = %s
         ''', (admin_notes, admin_notes, mapping_id))
-        
-        # Update the original transaction
+
+        # Update the original transaction - PostgreSQL uses %s
         cursor.execute('''
-            UPDATE transactions 
+            UPDATE transactions
             SET status = 'rejected'
-            WHERE id = ?
+            WHERE id = %s
         ''', (transaction_id,))
         
         conn.commit()
@@ -4677,10 +4754,10 @@ def notify_mapping_outcome():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get mapping details
+        # Get mapping details - PostgreSQL uses %s
         cursor.execute('''
             SELECT merchant_name, ticker_symbol, category
-            FROM llm_mappings WHERE id = ?
+            FROM llm_mappings WHERE id = %s
         ''', (mapping_id,))
         
         mapping = cursor.fetchone()
