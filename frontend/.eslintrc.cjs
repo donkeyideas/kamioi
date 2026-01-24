@@ -29,5 +29,7 @@ module.exports = {
     'react/react-in-jsx-scope': 'off',
     'no-unused-vars': 'warn',
     'react/no-unescaped-entities': 'warn',
+    // Warn about console.log - use logger utility instead
+    'no-console': ['warn', { allow: ['error', 'warn'] }],
   },
 }
