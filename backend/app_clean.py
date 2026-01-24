@@ -1013,7 +1013,7 @@ def admin_create_demo_users():
             existing = cursor.fetchone()
 
             if existing:
-                created_users.append({'email': account['email'], 'status': 'already_exists', 'id': existing['id']})
+                created_users.append({'email': account['email'], 'status': 'already_exists', 'id': existing[0]})
                 continue
 
             # Create the user
@@ -1023,7 +1023,7 @@ def admin_create_demo_users():
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
             ''', (account['email'], password_hash, account['name'], account['account_type'], datetime.utcnow()))
-            new_id = cursor.fetchone()['id']
+            new_id = cursor.fetchone()[0]
             conn.commit()
 
             created_users.append({
@@ -1067,11 +1067,11 @@ def admin_get_demo_users():
         conn.close()
 
         users = [{
-            'id': row['id'],
-            'email': row['email'],
-            'name': row['name'],
-            'account_type': row['account_type'],
-            'created_at': str(row['created_at']) if row['created_at'] else None
+            'id': row[0],
+            'email': row[1],
+            'name': row[2],
+            'account_type': row[3],
+            'created_at': str(row[4]) if row[4] else None
         } for row in rows]
 
         return jsonify({
