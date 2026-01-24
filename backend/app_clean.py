@@ -1187,6 +1187,8 @@ def admin_get_transactions():
               """)
             has_ticker = True
         except Exception:
+            # Rollback the failed transaction before fallback query
+            conn.rollback()
             # Fallback without ticker column
             cursor.execute("""
                   SELECT t.id, t.amount, t.status, t.date, t.merchant, t.category,
