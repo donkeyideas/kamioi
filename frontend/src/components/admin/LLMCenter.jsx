@@ -1518,10 +1518,11 @@ const LLMCenter = () => {
         })
       }, 2000)
 
-      // Add cache-busting parameter to force fresh request and bypass CDN cache
+      // Use FAST bulk upload endpoint with PostgreSQL COPY (50-100x faster)
+      // Expected: 50,000-100,000 rows/sec vs 824 rows/sec with regular upload
       const cacheBuster = `?t=${Date.now()}`
-      const proxyUrl = buildApiUrl(`/api/admin/bulk-upload-v2${cacheBuster}`)
-      const directUrl = `${backendBaseUrl}/api/admin/bulk-upload-v2${cacheBuster}`
+      const proxyUrl = buildApiUrl(`/api/admin/bulk-upload-fast${cacheBuster}`)
+      const directUrl = `${backendBaseUrl}/api/admin/bulk-upload-fast${cacheBuster}`
       const initialUrl = import.meta.env.PROD ? proxyUrl : directUrl
 
       const buildFormData = () => {
@@ -1548,6 +1549,9 @@ const LLMCenter = () => {
             const status = result.data?.status || 'processing'
             const processed = result.data?.processed_rows || 0
             const rowsPerSecond = result.data?.rows_per_second || 0
+            const phase = result.data?.phase || ''
+            const method = result.data?.method || 'INSERT'
+            const totalRows = result.data?.total_rows || 0
 
             if (status === 'completed') {
               clearInterval(progressInterval)
@@ -1555,16 +1559,19 @@ const LLMCenter = () => {
 
               const errorCount = result.data?.errors?.length || 0
               const processingTime = result.data?.processing_time || 0
-              setGlassModal({ 
-                isOpen: true, 
-                title: 'Bulk Upload Complete!', 
+              const copyTime = result.data?.copy_time || 0
+              const indexTime = result.data?.index_time || 0
+              setGlassModal({
+                isOpen: true,
+                title: 'Bulk Upload Complete!',
                 message: `Upload completed successfully!
-                
+
 Processed: ${processed.toLocaleString()} rows
-Time: ${processingTime}s
+Time: ${processingTime}s${method === 'COPY' ? ` (Copy: ${copyTime}s, Index: ${indexTime}s)` : ''}
 Speed: ${rowsPerSecond.toLocaleString()} rows/sec
-Errors: ${errorCount}`, 
-                type: 'success' 
+Method: ${method}
+Errors: ${errorCount}`,
+                type: 'success'
               })
               setShowBulkUpload(false)
               queryClient.invalidateQueries({ queryKey: ['llm-center-data'] })
@@ -1585,11 +1592,18 @@ Errors: ${errorCount}`,
               return
             }
 
-            setGlassModal({ 
-              isOpen: true, 
-              title: 'Processing Upload', 
-              message: `Processing... ${processed.toLocaleString()} rows (${rowsPerSecond.toLocaleString()} rows/sec).`, 
-              type: 'info' 
+            // Show progress with phase info for fast upload
+            let progressMsg = `Processing... ${processed.toLocaleString()} rows`
+            if (totalRows > 0) progressMsg += ` of ${totalRows.toLocaleString()}`
+            if (rowsPerSecond > 0) progressMsg += ` (${rowsPerSecond.toLocaleString()} rows/sec)`
+            if (phase === 'copying') progressMsg = `COPY in progress... ${totalRows.toLocaleString()} rows`
+            if (phase === 'indexing') progressMsg = `Rebuilding indexes...`
+
+            setGlassModal({
+              isOpen: true,
+              title: `Processing Upload${method === 'COPY' ? ' (Fast Mode)' : ''}`,
+              message: progressMsg,
+              type: 'info'
             })
           } catch (pollError) {
             // Ignore transient errors and keep polling

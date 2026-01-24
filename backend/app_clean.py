@@ -6986,6 +6986,275 @@ def admin_bulk_upload():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+# =============================================================================
+# FAST BULK UPLOAD - Uses PostgreSQL COPY for 50-100x faster imports
+# =============================================================================
+
+def _process_fast_bulk_upload(job_id, file_path):
+    """
+    FAST bulk upload using PostgreSQL COPY command.
+    Expected speed: 50,000-100,000 rows/sec (vs 824 rows/sec with INSERT)
+    """
+    import io
+    import csv
+
+    start_time = time.time()
+    _update_bulk_upload_job(job_id, status='processing', started_at=start_time, method='COPY')
+
+    try:
+        print(f"[FastBulkUpload] Starting job {job_id}")
+
+        # Read and pre-process the CSV
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read().decode('utf-8')
+        except UnicodeDecodeError:
+            with open(file_path, 'rb') as f:
+                content = f.read().decode('utf-8', errors='ignore')
+
+        # Parse CSV and prepare data for COPY
+        reader = csv.DictReader(io.StringIO(content))
+
+        # Helper for flexible column names
+        def get_col(row, *names):
+            for name in names:
+                if name in row:
+                    return row[name].strip() if row[name] else ''
+                for k in row.keys():
+                    if k.lower() == name.lower():
+                        return row[k].strip() if row[k] else ''
+            return ''
+
+        # Pre-process all rows into COPY format
+        print(f"[FastBulkUpload] Pre-processing CSV data...")
+        rows_buffer = io.StringIO()
+        writer = csv.writer(rows_buffer, delimiter='\t', quoting=csv.QUOTE_MINIMAL)
+
+        row_count = 0
+        errors = []
+
+        for row in reader:
+            row_count += 1
+            try:
+                merchant_name = get_col(row, 'Merchant Name', 'merchant_name', 'merchant', 'name')
+                if not merchant_name:
+                    errors.append(f"Row {row_count}: Missing merchant name")
+                    continue
+
+                # Handle confidence
+                confidence_str = get_col(row, 'Confidence', 'confidence', 'conf', 'score') or '0'
+                try:
+                    if confidence_str.endswith('%'):
+                        confidence = float(confidence_str[:-1]) / 100.0
+                    else:
+                        confidence = float(confidence_str) if confidence_str else 0.0
+                except:
+                    confidence = 0.0
+
+                ticker = get_col(row, 'Ticker Symbol', 'ticker_symbol', 'ticker', 'symbol')
+                company = get_col(row, 'Company Name', 'company_name', 'company') or get_company_name_from_ticker(ticker)
+                category = get_col(row, 'Category', 'category', 'cat', 'type')
+                notes = get_col(row, 'Notes', 'notes', 'note', 'description')
+
+                # Write tab-separated row for COPY
+                writer.writerow([
+                    merchant_name,
+                    category,
+                    notes,
+                    ticker,
+                    confidence,
+                    'approved',
+                    1,  # admin_approved
+                    'admin_fast_upload',
+                    company
+                ])
+
+            except Exception as e:
+                errors.append(f"Row {row_count}: {str(e)}")
+                continue
+
+        print(f"[FastBulkUpload] Pre-processed {row_count:,} rows")
+        _update_bulk_upload_job(job_id, total_rows=row_count, phase='copying')
+
+        # Reset buffer position for reading
+        rows_buffer.seek(0)
+
+        # Connect and use COPY command
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Drop indexes temporarily for faster insert
+        print(f"[FastBulkUpload] Temporarily dropping indexes...")
+        index_drop_start = time.time()
+        try:
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_admin_approved")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_status")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_created_at")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_category")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_merchant")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_ticker")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_status")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_admin_approved")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_created_at")
+            cursor.execute("DROP INDEX IF EXISTS idx_llm_mappings_status_created")
+            conn.commit()
+            print(f"[FastBulkUpload] Indexes dropped in {time.time() - index_drop_start:.1f}s")
+        except Exception as idx_err:
+            print(f"[FastBulkUpload] Index drop warning: {idx_err}")
+            conn.rollback()
+
+        # Use COPY FROM for maximum speed
+        print(f"[FastBulkUpload] Starting COPY command...")
+        copy_start = time.time()
+
+        cursor.copy_expert(
+            """
+            COPY llm_mappings (merchant_name, category, notes, ticker_symbol, confidence, status, admin_approved, admin_id, company_name)
+            FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', QUOTE '"', NULL '')
+            """,
+            rows_buffer
+        )
+        conn.commit()
+
+        copy_time = time.time() - copy_start
+        print(f"[FastBulkUpload] COPY completed in {copy_time:.1f}s")
+
+        # Recreate indexes
+        print(f"[FastBulkUpload] Recreating indexes...")
+        _update_bulk_upload_job(job_id, phase='indexing')
+        index_start = time.time()
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_admin_approved ON llm_mappings(admin_approved)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_status ON llm_mappings(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_created_at ON llm_mappings(created_at DESC)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_category ON llm_mappings(category)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_merchant ON llm_mappings(merchant_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_ticker ON llm_mappings(ticker_symbol)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_status ON llm_mappings(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_admin_approved ON llm_mappings(admin_approved)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_created_at ON llm_mappings(created_at DESC)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_mappings_status_created ON llm_mappings(status, created_at DESC)')
+        conn.commit()
+
+        index_time = time.time() - index_start
+        print(f"[FastBulkUpload] Indexes recreated in {index_time:.1f}s")
+
+        cursor.close()
+        conn.close()
+
+        # Calculate final metrics
+        end_time = time.time()
+        total_time = end_time - start_time
+        rows_per_second = row_count / total_time if total_time > 0 else 0
+
+        print(f"[FastBulkUpload] COMPLETED!")
+        print(f"  Total rows: {row_count:,}")
+        print(f"  Total time: {total_time:.2f}s")
+        print(f"  Speed: {rows_per_second:,.0f} rows/sec")
+        print(f"  Copy time: {copy_time:.1f}s, Index time: {index_time:.1f}s")
+
+        _update_bulk_upload_job(
+            job_id,
+            status='completed',
+            processed_rows=row_count,
+            errors=errors[:10],
+            processing_time=round(total_time, 2),
+            rows_per_second=round(rows_per_second, 0),
+            copy_time=round(copy_time, 2),
+            index_time=round(index_time, 2),
+            method='COPY',
+            finished_at=end_time
+        )
+
+    except Exception as e:
+        end_time = time.time()
+        print(f"[FastBulkUpload] FAILED: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        _update_bulk_upload_job(
+            job_id,
+            status='failed',
+            error=str(e),
+            processing_time=round(end_time - start_time, 2),
+            finished_at=end_time
+        )
+    finally:
+        # Clean up temp file
+        try:
+            os.unlink(file_path)
+        except:
+            pass
+
+
+@app.route('/api/admin/bulk-upload-fast', methods=['POST', 'OPTIONS'])
+@cross_origin(origins='*', methods=['POST', 'OPTIONS'], allow_headers=['Content-Type', 'Authorization', 'X-Admin-Token'])
+def admin_bulk_upload_fast():
+    """
+    FAST bulk upload endpoint using PostgreSQL COPY command.
+
+    Expected performance: 50,000-100,000 rows/sec
+    50 million rows = ~8-17 minutes (vs ~17 hours with regular upload)
+    """
+    try:
+        # Auth check
+        auth_header = request.headers.get('Authorization')
+        form_token = request.form.get('admin_token', '').strip() if request.form else ''
+        token = None
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ', 1)[1].strip()
+        if not token and form_token:
+            token = form_token
+        if not token or not str(token).startswith('admin_token_'):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        # Save to temp file
+        job_id = str(uuid.uuid4())
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp_file:
+            file.save(temp_file.name)
+            temp_path = temp_file.name
+
+        _update_bulk_upload_job(
+            job_id,
+            status='queued',
+            processed_rows=0,
+            method='COPY',
+            created_at=time.time()
+        )
+
+        # Start fast upload in background
+        worker = threading.Thread(
+            target=_process_fast_bulk_upload,
+            args=(job_id, temp_path),
+            daemon=True
+        )
+        worker.start()
+
+        return jsonify({
+            'success': True,
+            'message': 'Fast bulk upload started (using PostgreSQL COPY)',
+            'data': {
+                'job_id': job_id,
+                'status': 'queued',
+                'method': 'COPY',
+                'expected_speed': '50,000-100,000 rows/sec'
+            }
+        }), 202
+
+    except Exception as e:
+        print(f"Fast bulk upload failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Progress tracking endpoint for bulk uploads
 @app.route('/api/admin/bulk-upload/progress', methods=['GET'])
 def admin_bulk_upload_progress():
