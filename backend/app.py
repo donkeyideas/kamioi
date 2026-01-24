@@ -4,12 +4,17 @@ from datetime import datetime, timedelta
 import os
 import sys
 import jwt
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 import base64
 import uuid
 import csv
 import io
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Set UTF-8 encoding for stdout/stderr on Windows
 # Only set if stdout/stderr are not already wrapped
@@ -77,6 +82,13 @@ from routes.api_usage import api_usage_bp
 from routes.llm_processing import llm_processing_bp
 from routes.ai_recommendations import ai_recommendations_bp
 
+# New modular blueprints (Phase 2 refactor)
+from blueprints.auth import auth_bp
+from blueprints.user import user_bp
+from blueprints.family import family_bp
+from blueprints.business import business_bp
+from blueprints.admin import admin_bp
+
 # APScheduler for automatic monthly amortization
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -88,8 +100,10 @@ except ImportError:
 
 app = Flask(__name__)
 
-# Configure secret key for JWT
-app.config['SECRET_KEY'] = 'kamioi-secret-key-2024'
+# Configure secret key for JWT - MUST be set in environment variables for production
+app.config['SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-only-change-in-production')
+if app.config['SECRET_KEY'] == 'dev-only-change-in-production':
+    print("WARNING: Using default JWT secret. Set JWT_SECRET_KEY environment variable for production!")
 
 # Configure UTF-8 encoding
 app.config['JSON_AS_ASCII'] = False
@@ -284,15 +298,17 @@ def get_eastern_time():
         eastern_tz = timezone(eastern_offset)
         return now_utc.astimezone(eastern_tz)
 
-# Configure CORS with more permissive settings for ALL routes
-# This will apply to all routes including Blueprints
-CORS(app, 
-     origins='*',  # Allow all origins for development and production
+# Configure CORS with origins from environment variable
+# In production, set ALLOWED_ORIGINS to your frontend domain(s)
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3764,http://localhost:5173').split(',')
+allowed_origins = [origin.strip() for origin in allowed_origins]
+
+CORS(app,
+     origins=allowed_origins,
      methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
      allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-     supports_credentials=False,  # Set to False when using wildcard origins
+     supports_credentials=True,
      automatic_options=True,
-     send_wildcard=True,
      max_age=3600)
 
 # Register blueprints AFTER CORS configuration
@@ -305,6 +321,15 @@ app.register_blueprint(receipt_llm_bp)
 app.register_blueprint(api_usage_bp)
 app.register_blueprint(llm_processing_bp)
 app.register_blueprint(ai_recommendations_bp)
+
+# New modular blueprints (Phase 2 refactor)
+# Note: These routes will coexist with existing routes during migration
+# Once verified, remove the old routes from app.py
+app.register_blueprint(auth_bp)
+app.register_blueprint(user_bp)
+app.register_blueprint(family_bp)
+app.register_blueprint(business_bp)
+app.register_blueprint(admin_bp)
 
 # Global OPTIONS handler for CORS preflight requests
 @app.before_request
@@ -920,18 +945,45 @@ def user_login():
         row = cur.fetchone()
         conn.close()
         
-        if row and row[4] == password:  # Check password
-            user = {
-                'id': row[0],
-                'email': row[1], 
-                'name': row[2],
-                'role': row[3],
-                'dashboard': row[3],
-                'account_number': row[5]
-            }
-            return jsonify({'success': True, 'token': f'token_{row[0]}', 'user': user})
-        else:
-            return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
+        if row:
+            stored_password = row[4]
+            password_valid = False
+            needs_hash_upgrade = False
+
+            # Check if stored password is hashed (werkzeug hashes start with method prefix)
+            if stored_password and (stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:')):
+                # Password is hashed, use check_password_hash
+                password_valid = check_password_hash(stored_password, password)
+            else:
+                # Legacy plaintext password - check directly
+                password_valid = (stored_password == password)
+                if password_valid:
+                    needs_hash_upgrade = True
+
+            if password_valid:
+                # Upgrade plaintext password to hashed version
+                if needs_hash_upgrade:
+                    try:
+                        hashed = generate_password_hash(password)
+                        conn2 = db_manager.get_connection()
+                        cur2 = conn2.cursor()
+                        cur2.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, row[0]))
+                        conn2.commit()
+                        conn2.close()
+                    except Exception as hash_err:
+                        print(f"Warning: Could not upgrade password hash: {hash_err}")
+
+                user = {
+                    'id': row[0],
+                    'email': row[1],
+                    'name': row[2],
+                    'role': row[3],
+                    'dashboard': row[3],
+                    'account_number': row[5]
+                }
+                return jsonify({'success': True, 'token': f'token_{row[0]}', 'user': user})
+
+        return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
     except Exception as e:
         return jsonify({'success': False, 'error': 'Login failed'}), 500
 
@@ -1058,9 +1110,10 @@ def reset_password():
             return jsonify({'success': False, 'error': 'Invalid or expired reset token'}), 400
         
         email = result[0]
-        
-        # Update password
-        cur.execute("UPDATE users SET password = ? WHERE email = ?", (new_password, email))
+
+        # Update password with hash
+        hashed_password = generate_password_hash(new_password)
+        cur.execute("UPDATE users SET password = ? WHERE email = ?", (hashed_password, email))
         
         # Delete used token
         cur.execute("DELETE FROM password_reset_tokens WHERE token = ?", (token,))
@@ -4475,25 +4528,51 @@ def admin_login():
             row = cur.fetchone()
             conn.close()
         
-        print(f"DEBUG: Database query result - Row: {row}")
         if row:
-            print(f"DEBUG: Stored password: '{row[2]}', Length: {len(row[2])}")
-            print(f"DEBUG: Password match: {row[2] == password}")
-        
-        if row and row[2] == password:  # Check password
-            admin = {
-                'id': row[0],
-                'email': row[1], 
-                'name': row[3],
-                'role': row[4],
-                'dashboard': 'admin',
-                'permissions': '{}'
-            }
-            response = jsonify({'success': True, 'token': f'admin_token_{row[0]}', 'user': admin})
-            # CORS headers will be added by after_request handler
-            return response
-        else:
-            return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
+            stored_password = row[2]
+            password_valid = False
+            needs_hash_upgrade = False
+
+            # Check if stored password is hashed (werkzeug hashes start with method prefix)
+            if stored_password and (stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:')):
+                password_valid = check_password_hash(stored_password, password)
+            else:
+                # Legacy plaintext password - check directly
+                password_valid = (stored_password == password)
+                if password_valid:
+                    needs_hash_upgrade = True
+
+            if password_valid:
+                # Upgrade plaintext password to hashed version
+                if needs_hash_upgrade:
+                    try:
+                        hashed = generate_password_hash(password)
+                        conn2 = db_manager.get_connection()
+                        if db_manager.is_postgresql:
+                            from sqlalchemy import text
+                            conn2.execute(text("UPDATE admins SET password = :pwd WHERE id = :id"), {'pwd': hashed, 'id': row[0]})
+                            conn2.commit()
+                            db_manager.release_connection(conn2)
+                        else:
+                            cur2 = conn2.cursor()
+                            cur2.execute("UPDATE admins SET password = ? WHERE id = ?", (hashed, row[0]))
+                            conn2.commit()
+                            conn2.close()
+                    except Exception as hash_err:
+                        print(f"Warning: Could not upgrade admin password hash: {hash_err}")
+
+                admin = {
+                    'id': row[0],
+                    'email': row[1],
+                    'name': row[3],
+                    'role': row[4],
+                    'dashboard': 'admin',
+                    'permissions': '{}'
+                }
+                response = jsonify({'success': True, 'token': f'admin_token_{row[0]}', 'user': admin})
+                return response
+
+        return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
     except Exception as e:
         import traceback
         print(f"DEBUG: Exception in admin_login: {e}")
@@ -16897,10 +16976,13 @@ def user_register():
                 print(f"[REGISTER] Missing required field: {field}")
                 return jsonify({'success': False, 'error': f'{field} is required'}), 400
         
+        # Hash the password before storing
+        data['password'] = generate_password_hash(data['password'])
+
         # Check if user already exists
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute('SELECT id FROM users WHERE email = ?', (data['email'],))
         existing_user = cursor.fetchone()
         
@@ -17528,9 +17610,6 @@ def generate_account_number(account_type):
         
         if not existing:
             return account_number
-
-# Register business blueprint
-app.register_blueprint(business_bp, url_prefix='/api/business')
 
 # Image Upload Endpoints
 @app.route('/api/admin/upload/image', methods=['POST'])

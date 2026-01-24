@@ -1,8 +1,13 @@
 import axios from "axios";
 
-// Use empty string in development to leverage Vite proxy (routes /api to backend)
-// In production, set VITE_API_BASE_URL to your backend URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : "http://localhost:5111");
+// In development, use empty string to leverage Vite proxy (routes /api to backend)
+// In production, VITE_API_BASE_URL MUST be set to your backend URL (e.g., https://your-backend.railway.app)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+// Warn in production if API URL is not configured
+if (!import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
+  console.error('WARNING: VITE_API_BASE_URL is not set. API calls will fail in production!');
+}
 
 export const ROLES = { USER: "user", ADMIN: "admin" };
 const TOKEN_KEYS = { [ROLES.USER]: "kamioi_user_token", [ROLES.ADMIN]: "kamioi_admin_token" };

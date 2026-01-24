@@ -11,10 +11,20 @@ import ssl
 
 class AlpacaService:
     def __init__(self):
-        # Alpaca Sandbox Credentials - Using Broker API
-        self.base_url = "https://broker-api.sandbox.alpaca.markets"
-        self.api_key = "CK6FZFJH7T9D91M2FDWD"
-        self.api_secret = "gYQxzK4zDOnpgaiyOAWoLwl6woKXk07pK1lbPygx"
+        # Alpaca Credentials - Read from environment variables
+        # Set ALPACA_USE_SANDBOX=false in production to use live trading
+        use_sandbox = os.getenv('ALPACA_USE_SANDBOX', 'true').lower() == 'true'
+
+        if use_sandbox:
+            self.base_url = "https://broker-api.sandbox.alpaca.markets"
+        else:
+            self.base_url = "https://broker-api.alpaca.markets"
+
+        self.api_key = os.getenv('ALPACA_API_KEY')
+        self.api_secret = os.getenv('ALPACA_API_SECRET')
+
+        if not self.api_key or not self.api_secret:
+            print("WARNING: ALPACA_API_KEY and ALPACA_API_SECRET must be set in environment variables")
         
         # Headers for API requests
         self.headers = {
