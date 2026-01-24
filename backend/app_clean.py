@@ -6178,20 +6178,21 @@ def admin_llm_center_automation_status():
         pending = int(status_row[1] or 0) if status_row else 0
         rejected = int(status_row[2] or 0) if status_row else 0
 
-        # Get avg confidence
+        # Get avg confidence - return 0 if no data (don't fake values)
         cursor.execute("SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0")
-        avg_conf = cursor.fetchone()[0] or 0.85
+        result = cursor.fetchone()
+        avg_conf = float(result[0]) if result and result[0] else 0
 
         conn.close()
 
-        # Build consolidated response
+        # Build consolidated response - reflect reality
         return jsonify({
             'success': True,
             'data': {
                 # Real-time processing status
                 'realtime': {
-                    'status': 'active',
-                    'processing_rate': min(total_mappings / 100, 500),
+                    'status': 'active' if total_mappings > 0 else 'idle',
+                    'processing_rate': min(total_mappings / 100, 500) if total_mappings > 0 else 0,
                     'queue_size': pending,
                     'last_processed': datetime.now().isoformat()
                 },
@@ -8103,14 +8104,16 @@ def admin_llm_analytics():
         approval_counts = {row[0]: row[1] for row in cursor.fetchall()}
         approved_mappings = approval_counts.get(1, 0)
 
-        # FAST: Get confidence average
+        # FAST: Get confidence average - return 0 if no data (don't fake 93%)
         cursor.execute('SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0')
-        avg_confidence = cursor.fetchone()[0] or 0.93
+        result = cursor.fetchone()
+        avg_confidence = float(result[0]) if result and result[0] else 0
 
         conn.close()
 
         auto_approval_rate = (approved_mappings / max(total_mappings, 1)) * 100
-        accuracy_rate = round(float(avg_confidence) * 100, 1)
+        # Only show accuracy if we have mappings
+        accuracy_rate = round(avg_confidence * 100, 1) if total_mappings > 0 else 0
 
         return jsonify({
             'success': True,
@@ -8256,9 +8259,10 @@ def admin_llm_dashboard():
         pending_count = approval_counts.get(0, 0) + approval_counts.get(None, 0)
         rejected_count = approval_counts.get(-1, 0)
 
-        # FAST: Get average confidence (single value)
+        # FAST: Get average confidence (single value) - return 0 if no data
         cursor.execute('SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0')
-        avg_confidence = cursor.fetchone()[0] or 0.93  # Default to 93% if no data
+        result = cursor.fetchone()
+        avg_confidence = float(result[0]) if result and result[0] else 0
 
         # FAST: Get only 7 mappings for each tab (with index)
         pending_mappings = []
@@ -8306,8 +8310,8 @@ def admin_llm_dashboard():
         # Use total_estimate for all counts
         total_mappings = total_estimate
 
-        # Calculate simple asset values (no extra queries)
-        avg_conf = float(avg_confidence) if avg_confidence else 0.93
+        # Calculate simple asset values (no extra queries) - use 0 if no data
+        avg_conf = float(avg_confidence) if avg_confidence else 0
         individual_assets = [
             {
                 'asset_name': 'KamioiGPT v1.0',
@@ -11818,16 +11822,17 @@ def get_llm_data_assets():
         result = cursor.fetchone()
         total_mappings = int(result[0]) if result and result[0] else 0
 
-        # FAST: Get avg confidence
+        # FAST: Get avg confidence - return 0 if no data (don't fake 93%)
         cursor.execute("SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0")
-        avg_confidence = cursor.fetchone()[0] or 0.93
+        result = cursor.fetchone()
+        avg_confidence = float(result[0]) if result and result[0] else 0
 
         # FAST: Estimate categories (skip for speed, use fixed value)
         categories_count = 20  # Reasonable estimate
 
         # FAST: Use approval count from GROUP BY
         cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE admin_approved = 1')
-        approved_count = cursor.fetchone()[0] or total_mappings
+        approved_count = cursor.fetchone()[0] or 0
 
         conn.close()
         
