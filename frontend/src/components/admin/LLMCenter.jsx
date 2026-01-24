@@ -642,6 +642,7 @@ const LLMCenter = () => {
     cacheTime: 600000, // 10 minutes - keep in cache for 10 minutes
     refetchOnWindowFocus: false, // 🚀 FIX: Don't refetch on window focus
     refetchOnMount: false, // 🚀 FIX: Don't refetch on mount if data is fresh
+    keepPreviousData: true, // Prevent flash when switching tabs
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     onSuccess: (data) => {
@@ -1165,7 +1166,8 @@ const LLMCenter = () => {
       }
       
       // OPTIMIZED: Removed cache-busting timestamp to allow React Query caching
-      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mappings?search=${encodeURIComponent(searchQuery)}&limit=10&page=${pageNum}`), {
+      // FIX: Use 'query' parameter instead of 'searchQuery' state to avoid stale data
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/mappings?search=${encodeURIComponent(query)}&limit=10&page=${pageNum}`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -2636,6 +2638,7 @@ Errors: ${errorCount}`,
     staleTime: 30000, // 30 seconds cache
     cacheTime: 300000, // 5 minutes cache
     refetchOnWindowFocus: false,
+    keepPreviousData: true, // Prevent flash when paginating
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000)
   })

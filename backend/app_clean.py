@@ -6114,22 +6114,115 @@ def admin_journal_entries_stub():
 
 @app.route('/api/receipts/llm-mappings', methods=['GET'])
 def receipts_llm_mappings():
+    """Get receipt-to-stock mappings with pagination"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
         page = request.args.get('page', 1, type=int)
-        limit = request.args.get('limit', 5, type=int)
-        
+        limit = request.args.get('limit', 7, type=int)  # Match other tabs
+        offset = (page - 1) * limit
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        conn.rollback()  # Clear any aborted transaction
+
+        # Check if receipts table exists
+        cursor.execute('''
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'receipts'
+            )
+        ''')
+        table_exists = cursor.fetchone()[0]
+
+        if not table_exists:
+            conn.close()
+            return jsonify({
+                'success': True,
+                'data': {
+                    'mappings': [],
+                    'total': 0,
+                    'page': page,
+                    'limit': limit,
+                    'pages': 0,
+                    'pagination': {
+                        'current_page': page,
+                        'total_pages': 0,
+                        'total_count': 0,
+                        'has_next': False,
+                        'has_prev': False
+                    }
+                }
+            })
+
+        # Get receipts with parsed data (these are the "mapped" receipts)
+        cursor.execute('''
+            SELECT id, user_id, filename, status, parsed_data, round_up_amount,
+                   allocation_data, created_at
+            FROM receipts
+            WHERE status = 'processed' OR parsed_data IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT %s OFFSET %s
+        ''', (limit, offset))
+
+        cols = [c[0] for c in cursor.description]
+        rows = cursor.fetchall()
+
+        mappings = []
+        for row in rows:
+            row_dict = dict(zip(cols, row))
+            # Parse JSON fields
+            parsed_data = {}
+            allocation_data = {}
+            try:
+                if row_dict.get('parsed_data'):
+                    parsed_data = json.loads(row_dict['parsed_data']) if isinstance(row_dict['parsed_data'], str) else row_dict['parsed_data']
+                if row_dict.get('allocation_data'):
+                    allocation_data = json.loads(row_dict['allocation_data']) if isinstance(row_dict['allocation_data'], str) else row_dict['allocation_data']
+            except:
+                pass
+
+            mappings.append({
+                'id': row_dict['id'],
+                'receipt_id': row_dict['id'],
+                'user_id': row_dict['user_id'],
+                'filename': row_dict['filename'],
+                'status': row_dict['status'],
+                'merchant_name': parsed_data.get('merchant', parsed_data.get('store', 'Unknown')),
+                'total_amount': parsed_data.get('total', row_dict.get('round_up_amount', 0)),
+                'round_up_amount': row_dict.get('round_up_amount', 0),
+                'ticker': allocation_data.get('ticker', 'PENDING'),
+                'category': parsed_data.get('category', 'Other'),
+                'confidence': allocation_data.get('confidence', 0),
+                'created_at': str(row_dict['created_at']) if row_dict.get('created_at') else None,
+                'items': parsed_data.get('items', [])
+            })
+
+        # Get actual count of processed receipts
+        cursor.execute("SELECT COUNT(*) FROM receipts WHERE status = 'processed' OR parsed_data IS NOT NULL")
+        actual_count = cursor.fetchone()[0] or 0
+
+        conn.close()
+
+        total_pages = (actual_count + limit - 1) // limit if actual_count > 0 else 0
+
         return jsonify({
             'success': True,
             'data': {
-                'mappings': [],
-                'total': 0,
+                'mappings': mappings,
+                'total': actual_count,
                 'page': page,
                 'limit': limit,
-                'pages': 0
+                'pages': total_pages,
+                'pagination': {
+                    'current_page': page,
+                    'total_pages': total_pages,
+                    'total_count': actual_count,
+                    'has_next': page < total_pages,
+                    'has_prev': page > 1
+                }
             }
         })
     except Exception as e:
