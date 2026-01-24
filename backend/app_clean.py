@@ -96,7 +96,19 @@ def _process_bulk_upload_job(job_id, file_path):
     start_time = time.time()
     _update_bulk_upload_job(job_id, status='processing', started_at=start_time)
 
+    # Helper function for flexible column matching (defined once, outside loop)
+    def get_col(row, *names):
+        for name in names:
+            if name in row:
+                return row[name].strip() if row[name] else ''
+            for k in row.keys():
+                if k.lower() == name.lower():
+                    return row[k].strip() if row[k] else ''
+        return ''
+
     try:
+        print(f"[BulkUpload] Starting job {job_id}, file: {file_path}")
+
         # Read file content with proper encoding handling
         try:
             with open(file_path, 'rb') as file_handle:
@@ -105,10 +117,14 @@ def _process_bulk_upload_job(job_id, file_path):
             with open(file_path, 'rb') as file_handle:
                 file_content = file_handle.read().decode('utf-8', errors='ignore')
 
+        print(f"[BulkUpload] File read, size: {len(file_content)} bytes")
+
         import csv
         import io
 
         csv_reader = csv.DictReader(io.StringIO(file_content))
+        fieldnames = csv_reader.fieldnames
+        print(f"[BulkUpload] CSV columns detected: {fieldnames}")
 
         # OPTIMIZED: Process in larger batches with execute_values for speed
         batch_size = 20000  # Balanced size for faster inserts and progress updates
@@ -178,19 +194,10 @@ def _process_bulk_upload_job(job_id, file_path):
             # Continue anyway - table might not exist yet
 
         batch_data = []
+        row_count = 0
         for row in csv_reader:
+            row_count += 1
             try:
-                # Flexible column name matching (case-insensitive, with variations)
-                def get_col(row, *names):
-                    for name in names:
-                        if name in row:
-                            return row[name].strip() if row[name] else ''
-                        # Try lowercase
-                        for k in row.keys():
-                            if k.lower() == name.lower():
-                                return row[k].strip() if row[k] else ''
-                    return ''
-
                 # Validate required fields - accept multiple column name variations
                 merchant_name = get_col(row, 'Merchant Name', 'merchant_name', 'merchant', 'name', 'MerchantName')
                 if not merchant_name:
