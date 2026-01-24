@@ -15,8 +15,9 @@ import random
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add backend directory to path for imports
+backend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend')
+sys.path.insert(0, backend_dir)
 
 from database_manager import db_manager
 
