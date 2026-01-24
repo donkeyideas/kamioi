@@ -1170,74 +1170,77 @@ def admin_get_transactions():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # Query with ticker column - PostgreSQL compatible
         try:
             cursor.execute("""
-                  SELECT t.id, t.amount, t.status, t.date, t.merchant, t.category, 
+                  SELECT t.id, t.amount, t.status, t.date, t.merchant, t.category,
                          t.description, t.round_up, t.total_debit, t.fee, t.account_type, t.ticker,
                          u.name as user_name, u.email as user_email, u.role as user_role
                   FROM transactions t
-                  JOIN users u ON t.user_id = u.id
-                  WHERE 
-                      LOWER(t.merchant) NOT LIKE '%test%' AND 
-                      LOWER(t.description) NOT LIKE '%test%' AND
-                      LOWER(t.merchant) NOT LIKE '%fake%' AND 
-                      LOWER(t.description) NOT LIKE '%fake%' AND
-                      LOWER(t.merchant) NOT LIKE '%mock%' AND 
-                      LOWER(t.description) NOT LIKE '%mock%' AND
-                      t.id NOT IN (333, 332, 320)
-                  ORDER BY t.date DESC
+                  JOIN users u ON CAST(t.user_id AS VARCHAR) = CAST(u.id AS VARCHAR)
+                  ORDER BY t.date DESC NULLS LAST
                   LIMIT 100
               """)
-        except sqlite3.OperationalError:
+            has_ticker = True
+        except Exception:
+            # Fallback without ticker column
             cursor.execute("""
-                  SELECT t.id, t.amount, t.status, t.date, t.merchant, t.category, 
+                  SELECT t.id, t.amount, t.status, t.date, t.merchant, t.category,
                          t.description, t.round_up, t.total_debit, t.fee, t.account_type,
                          u.name as user_name, u.email as user_email, u.role as user_role
                   FROM transactions t
-                  JOIN users u ON t.user_id = u.id
-                  WHERE 
-                      LOWER(t.merchant) NOT LIKE '%test%' AND 
-                      LOWER(t.description) NOT LIKE '%test%' AND
-                      LOWER(t.merchant) NOT LIKE '%fake%' AND 
-                      LOWER(t.description) NOT LIKE '%fake%' AND
-                      LOWER(t.merchant) NOT LIKE '%mock%' AND 
-                      LOWER(t.description) NOT LIKE '%mock%' AND
-                      t.id NOT IN (333, 332, 320)
-                  ORDER BY t.date DESC
+                  JOIN users u ON CAST(t.user_id AS VARCHAR) = CAST(u.id AS VARCHAR)
+                  ORDER BY t.date DESC NULLS LAST
                   LIMIT 100
               """)
+            has_ticker = False
+
         transactions = cursor.fetchall()
         conn.close()
-        
+
         transaction_list = []
         for txn in transactions:
+            # psycopg2 returns tuples - with ticker: (id, amount, status, date, merchant, category, description, round_up, total_debit, fee, account_type, ticker, user_name, user_email, user_role)
+            # without ticker: (id, amount, status, date, merchant, category, description, round_up, total_debit, fee, account_type, user_name, user_email, user_role)
+            if has_ticker:
+                user_role = txn[14]
+                ticker = txn[11]
+                user_name = txn[12]
+                user_email = txn[13]
+            else:
+                user_role = txn[13]
+                ticker = None
+                user_name = txn[11]
+                user_email = txn[12]
+
             # Determine dashboard type based on user role
             dashboard_type = 'user'
-            if txn['user_role'] == 'family':
+            if user_role == 'family':
                 dashboard_type = 'family'
-            elif txn['user_role'] == 'business':
+            elif user_role == 'business':
                 dashboard_type = 'business'
-            
+
             transaction_list.append({
-                'id': txn['id'],
-                'amount': txn['amount'],
-                'status': txn['status'],
-                'created_at': txn['date'],  # Use date as created_at
-                'date': txn['date'],
-                'merchant': txn['merchant'] or 'Unknown Merchant',
-                'category': txn['category'] or 'Unknown',
-                'description': txn['description'],
-                'round_up': txn['round_up'] or 0,
-                'total_debit': txn['total_debit'] or txn['amount'],
-                'fee': txn['fee'] or 0,
-                'ticker': txn['ticker'] if 'ticker' in txn.keys() else None,
-                'account_type': txn['account_type'],
-                'user_name': txn['user_name'],
-                'user_email': txn['user_email'],
-                'user_role': txn['user_role'],
+                'id': txn[0],
+                'amount': txn[1],
+                'status': txn[2],
+                'created_at': str(txn[3]) if txn[3] else None,
+                'date': str(txn[3]) if txn[3] else None,
+                'merchant': txn[4] or 'Unknown Merchant',
+                'category': txn[5] or 'Unknown',
+                'description': txn[6],
+                'round_up': txn[7] or 0,
+                'total_debit': txn[8] or txn[1],
+                'fee': txn[9] or 0,
+                'ticker': ticker,
+                'account_type': txn[10],
+                'user_name': user_name,
+                'user_email': user_email,
+                'user_role': user_role,
                 'dashboard': dashboard_type
             })
         
@@ -5568,23 +5571,24 @@ def llm_event_stats():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Get RAG search metrics
         cursor.execute("SELECT COUNT(*) FROM llm_mappings")
         total_events = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > datetime('now', '-1 day')")
+
+        # PostgreSQL uses NOW() - INTERVAL '1 day' instead of SQLite datetime()
+        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > NOW() - INTERVAL '1 day'")
         processed_today = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE status = 'pending'")
         pending_events = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0")
         avg_confidence = cursor.fetchone()[0] or 0
-        
+
         # Calculate error rate (low confidence = potential error)
         error_rate = max(0, (1 - avg_confidence) * 100) if avg_confidence > 0 else 0
-        
+
         conn.close()
         
         return jsonify({
@@ -8968,11 +8972,12 @@ def llm_data_feature_store():
         cursor.execute("SELECT COUNT(DISTINCT category) FROM llm_mappings WHERE category IS NOT NULL")
         user_behavior = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > datetime('now', '-1 day')")
+        # PostgreSQL uses NOW() - INTERVAL instead of SQLite datetime()
+        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > NOW() - INTERVAL '1 day'")
         transaction_features = cursor.fetchone()[0]
-        
+
         conn.close()
-        
+
         # Determine status and calculate realistic metrics
         status = 'active' if total_features > 0 else 'inactive'
         cache_hit_rate = min(merchant_patterns / max(total_features, 1) * 100, 95.0) if total_features > 0 else 0.0
