@@ -3107,10 +3107,10 @@ def user_ai_insights_slash():
         
         # Get user's mapping history
         cursor.execute('''
-            SELECT id, merchant_name, ticker_symbol, category, status, 
+            SELECT id, merchant_name, ticker_symbol, category, status,
                    admin_approved, confidence, notes, created_at, processed_at, transaction_id, mapping_id
-            FROM llm_mappings 
-            WHERE user_id = ?
+            FROM llm_mappings
+            WHERE user_id = %s
             ORDER BY created_at DESC
         ''', (user_id,))
         
