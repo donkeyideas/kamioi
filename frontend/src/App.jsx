@@ -60,6 +60,7 @@ const FamilyDashboard = lazy(() => import('./pages/FamilyDashboard'))
 const AdminDashboard = lazy(() => import('./components/admin/LazyAdminDashboard'))
 const AdminLogin = lazy(() => import('./pages/AdminLogin'))
 const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
 const ResetPassword = lazy(() => import('./components/auth/ResetPassword'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
@@ -246,8 +247,8 @@ const AppRoutes = () => {
         <Route path="/home-v5" element={<HomePageV5 />} />
         <Route path="/business-registration" element={<BusinessRegistration />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Login initialMode="signup" />} />
-        <Route path="/register" element={<Login initialMode="signup" />} />
+        <Route path="/signup" element={<Register />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/admin-login" element={<AdminLogin />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/terms-of-service" element={<TermsOfService />} />
