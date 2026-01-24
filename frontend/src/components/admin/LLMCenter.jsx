@@ -1539,13 +1539,57 @@ const LLMCenter = () => {
       }
 
       const startProgressPolling = (jobId) => {
+        let consecutiveErrors = 0
+        let lastKnownProgress = { rows: 0, phase: '' }
+
         const poll = async () => {
           try {
             const response = await fetch(buildProgressUrl(jobId))
-            const result = await response.json()
-            if (!result.success) {
+
+            // Handle 404/502 errors (server restart or job state lost)
+            if (!response.ok) {
+              consecutiveErrors++
+              console.warn(`Progress poll error ${consecutiveErrors}: ${response.status}`)
+
+              // After 10 consecutive errors, assume upload may have completed
+              if (consecutiveErrors >= 10) {
+                clearInterval(progressPollInterval)
+                setGlassModal({
+                  isOpen: true,
+                  title: 'Upload Status Unknown',
+                  message: `Server connection lost during upload.
+
+The upload was in progress${lastKnownProgress.rows > 0 ? ` (${lastKnownProgress.rows.toLocaleString()} rows processed)` : ''}.
+
+Please check the Summary tab to verify your data was uploaded. If not, try uploading again.`,
+                  type: 'warning'
+                })
+                setShowBulkUpload(false)
+                queryClient.invalidateQueries({ queryKey: ['llm-center-data'] })
+                refetchLLMData()
+                fetchLLMData()
+                return
+              }
+
+              // Show waiting message
+              setGlassModal({
+                isOpen: true,
+                title: 'Processing Upload (Fast Mode)',
+                message: `Waiting for server response...${lastKnownProgress.rows > 0 ? ` Last: ${lastKnownProgress.rows.toLocaleString()} rows` : ''}`,
+                type: 'info'
+              })
               return
             }
+
+            const result = await response.json()
+            if (!result.success) {
+              consecutiveErrors++
+              return
+            }
+
+            // Reset error count on success
+            consecutiveErrors = 0
+
             const status = result.data?.status || 'processing'
             const processed = result.data?.processed_rows || 0
             const rowsPerSecond = result.data?.rows_per_second || 0
@@ -1553,8 +1597,10 @@ const LLMCenter = () => {
             const method = result.data?.method || 'INSERT'
             const totalRows = result.data?.total_rows || 0
 
+            // Track last known progress
+            lastKnownProgress = { rows: processed || totalRows, phase }
+
             if (status === 'completed') {
-              clearInterval(progressInterval)
               clearInterval(progressPollInterval)
 
               const errorCount = result.data?.errors?.length || 0
@@ -1581,13 +1627,12 @@ Errors: ${errorCount}`,
             }
 
             if (status === 'failed') {
-              clearInterval(progressInterval)
               clearInterval(progressPollInterval)
-              setGlassModal({ 
-                isOpen: true, 
-                title: 'Error', 
-                message: result.data?.error || 'Bulk upload failed', 
-                type: 'error' 
+              setGlassModal({
+                isOpen: true,
+                title: 'Error',
+                message: result.data?.error || 'Bulk upload failed',
+                type: 'error'
               })
               return
             }
@@ -1606,7 +1651,8 @@ Errors: ${errorCount}`,
               type: 'info'
             })
           } catch (pollError) {
-            // Ignore transient errors and keep polling
+            consecutiveErrors++
+            console.warn(`Progress poll exception ${consecutiveErrors}:`, pollError)
           }
         }
 
