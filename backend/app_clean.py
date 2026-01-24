@@ -985,6 +985,144 @@ def admin_get_business_users():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/admin/demo-users/create', methods=['POST'])
+def admin_create_demo_users():
+    """Create demo users for testing and demonstrations"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        from datetime import datetime
+        from werkzeug.security import generate_password_hash
+
+        DEMO_PASSWORD = "Demo123!"
+        DEMO_ACCOUNTS = [
+            {"email": "demo_user@kamioi.com", "name": "Demo User", "account_type": "individual"},
+            {"email": "demo_family@kamioi.com", "name": "Demo Family Admin", "account_type": "family"},
+            {"email": "demo_business@kamioi.com", "name": "Demo Business", "account_type": "business"}
+        ]
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        created_users = []
+
+        for account in DEMO_ACCOUNTS:
+            # Check if user already exists
+            cursor.execute('SELECT id FROM users WHERE LOWER(email) = LOWER(%s)', (account['email'],))
+            existing = cursor.fetchone()
+
+            if existing:
+                created_users.append({'email': account['email'], 'status': 'already_exists', 'id': existing['id']})
+                continue
+
+            # Create the user
+            password_hash = generate_password_hash(DEMO_PASSWORD)
+            cursor.execute('''
+                INSERT INTO users (email, password, name, account_type, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (account['email'], password_hash, account['name'], account['account_type'], datetime.utcnow()))
+            new_id = cursor.fetchone()['id']
+            conn.commit()
+
+            created_users.append({
+                'email': account['email'],
+                'status': 'created',
+                'id': new_id,
+                'account_type': account['account_type']
+            })
+
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': 'Demo users processed',
+            'users': created_users,
+            'password': DEMO_PASSWORD
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/demo-users', methods=['GET'])
+def admin_get_demo_users():
+    """Get list of demo users"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        demo_emails = ['demo_user@kamioi.com', 'demo_family@kamioi.com', 'demo_business@kamioi.com']
+        cursor.execute('''
+            SELECT id, email, name, account_type, created_at
+            FROM users
+            WHERE LOWER(email) = ANY(%s)
+        ''', ([e.lower() for e in demo_emails],))
+        rows = cursor.fetchall()
+        conn.close()
+
+        users = [{
+            'id': row['id'],
+            'email': row['email'],
+            'name': row['name'],
+            'account_type': row['account_type'],
+            'created_at': str(row['created_at']) if row['created_at'] else None
+        } for row in rows]
+
+        return jsonify({
+            'success': True,
+            'users': users,
+            'password': 'Demo123!'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/db-status', methods=['GET'])
+def admin_db_status():
+    """Check database status"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check users table
+        cursor.execute('''
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'users' ORDER BY ordinal_position
+        ''')
+        columns = [row['column_name'] for row in cursor.fetchall()]
+
+        cursor.execute('SELECT COUNT(*) as count FROM users')
+        user_count = cursor.fetchone()['count']
+
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'status': {
+                'database_type': 'postgresql',
+                'users_columns': columns,
+                'users_count': user_count
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/api/admin/user-metrics', methods=['GET'])
 def admin_get_user_metrics():
     try:
