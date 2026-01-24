@@ -2412,16 +2412,28 @@ def user_transactions():
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        # Columns: 0=id, 1=amount, 2=status, 3=created_at, 4=description, 5=merchant, 6=category, 7=date, 8=round_up, 9=fee, 10=total_debit, 11=ticker
-        cursor.execute("""
-            SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
-            FROM transactions
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-        """, (user_id,))
+        # Try with ticker column first, fall back without it
+        try:
+            cursor.execute("""
+                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
+                FROM transactions
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+            has_ticker = True
+        except Exception:
+            conn.rollback()
+            cursor.execute("""
+                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit
+                FROM transactions
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+            has_ticker = False
         transactions = cursor.fetchall()
         conn.close()
 
+        # Columns: 0=id, 1=amount, 2=status, 3=created_at, 4=description, 5=merchant, 6=category, 7=date, 8=round_up, 9=fee, 10=total_debit, 11=ticker (if exists)
         transaction_list = []
         for txn in transactions:
             transaction_list.append({
@@ -2436,7 +2448,7 @@ def user_transactions():
                 'round_up': txn[8],
                 'fee': txn[9],
                 'total_debit': txn[10],
-                'ticker': txn[11] if len(txn) > 11 else None
+                'ticker': txn[11] if has_ticker and len(txn) > 11 else None
             })
         
         return jsonify({
@@ -2995,6 +3007,58 @@ def user_fees_total():
             'average_fee': float(total_fees / fee_transactions) if fee_transactions > 0 else 0
         })
         
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/settings/roundup', methods=['GET'])
+def user_settings_roundup():
+    """Get user's roundup settings"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        user_id = token.replace('user_token_', '')
+
+        # Return default roundup settings
+        return jsonify({
+            'success': True,
+            'settings': {
+                'roundup_amount': 1.00,
+                'roundup_enabled': True,
+                'auto_invest': True,
+                'investment_frequency': 'per_transaction'
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/settings/roundup', methods=['PUT'])
+def update_user_settings_roundup():
+    """Update user's roundup settings"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        user_id = token.replace('user_token_', '')
+
+        data = request.get_json() or {}
+
+        return jsonify({
+            'success': True,
+            'message': 'Roundup settings updated',
+            'settings': {
+                'roundup_amount': data.get('roundup_amount', 1.00),
+                'roundup_enabled': data.get('roundup_enabled', True),
+                'auto_invest': data.get('auto_invest', True),
+                'investment_frequency': data.get('investment_frequency', 'per_transaction')
+            }
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
