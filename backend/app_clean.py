@@ -3427,11 +3427,16 @@ def user_profile():
             annual_income = data.get('annualIncome', data.get('annual_income', '')).strip()
             employment_status = data.get('employmentStatus', data.get('employment_status', '')).strip()
 
+            # DOB and SSN fields - handle multiple field name formats
+            dob = data.get('dob') or data.get('dateOfBirth') or data.get('date_of_birth')
+            ssn_last4 = data.get('ssn_last4') or data.get('ssnLast4') or data.get('ssn')
+
             conn = get_db_connection()
             cursor = conn.cursor()
 
             # Build dynamic update query based on provided fields
-            update_fields = ['updated_at = CURRENT_TIMESTAMP']
+            # Note: removed updated_at as column may not exist
+            update_fields = []
             update_values = []
 
             if name:
@@ -3479,6 +3484,17 @@ def user_profile():
             if employment_status:
                 update_fields.append('employment_status = %s')
                 update_values.append(employment_status)
+            if dob:
+                update_fields.append('dob = %s')
+                update_values.append(dob)
+            if ssn_last4:
+                update_fields.append('ssn_last4 = %s')
+                update_values.append(ssn_last4)
+
+            # If no fields to update, return early
+            if not update_fields:
+                conn.close()
+                return jsonify({'success': True, 'message': 'No fields to update'})
 
             update_values.append(user_id)
 
@@ -3937,6 +3953,33 @@ def user_bank_connections():
                 'has_connections': False,
                 'message': 'No bank connections linked'
             })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/bank-connections/<connection_id>', methods=['DELETE'])
+def delete_user_bank_connection(connection_id):
+    """Delete a user's bank connection"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        user_id = token.replace('user_token_', '')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Clear the mx_data column to remove bank connection
+        cursor.execute("UPDATE users SET mx_data = NULL WHERE id = %s", (user_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Bank connection deleted successfully'
+        })
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
