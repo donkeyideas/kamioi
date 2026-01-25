@@ -1268,8 +1268,9 @@ def admin_delete_user(user_id):
 
         # Tables to delete from, in order (child tables first)
         # Format: (table_name, column_name, use_string_for_id)
+        # NOTE: llm_mappings is a GLOBAL merchant-to-ticker mapping table
+        #       It does NOT have a user_id column, so we don't delete from it
         tables_to_delete = [
-            ("llm_mappings", "user_id", True),
             ("transactions", "user_id", False),
             ("portfolios", "user_id", False),
             ("goals", "user_id", False),
