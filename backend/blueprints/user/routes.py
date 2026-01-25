@@ -500,7 +500,14 @@ def get_profile():
             'riskTolerance': row[21] if len(row) > 21 else None
         }
 
-        return success_response(data={'profile': profile})
+        # Return profile at top level for frontend compatibility
+        # Frontend expects: { success: true, profile: {...} }
+        from flask import jsonify
+        return jsonify({
+            'success': True,
+            'profile': profile,
+            'data': profile  # Also include at data level for any code expecting that format
+        })
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -583,6 +590,148 @@ def update_profile():
             conn.close()
 
         return success_response(message='Profile updated successfully')
+
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+# =============================================================================
+# BANK CONNECTIONS
+# =============================================================================
+
+@user_bp.route('/bank-connections', methods=['GET'])
+def get_bank_connections():
+    """Get user's bank connections from mx_data column."""
+    user = get_auth_user()
+    if not user:
+        return unauthorized_response()
+
+    try:
+        import json
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+
+        if use_postgresql:
+            from sqlalchemy import text
+            result = conn.execute(
+                text("SELECT mx_data, user_guid FROM users WHERE id = :user_id"),
+                {'user_id': user['id']}
+            )
+            row = result.fetchone()
+            db_manager.release_connection(conn)
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT mx_data, user_guid FROM users WHERE id = ?", (user['id'],))
+            row = cur.fetchone()
+            conn.close()
+
+        if row and row[0]:
+            try:
+                mx_data = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                # Format connection data for frontend
+                connection = {
+                    'id': mx_data.get('member_guid', f"conn_{user['id']}"),
+                    'member_guid': mx_data.get('member_guid', ''),
+                    'user_guid': mx_data.get('user_guid', row[1] if row[1] else ''),
+                    'bank_name': mx_data.get('institution_name', mx_data.get('bank_name', 'Connected Bank')),
+                    'institution_name': mx_data.get('institution_name', mx_data.get('bank_name', 'Connected Bank')),
+                    'account_name': mx_data.get('account_name', 'Primary Account'),
+                    'account_type': mx_data.get('account_type', 'checking'),
+                    'status': 'active',
+                    'connected_at': mx_data.get('connected_at', '')
+                }
+                return success_response(data={
+                    'connections': [connection],
+                    'has_connections': True
+                })
+            except Exception:
+                pass
+
+        return success_response(data={
+            'connections': [],
+            'has_connections': False
+        })
+
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@user_bp.route('/bank-connections', methods=['POST'])
+def save_bank_connection():
+    """Save bank connection to mx_data column."""
+    user = get_auth_user()
+    if not user:
+        return unauthorized_response()
+
+    try:
+        import json
+        from datetime import datetime
+
+        data = request.get_json() or {}
+        member_guid = data.get('member_guid', '')
+        user_guid = data.get('user_guid', '')
+        institution_name = data.get('institution_name', 'Connected Bank')
+        accounts = data.get('accounts', [])
+
+        # Store as JSON in mx_data column
+        mx_data = json.dumps({
+            'member_guid': member_guid,
+            'user_guid': user_guid,
+            'institution_name': institution_name,
+            'accounts': accounts,
+            'connected_at': datetime.now().isoformat()
+        })
+
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+
+        if use_postgresql:
+            from sqlalchemy import text
+            conn.execute(
+                text("UPDATE users SET mx_data = :mx_data, user_guid = :user_guid WHERE id = :user_id"),
+                {'mx_data': mx_data, 'user_guid': user_guid, 'user_id': user['id']}
+            )
+            conn.commit()
+            db_manager.release_connection(conn)
+        else:
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET mx_data = ?, user_guid = ? WHERE id = ?",
+                       (mx_data, user_guid, user['id']))
+            conn.commit()
+            conn.close()
+
+        return success_response(message='Bank connection saved successfully')
+
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@user_bp.route('/bank-connections', methods=['DELETE'])
+def delete_bank_connection():
+    """Delete bank connection by clearing mx_data column."""
+    user = get_auth_user()
+    if not user:
+        return unauthorized_response()
+
+    try:
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+
+        if use_postgresql:
+            from sqlalchemy import text
+            conn.execute(
+                text("UPDATE users SET mx_data = NULL WHERE id = :user_id"),
+                {'user_id': user['id']}
+            )
+            conn.commit()
+            db_manager.release_connection(conn)
+        else:
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET mx_data = NULL WHERE id = ?", (user['id'],))
+            conn.commit()
+            conn.close()
+
+        return success_response(message='Bank connection removed successfully')
 
     except Exception as e:
         return error_response(str(e), 500)

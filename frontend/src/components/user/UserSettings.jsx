@@ -54,8 +54,11 @@ const UserSettings = () => {
 
       if (response.ok) {
         const result = await response.json()
-        if (result.success && result.profile) {
-          const p = result.profile
+        console.log('Profile API response:', result)
+        if (result.success) {
+          // Handle multiple response formats for backward compatibility
+          const p = result.profile || result.data?.profile || result.data || {}
+          console.log('Parsed profile data:', p)
           setProfileForm(prev => ({
             ...prev,
             name: p.name || prev.name,
@@ -63,20 +66,22 @@ const UserSettings = () => {
             phone: p.phone || prev.phone,
             country: p.country || prev.country,
             timezone: p.timezone || prev.timezone,
-            firstName: p.firstName || prev.firstName,
-            lastName: p.lastName || prev.lastName,
-            dob: p.dob || prev.dob,
-            ssn: p.ssn || prev.ssn,
+            firstName: p.firstName || p.first_name || prev.firstName,
+            lastName: p.lastName || p.last_name || prev.lastName,
+            // Handle dob field name variations
+            dob: p.dob || p.dateOfBirth || p.date_of_birth || prev.dob,
+            // Handle ssn field name variations (backend uses ssn_last4)
+            ssn: p.ssn || p.ssn_last4 || p.ssnLast4 || prev.ssn,
             street: p.street || p.address || prev.street,
             city: p.city || prev.city,
             state: p.state || prev.state,
-            zip: p.zip || p.zip_code || prev.zip,
-            annualIncome: p.annualIncome || prev.annualIncome,
-            employmentStatus: p.employmentStatus || prev.employmentStatus,
+            zip: p.zip || p.zip_code || p.zipCode || prev.zip,
+            annualIncome: p.annualIncome || p.annual_income || prev.annualIncome,
+            employmentStatus: p.employmentStatus || p.employment_status || prev.employmentStatus,
             employer: p.employer || prev.employer,
             occupation: p.occupation || prev.occupation,
-            roundUpAmount: p.roundUpAmount || prev.roundUpAmount,
-            riskTolerance: p.riskTolerance || prev.riskTolerance
+            roundUpAmount: p.roundUpAmount || p.round_up_amount || prev.roundUpAmount,
+            riskTolerance: p.riskTolerance || p.risk_tolerance || prev.riskTolerance
           }))
         }
       }
