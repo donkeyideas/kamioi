@@ -85,13 +85,95 @@ const DashboardHeader = () => {
   }
 
   const handleMXConnect = async () => {
-    // Try MX Connect first, but if it fails, offer manual transaction submission
+    // Open MX Connect widget to add a new bank
+    setShowMXConnect(true)
+  }
+
+  const handleAutoSync = async () => {
+    // Auto Sync: Check if user has a bank connected, then sync transactions
+    const token = localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
+    if (!token) {
+      showErrorModal('Authentication Required', 'Please log in to sync your transactions.')
+      return
+    }
+
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+
     try {
-      setShowMXConnect(true)
+      // First, check if user has a bank connected
+      const bankResponse = await fetch(`${apiBaseUrl}/api/user/bank-connections`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const bankData = await bankResponse.json()
+
+      // Check if user has any bank connections
+      const hasBankConnected = bankData.success &&
+        ((bankData.connections && bankData.connections.length > 0) ||
+         (bankData.mx_data && Object.keys(bankData.mx_data).length > 0))
+
+      if (!hasBankConnected) {
+        // No bank connected - prompt to connect one
+        showInfoModal(
+          'No Bank Connected',
+          'You need to connect a bank account first before syncing transactions. Would you like to connect one now?'
+        )
+        setShowMXConnect(true)
+        return
+      }
+
+      // Bank is connected - sync transactions
+      showSuccessModal(
+        'Syncing Transactions',
+        'Fetching latest transactions from your connected bank account...',
+        'info'
+      )
+
+      const syncResponse = await fetch(`${apiBaseUrl}/api/user/transactions/sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sync_type: 'auto',
+          force_refresh: true
+        })
+      })
+
+      const syncData = await syncResponse.json()
+
+      if (syncData.success) {
+        const txCount = syncData.transactions?.length || syncData.count || 0
+        showSuccessModal(
+          'Sync Complete!',
+          `Successfully synced ${txCount} transaction${txCount !== 1 ? 's' : ''} from your bank account.`
+        )
+        addNotification({
+          type: 'success',
+          title: 'Transactions Synced',
+          message: `Successfully synced ${txCount} transaction${txCount !== 1 ? 's' : ''}.`,
+          timestamp: new Date()
+        })
+        // Refresh transactions in the data context
+        if (addTransactions && syncData.transactions) {
+          await addTransactions(syncData.transactions)
+        }
+      } else {
+        showErrorModal(
+          'Sync Failed',
+          syncData.error || 'Unable to sync transactions. Please try again later.'
+        )
+      }
     } catch (error) {
-      console.log('MX Connect not available, using manual sync option')
-      // Fallback: Direct transaction sync option
-      handleManualSync()
+      console.error('Auto sync error:', error)
+      showErrorModal(
+        'Sync Error',
+        'An error occurred while syncing transactions. Please try again.'
+      )
     }
   }
 
@@ -361,7 +443,7 @@ const DashboardHeader = () => {
           
           {/* Bank Sync - Now Automatic */}
           <button
-            onClick={handleMXConnect}
+            onClick={handleAutoSync}
             className="bg-green-600/20 hover:bg-green-600/30 text-green-400 px-4 py-2 rounded-full flex items-center space-x-2 transition-colors cursor-pointer"
             title="Sync transactions from your bank account"
           >

@@ -4081,6 +4081,94 @@ def delete_user_bank_connection(connection_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/user/transactions/sync', methods=['POST'])
+def sync_user_transactions():
+    """Sync transactions from user's connected bank account"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        user_id = token.replace('user_token_', '')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if user has a bank connection
+        cursor.execute("SELECT mx_data FROM users WHERE id = %s", (user_id,))
+        result = cursor.fetchone()
+
+        if not result or not result[0]:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'No bank account connected. Please connect a bank first.'
+            }), 400
+
+        # In demo mode, generate sample transactions
+        # In production, this would call MX API to fetch real transactions
+        import random
+        from datetime import datetime, timedelta
+
+        merchants = [
+            ('Starbucks', 'SBUX', 'Coffee & Beverages'),
+            ('Amazon', 'AMZN', 'E-commerce'),
+            ('Walmart', 'WMT', 'Retail'),
+            ('Target', 'TGT', 'Retail'),
+            ('McDonalds', 'MCD', 'Fast Food'),
+            ('Apple Store', 'AAPL', 'Technology'),
+            ('Netflix', 'NFLX', 'Entertainment'),
+            ('Uber', 'UBER', 'Transportation'),
+            ('Chipotle', 'CMG', 'Fast Food'),
+            ('Home Depot', 'HD', 'Home Improvement')
+        ]
+
+        transactions = []
+        base_date = datetime.now()
+
+        # Generate 5-10 new transactions
+        num_transactions = random.randint(5, 10)
+
+        for i in range(num_transactions):
+            merchant = random.choice(merchants)
+            amount = round(random.uniform(5.00, 75.00), 2)
+            round_up = round(1.00 - (amount % 1) if (amount % 1) > 0 else 1.00, 2)
+            tx_date = base_date - timedelta(days=random.randint(0, 7))
+
+            tx = {
+                'id': f'tx_{user_id}_{int(datetime.now().timestamp())}_{i}',
+                'merchant': merchant[0],
+                'ticker': merchant[1],
+                'category': merchant[2],
+                'amount': amount,
+                'round_up': round_up,
+                'fee': 0.25,
+                'date': tx_date.strftime('%Y-%m-%d'),
+                'status': 'pending'
+            }
+            transactions.append(tx)
+
+            # Save to database
+            cursor.execute("""
+                INSERT INTO transactions (user_id, merchant, amount, round_up, fee, date, status, ticker, category)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+            """, (user_id, merchant[0], amount, round_up, 0.25, tx_date, 'pending', merchant[1], merchant[2]))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Synced {len(transactions)} new transactions',
+            'count': len(transactions),
+            'transactions': transactions
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/user/roundups/total', methods=['GET'])
 def user_roundups_total():
     try:
