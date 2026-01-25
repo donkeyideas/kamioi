@@ -134,6 +134,7 @@ def create_postgres_schema():
                 annual_income VARCHAR(50),
                 employment_status VARCHAR(50),
                 dob DATE,
+                ssn_last4 VARCHAR(4),
                 country VARCHAR(100),
                 timezone VARCHAR(100),
                 risk_tolerance VARCHAR(50),
@@ -193,6 +194,9 @@ def create_postgres_schema():
                 END IF;
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='dob') THEN
                     ALTER TABLE users ADD COLUMN dob DATE;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='ssn_last4') THEN
+                    ALTER TABLE users ADD COLUMN ssn_last4 VARCHAR(4);
                 END IF;
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='country') THEN
                     ALTER TABLE users ADD COLUMN country VARCHAR(100);

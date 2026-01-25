@@ -439,7 +439,9 @@ def get_profile():
             result = conn.execute(
                 text("""
                     SELECT id, name, email, account_type, phone, city, state, zip_code,
-                           address, account_number, created_at
+                           address, account_number, created_at, first_name, last_name,
+                           dob, ssn_last4, country, timezone, employer, occupation,
+                           annual_income, employment_status, risk_tolerance
                     FROM users
                     WHERE id = :user_id
                 """),
@@ -451,7 +453,9 @@ def get_profile():
             cur = conn.cursor()
             cur.execute("""
                 SELECT id, name, email, account_type, phone, city, state, zip_code,
-                       address, account_number, created_at
+                       address, account_number, created_at, first_name, last_name,
+                       dob, ssn_last4, country, timezone, employer, occupation,
+                       annual_income, employment_status, risk_tolerance
                 FROM users
                 WHERE id = ?
             """, (user['id'],))
@@ -460,6 +464,11 @@ def get_profile():
 
         if not row:
             return error_response('User not found', 404)
+
+        # Format DOB as string if it's a date object
+        dob_value = row[13] if len(row) > 13 else None
+        if dob_value and hasattr(dob_value, 'isoformat'):
+            dob_value = dob_value.isoformat()
 
         profile = {
             'id': row[0],
@@ -470,12 +479,28 @@ def get_profile():
             'city': row[5],
             'state': row[6],
             'zip_code': row[7],
+            'zip': row[7],  # Alias for frontend
             'address': row[8],
+            'street': row[8],  # Alias for frontend
             'account_number': row[9],
-            'created_at': row[10]
+            'created_at': row[10],
+            'firstName': row[11] if len(row) > 11 else None,
+            'lastName': row[12] if len(row) > 12 else None,
+            'dob': dob_value,
+            'dateOfBirth': dob_value,  # Alias for frontend
+            'ssn': row[14] if len(row) > 14 else None,
+            'ssnLast4': row[14] if len(row) > 14 else None,
+            'ssn_last4': row[14] if len(row) > 14 else None,
+            'country': row[15] if len(row) > 15 else None,
+            'timezone': row[16] if len(row) > 16 else None,
+            'employer': row[17] if len(row) > 17 else None,
+            'occupation': row[18] if len(row) > 18 else None,
+            'annualIncome': row[19] if len(row) > 19 else None,
+            'employmentStatus': row[20] if len(row) > 20 else None,
+            'riskTolerance': row[21] if len(row) > 21 else None
         }
 
-        return success_response(data=profile)
+        return success_response(data={'profile': profile})
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -490,15 +515,41 @@ def update_profile():
 
     try:
         data = request.get_json() or {}
-        allowed_fields = ['name', 'phone', 'city', 'state', 'zip_code', 'address']
+
+        # Expanded allowed fields including DOB, SSN, and all profile fields
+        allowed_fields = [
+            'name', 'phone', 'city', 'state', 'zip_code', 'address',
+            'first_name', 'last_name', 'dob', 'ssn_last4',
+            'country', 'timezone', 'employer', 'occupation',
+            'annual_income', 'employment_status', 'risk_tolerance'
+        ]
+
+        # Map frontend field names to database field names
+        field_mapping = {
+            'firstName': 'first_name',
+            'lastName': 'last_name',
+            'dateOfBirth': 'dob',
+            'ssnLast4': 'ssn_last4',
+            'ssn': 'ssn_last4',
+            'zipCode': 'zip_code',
+            'zip': 'zip_code',
+            'street': 'address',
+            'annualIncome': 'annual_income',
+            'employmentStatus': 'employment_status',
+            'riskTolerance': 'risk_tolerance'
+        }
 
         # Build update query dynamically
         updates = []
         values = {}
-        for field in allowed_fields:
-            if field in data:
-                updates.append(f"{field} = :{field}")
-                values[field] = data[field]
+
+        for key, value in data.items():
+            # Map frontend field names to database field names
+            db_field = field_mapping.get(key, key)
+
+            if db_field in allowed_fields:
+                updates.append(f"{db_field} = :{db_field}")
+                values[db_field] = value
 
         if not updates:
             return error_response('No valid fields to update', 400)
@@ -516,8 +567,13 @@ def update_profile():
             db_manager.release_connection(conn)
         else:
             # Convert to SQLite format
-            sqlite_updates = [f"{field} = ?" for field in allowed_fields if field in data]
-            sqlite_values = [data[field] for field in allowed_fields if field in data]
+            sqlite_updates = []
+            sqlite_values = []
+            for key, value in data.items():
+                db_field = field_mapping.get(key, key)
+                if db_field in allowed_fields:
+                    sqlite_updates.append(f"{db_field} = ?")
+                    sqlite_values.append(value)
             sqlite_values.append(user['id'])
 
             cur = conn.cursor()
