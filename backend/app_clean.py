@@ -525,6 +525,10 @@ def initialize_database():
             ("favorite_sectors", "TEXT"),
             ("investment_style", "VARCHAR(100)"),
             ("monthly_investment_target", "DECIMAL(10,2)"),
+            ("dob", "DATE"),
+            ("ssn_last4", "VARCHAR(4)"),
+            ("subscription_plan_id", "INTEGER"),
+            ("billing_cycle", "VARCHAR(20)"),
         ]
 
         for col_name, col_type in profile_columns:
@@ -858,6 +862,8 @@ def initialize_database():
                         'name': 'Individual',
                         'description': 'Perfect for individual investors looking to grow their wealth through automated micro-investing.',
                         'price': 9.00,
+                        'price_monthly': 9.00,
+                        'price_yearly': 90.00,
                         'billing_period': 'monthly',
                         'account_type': 'individual',
                         'features': json.dumps([
@@ -873,6 +879,8 @@ def initialize_database():
                         'name': 'Family',
                         'description': 'Ideal for families who want to invest together and teach financial literacy.',
                         'price': 19.00,
+                        'price_monthly': 19.00,
+                        'price_yearly': 190.00,
                         'billing_period': 'monthly',
                         'account_type': 'family',
                         'features': json.dumps([
@@ -889,6 +897,8 @@ def initialize_database():
                         'name': 'Business',
                         'description': 'For businesses looking to offer investment benefits to employees or manage corporate funds.',
                         'price': 49.00,
+                        'price_monthly': 49.00,
+                        'price_yearly': 490.00,
                         'billing_period': 'monthly',
                         'account_type': 'business',
                         'features': json.dumps([
@@ -906,9 +916,9 @@ def initialize_database():
 
                 for plan in default_plans:
                     cursor.execute("""
-                        INSERT INTO subscription_plans (name, description, price, billing_period, account_type, features)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (plan['name'], plan['description'], plan['price'], plan['billing_period'], plan['account_type'], plan['features']))
+                        INSERT INTO subscription_plans (name, description, price, price_monthly, price_yearly, billing_period, account_type, features)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (plan['name'], plan['description'], plan['price'], plan['price_monthly'], plan['price_yearly'], plan['billing_period'], plan['account_type'], plan['features']))
 
                 conn.commit()
                 print("✅ Default subscription plans created successfully")
@@ -2444,6 +2454,14 @@ def user_register():
         annual_income = data.get('annualIncome', data.get('annual_income', '')).strip()
         employment_status = data.get('employmentStatus', data.get('employment_status', '')).strip()
 
+        # DOB and SSN fields
+        dob = data.get('dateOfBirth', data.get('dob', '')).strip()
+        ssn_last4 = data.get('ssnLast4', data.get('ssn_last4', '')).strip()
+
+        # Subscription fields
+        subscription_plan_id = data.get('subscriptionPlanId', data.get('subscription_plan_id'))
+        billing_cycle = data.get('billingCycle', data.get('billing_cycle', 'monthly')).strip()
+
         # MX bank connection data
         mx_data = data.get('mxData', data.get('mx_data'))
         if mx_data and isinstance(mx_data, dict):
@@ -2488,8 +2506,9 @@ def user_register():
             INSERT INTO users (email, password, name, account_type, role, round_up_amount, risk_tolerance, investment_goals,
                              terms_agreed, privacy_agreed, marketing_agreed, created_at,
                              phone, address, city, state, zip_code, company_name, mx_data,
-                             first_name, last_name, employer, occupation, annual_income, employment_status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             first_name, last_name, employer, occupation, annual_income, employment_status,
+                             dob, ssn_last4, subscription_plan_id, billing_cycle)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             email,
@@ -2516,7 +2535,11 @@ def user_register():
             employer or None,
             occupation or None,
             annual_income or None,
-            employment_status or None
+            employment_status or None,
+            dob or None,
+            ssn_last4 or None,
+            subscription_plan_id,
+            billing_cycle or 'monthly'
         ))
 
         result = cursor.fetchone()
@@ -2589,6 +2612,14 @@ def user_auth_register():
         annual_income = data.get('annualIncome', data.get('annual_income', '')).strip()
         employment_status = data.get('employmentStatus', data.get('employment_status', '')).strip()
 
+        # DOB and SSN fields
+        dob = data.get('dateOfBirth', data.get('dob', '')).strip()
+        ssn_last4 = data.get('ssnLast4', data.get('ssn_last4', '')).strip()
+
+        # Subscription fields
+        subscription_plan_id = data.get('subscriptionPlanId', data.get('subscription_plan_id'))
+        billing_cycle = data.get('billingCycle', data.get('billing_cycle', 'monthly')).strip()
+
         # MX bank connection data
         mx_data = data.get('mxData', data.get('mx_data'))
         if mx_data and isinstance(mx_data, dict):
@@ -2633,8 +2664,9 @@ def user_auth_register():
             INSERT INTO users (email, password, name, account_type, role, round_up_amount, risk_tolerance, investment_goals,
                              terms_agreed, privacy_agreed, marketing_agreed, created_at,
                              phone, address, city, state, zip_code, company_name, mx_data,
-                             first_name, last_name, employer, occupation, annual_income, employment_status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             first_name, last_name, employer, occupation, annual_income, employment_status,
+                             dob, ssn_last4, subscription_plan_id, billing_cycle)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             email,
@@ -2661,7 +2693,11 @@ def user_auth_register():
             employer or None,
             occupation or None,
             annual_income or None,
-            employment_status or None
+            employment_status or None,
+            dob or None,
+            ssn_last4 or None,
+            subscription_plan_id,
+            billing_cycle or 'monthly'
         ))
 
         result = cursor.fetchone()
@@ -2693,6 +2729,171 @@ def user_auth_register():
         })
         
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/auth/complete-registration', methods=['POST'])
+def user_auth_complete_registration():
+    """Complete registration with additional profile data after initial signup"""
+    try:
+        data = request.get_json() or {}
+
+        # Get user ID from token, userId, or userGuid field
+        user_id = data.get('userId')
+        user_guid = data.get('userGuid', '')
+
+        if not user_id:
+            auth_header = request.headers.get('Authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+                user_id = token.replace('user_token_', '')
+
+        # If still no user_id, try to extract from userGuid (format: kamioi_user_123_timestamp)
+        if not user_id and user_guid:
+            try:
+                parts = user_guid.split('_')
+                if len(parts) >= 3 and parts[0] == 'kamioi':
+                    user_id = parts[2]
+            except:
+                pass
+
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User ID required'}), 400
+
+        # Extract all fields from the request
+        first_name = data.get('firstName', '').strip()
+        last_name = data.get('lastName', '').strip()
+        phone = data.get('phone', '').strip()
+        address = data.get('address', '').strip()
+        city = data.get('city', '').strip()
+        state = data.get('state', '').strip()
+        zip_code = data.get('zipCode', data.get('zip_code', '')).strip()
+        country = data.get('country', 'USA').strip()
+        employer = data.get('employer', '').strip()
+        occupation = data.get('occupation', '').strip()
+        annual_income = data.get('annualIncome', data.get('annual_income', '')).strip()
+        employment_status = data.get('employmentStatus', data.get('employment_status', '')).strip()
+        round_up_amount = data.get('roundUpAmount', data.get('round_up_amount', 1.0))
+        risk_tolerance = data.get('riskTolerance', data.get('risk_tolerance', 'moderate'))
+        dob = data.get('dateOfBirth', data.get('dob', '')).strip()
+        ssn_last4 = data.get('ssnLast4', data.get('ssn_last4', '')).strip()
+        subscription_plan_id = data.get('subscriptionPlanId', data.get('subscription_plan_id'))
+        billing_cycle = data.get('billingCycle', data.get('billing_cycle', 'monthly')).strip()
+
+        # MX bank connection data
+        mx_data = data.get('mxData')
+        if mx_data and isinstance(mx_data, dict):
+            import json
+            mx_data = json.dumps(mx_data)
+        elif mx_data and not isinstance(mx_data, str):
+            mx_data = str(mx_data)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Build dynamic UPDATE query for non-empty fields
+        updates = []
+        params = []
+
+        if first_name:
+            updates.append("first_name = %s")
+            params.append(first_name)
+        if last_name:
+            updates.append("last_name = %s")
+            params.append(last_name)
+        if phone:
+            updates.append("phone = %s")
+            params.append(phone)
+        if address:
+            updates.append("address = %s")
+            params.append(address)
+        if city:
+            updates.append("city = %s")
+            params.append(city)
+        if state:
+            updates.append("state = %s")
+            params.append(state)
+        if zip_code:
+            updates.append("zip_code = %s")
+            params.append(zip_code)
+        if employer:
+            updates.append("employer = %s")
+            params.append(employer)
+        if occupation:
+            updates.append("occupation = %s")
+            params.append(occupation)
+        if annual_income:
+            updates.append("annual_income = %s")
+            params.append(annual_income)
+        if employment_status:
+            updates.append("employment_status = %s")
+            params.append(employment_status)
+        if round_up_amount:
+            updates.append("round_up_amount = %s")
+            params.append(round_up_amount)
+        if risk_tolerance:
+            updates.append("risk_tolerance = %s")
+            params.append(risk_tolerance)
+        if dob:
+            updates.append("dob = %s")
+            params.append(dob)
+        if ssn_last4:
+            updates.append("ssn_last4 = %s")
+            params.append(ssn_last4)
+        if subscription_plan_id:
+            updates.append("subscription_plan_id = %s")
+            params.append(subscription_plan_id)
+        if billing_cycle:
+            updates.append("billing_cycle = %s")
+            params.append(billing_cycle)
+        if mx_data:
+            updates.append("mx_data = %s")
+            params.append(mx_data)
+        if user_guid:
+            updates.append("user_guid = %s")
+            params.append(user_guid)
+
+        # Also update name if first/last provided
+        if first_name or last_name:
+            full_name = f"{first_name} {last_name}".strip()
+            if full_name:
+                updates.append("name = %s")
+                params.append(full_name)
+
+        if updates:
+            params.append(user_id)
+            query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+            cursor.execute(query, tuple(params))
+            conn.commit()
+
+        # Get the updated user data to return
+        cursor.execute("""
+            SELECT id, email, name, role, account_type FROM users WHERE id = %s
+        """, (user_id,))
+        user = cursor.fetchone()
+        conn.close()
+
+        user_data = None
+        token = None
+        if user:
+            token = f"user_token_{user[0]}"
+            user_data = {
+                'id': user[0],
+                'email': user[1],
+                'name': user[2],
+                'role': user[3],
+                'account_type': user[4]
+            }
+
+        return jsonify({
+            'success': True,
+            'message': 'Registration completed successfully',
+            'updated_fields': len(updates),
+            'token': token,
+            'user': user_data
+        })
+
+    except Exception as e:
+        print(f"Complete registration error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/user/auth/me')
@@ -3141,7 +3342,8 @@ def user_profile():
             cursor.execute("""
                 SELECT id, name, email, role, created_at, phone, address, city, state, zip_code,
                        company_name, round_up_amount, risk_tolerance, account_type, mx_data,
-                       first_name, last_name, employer, occupation, annual_income, employment_status
+                       first_name, last_name, employer, occupation, annual_income, employment_status,
+                       dob, ssn_last4, subscription_plan_id, billing_cycle
                 FROM users WHERE id = %s
             """, (user_id,))
             user = cursor.fetchone()
@@ -3188,7 +3390,11 @@ def user_profile():
                         'employer': user[17] if len(user) > 17 else '',
                         'occupation': user[18] if len(user) > 18 else '',
                         'annualIncome': user[19] if len(user) > 19 else '',
-                        'employmentStatus': user[20] if len(user) > 20 else ''
+                        'employmentStatus': user[20] if len(user) > 20 else '',
+                        'dateOfBirth': str(user[21]) if len(user) > 21 and user[21] else '',
+                        'ssnLast4': user[22] if len(user) > 22 else '',
+                        'subscriptionPlanId': user[23] if len(user) > 23 else None,
+                        'billingCycle': user[24] if len(user) > 24 else 'monthly'
                     }
                 })
             else:
@@ -6572,7 +6778,8 @@ def public_subscription_plans():
         cursor = get_db_cursor(conn)
 
         cursor.execute("""
-            SELECT id, name, description, price, billing_period, account_type, features, stripe_price_id
+            SELECT id, name, description, price, billing_period, account_type, features, stripe_price_id,
+                   COALESCE(price_monthly, price, 0) as price_monthly, COALESCE(price_yearly, 0) as price_yearly
             FROM subscription_plans
             WHERE is_active = TRUE AND account_type = %s
             ORDER BY price
@@ -6590,11 +6797,16 @@ def public_subscription_plans():
                 except:
                     features = []
 
+            price_monthly = float(row[8]) if row[8] else float(row[3]) if row[3] else 0
+            price_yearly = float(row[9]) if row[9] else (price_monthly * 10)  # Default yearly = 10 months
+
             plans.append({
                 'id': row[0],
                 'name': row[1],
                 'description': row[2],
                 'price': float(row[3]) if row[3] else 0,
+                'price_monthly': price_monthly,
+                'price_yearly': price_yearly,
                 'billing_period': row[4],
                 'account_type': row[5],
                 'features': features,
