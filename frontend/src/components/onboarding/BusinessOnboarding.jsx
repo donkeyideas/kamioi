@@ -289,19 +289,19 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Business Name *</label>
+              <label className="block text-sm font-medium text-white/90 mb-1">Business Name *</label>
               <input
                 type="text"
                 name="businessName"
                 value={formData.businessName}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter your business name"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Business Type *</label>
+              <label className="block text-sm font-medium text-white/90 mb-3">Business Type *</label>
               <div className="grid grid-cols-1 gap-2">
                 {BUSINESS_TYPES.map(type => (
                   <label
@@ -309,7 +309,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                     className={`flex items-center p-3 border rounded-lg cursor-pointer transition-all ${
                       formData.businessType === type.value
                         ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-white/20 hover:border-gray-300'
                     }`}
                   >
                     <input
@@ -321,8 +321,8 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                     />
                     <div className="ml-3">
-                      <span className="font-medium text-gray-900">{type.label}</span>
-                      <span className="text-sm text-gray-500 ml-2">- {type.description}</span>
+                      <span className="font-medium text-white">{type.label}</span>
+                      <span className="text-sm text-white/60 ml-2">- {type.description}</span>
                     </div>
                   </label>
                 ))}
@@ -331,37 +331,37 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">EIN (Optional)</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">EIN (Optional)</label>
                 <input
                   type="text"
                   name="ein"
                   value={formData.ein}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="XX-XXXXXXX"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Industry</label>
                 <input
                   type="text"
                   name="industry"
                   value={formData.industry}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="e.g., Technology"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Website (Optional)</label>
+              <label className="block text-sm font-medium text-white/90 mb-1">Website (Optional)</label>
               <input
                 type="url"
                 name="website"
                 value={formData.website}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="https://www.example.com"
               />
             </div>
@@ -380,61 +380,61 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Your Name *</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Your Name *</label>
                 <input
                   type="text"
                   name="adminName"
                   value={formData.adminName}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Full name"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Job Title</label>
                 <input
                   type="text"
                   name="adminTitle"
                   value={formData.adminTitle}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="e.g., CEO, CFO"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Work Email *</label>
+              <label className="block text-sm font-medium text-white/90 mb-1">Work Email *</label>
               <input
                 type="email"
                 name="adminEmail"
                 value={formData.adminEmail}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="you@company.com"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Password *</label>
                 <input
                   type="password"
                   name="adminPassword"
                   value={formData.adminPassword}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Min 8 characters"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Confirm Password *</label>
                 <input
                   type="password"
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Confirm password"
                 />
               </div>
@@ -448,7 +448,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                 onChange={handleInputChange}
                 className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <label className="ml-2 text-sm text-gray-600">
+              <label className="ml-2 text-sm text-white/70">
                 I agree to the <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>,{' '}
                 <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>, and{' '}
                 <a href="/business-terms" className="text-blue-600 hover:underline">Business Agreement</a>
@@ -465,11 +465,11 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <Check className="w-8 h-8 text-green-600" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Business Bank Connected!</h3>
-                <p className="text-gray-500 mt-2">Your business bank account is now linked.</p>
+                <h3 className="text-lg font-medium text-white">Business Bank Connected!</h3>
+                <p className="text-white/60 mt-2">Your business bank account is now linked.</p>
               </div>
             ) : showMXConnect ? (
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="border border-white/20 rounded-lg p-4">
                 <MXConnectWidget
                   userGuid={userGuid}
                   onSuccess={handleMXSuccess}
@@ -481,8 +481,8 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
             ) : (
               <div className="text-center py-8">
                 <CreditCard className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900">Connect Business Bank Account</h3>
-                <p className="text-gray-500 mt-2 mb-6">
+                <h3 className="text-lg font-medium text-white">Connect Business Bank Account</h3>
+                <p className="text-white/60 mt-2 mb-6">
                   Link your business bank account to enable automated expense tracking and round-up investing for your company.
                 </p>
                 <button
@@ -501,7 +501,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
         return (
           <div className="space-y-6">
             <div>
-              <p className="text-gray-600 mb-4">
+              <p className="text-white/70 mb-4">
                 Invite team members to join your business account. They will receive email invitations with role-specific access.
               </p>
 
@@ -512,7 +512,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                     name="newMemberName"
                     value={formData.newMemberName}
                     onChange={handleInputChange}
-                    className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Name"
                   />
                   <input
@@ -520,14 +520,14 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                     name="newMemberEmail"
                     value={formData.newMemberEmail}
                     onChange={handleInputChange}
-                    className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="email@company.com"
                   />
                   <select
                     name="newMemberRole"
                     value={formData.newMemberRole}
                     onChange={handleInputChange}
-                    className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     {TEAM_ROLES.map(role => (
                       <option key={role.value} value={role.value}>{role.label}</option>
@@ -537,7 +537,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                 <button
                   type="button"
                   onClick={addTeamMember}
-                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center"
+                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-white/70 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center"
                 >
                   <Briefcase className="w-5 h-5 mr-2" />
                   Add Team Member
@@ -547,7 +547,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
 
             {formData.teamMembers.length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">
+                <h4 className="text-sm font-medium text-white/90 mb-3">
                   Team Members ({formData.teamMembers.length})
                 </h4>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -563,8 +563,8 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                           </span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{member.name}</p>
-                          <p className="text-xs text-gray-500">{member.email}</p>
+                          <p className="text-sm font-medium text-white">{member.name}</p>
+                          <p className="text-xs text-white/60">{member.email}</p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
@@ -586,7 +586,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
             )}
 
             {formData.teamMembers.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-white/60">
                 <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p>No team members added yet.</p>
                 <p className="text-sm">You can invite team members now or later from your dashboard.</p>
@@ -594,8 +594,8 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
             )}
 
             <div className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Role Permissions</h4>
-              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+              <h4 className="text-sm font-medium text-white/90 mb-2">Role Permissions</h4>
+              <div className="grid grid-cols-2 gap-2 text-xs text-white/70">
                 {TEAM_ROLES.map(role => (
                   <div key={role.value} className="flex items-start">
                     <span className="font-medium mr-1">{role.label}:</span>
@@ -631,12 +631,12 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
                         ? 'bg-green-500 text-white'
                         : isActive
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-500'
+                        : 'bg-gray-200 text-white/60'
                     }`}
                   >
                     {isCompleted ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
                   </div>
-                  <span className={`mt-2 text-xs font-medium ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+                  <span className={`mt-2 text-xs font-medium ${isActive ? 'text-blue-600' : 'text-white/60'}`}>
                     {step.title}
                   </span>
                 </div>
@@ -650,8 +650,8 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
       </div>
 
       {/* Step Content */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-6">
+      <div className="bg-white/10 backdrop-blur-lg rounded-xl shadow-lg p-6">
+        <h2 className="text-xl font-bold text-white mb-6">
           {STEPS[currentStep - 1].title}
         </h2>
 
@@ -678,7 +678,7 @@ const BusinessOnboarding = ({ onComplete, onBack }) => {
           <button
             type="button"
             onClick={handleBack}
-            className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+            className="flex items-center px-4 py-2 text-white/70 hover:text-gray-800 transition-colors"
           >
             <ChevronLeft className="w-5 h-5 mr-1" />
             Back

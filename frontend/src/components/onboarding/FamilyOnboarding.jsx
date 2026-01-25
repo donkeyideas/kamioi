@@ -299,58 +299,58 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name</label>
+              <label className="block text-sm font-medium text-white/90 mb-1">Family Name</label>
               <input
                 type="text"
                 name="familyName"
                 value={formData.familyName}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 placeholder="e.g., The Smith Family"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Your Name (Admin)</label>
+              <label className="block text-sm font-medium text-white/90 mb-1">Your Name (Admin)</label>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 placeholder="Enter your full name"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <label className="block text-sm font-medium text-white/90 mb-1">Email Address</label>
               <input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 placeholder="Enter your email"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Password</label>
                 <input
                   type="password"
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   placeholder="Create password"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                <label className="block text-sm font-medium text-white/90 mb-1">Confirm Password</label>
                 <input
                   type="password"
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   placeholder="Confirm password"
                 />
               </div>
@@ -363,7 +363,7 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
                 onChange={handleInputChange}
                 className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
               />
-              <label className="ml-2 text-sm text-gray-600">
+              <label className="ml-2 text-sm text-white/70">
                 I agree to the <a href="/terms" className="text-purple-600 hover:underline">Terms of Service</a> and <a href="/privacy" className="text-purple-600 hover:underline">Privacy Policy</a>
               </label>
             </div>
@@ -374,7 +374,7 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
         return (
           <div className="space-y-6">
             <div>
-              <p className="text-gray-600 mb-4">
+              <p className="text-white/70 mb-4">
                 Invite family members to join your account. They will receive an email invitation to create their profile.
               </p>
               <div className="flex gap-2">
@@ -383,14 +383,14 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
                   name="newMemberEmail"
                   value={formData.newMemberEmail}
                   onChange={handleInputChange}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="flex-1 px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   placeholder="family.member@email.com"
                 />
                 <select
                   name="newMemberRole"
                   value={formData.newMemberRole}
                   onChange={handleInputChange}
-                  className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="px-4 py-3 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 >
                   <option value="member">Member</option>
                   <option value="admin">Co-Admin</option>
@@ -407,7 +407,7 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
 
             {formData.familyMembers.length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Pending Invitations</h4>
+                <h4 className="text-sm font-medium text-white/90 mb-3">Pending Invitations</h4>
                 <div className="space-y-2">
                   {formData.familyMembers.map((member, index) => (
                     <div
@@ -417,8 +417,8 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
                       <div className="flex items-center">
                         <Mail className="w-5 h-5 text-gray-400 mr-3" />
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{member.email}</p>
-                          <p className="text-xs text-gray-500 capitalize">{member.role}</p>
+                          <p className="text-sm font-medium text-white">{member.email}</p>
+                          <p className="text-xs text-white/60 capitalize">{member.role}</p>
                         </div>
                       </div>
                       <button
@@ -435,7 +435,7 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
             )}
 
             {formData.familyMembers.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-white/60">
                 <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p>No family members added yet.</p>
                 <p className="text-sm">You can invite members now or later from your dashboard.</p>
@@ -452,11 +452,11 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <Check className="w-8 h-8 text-green-600" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Bank Connected Successfully!</h3>
-                <p className="text-gray-500 mt-2">Your family bank account is now linked.</p>
+                <h3 className="text-lg font-medium text-white">Bank Connected Successfully!</h3>
+                <p className="text-white/60 mt-2">Your family bank account is now linked.</p>
               </div>
             ) : showMXConnect ? (
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="border border-white/20 rounded-lg p-4">
                 <MXConnectWidget
                   userGuid={userGuid}
                   onSuccess={handleMXSuccess}
@@ -468,8 +468,8 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
             ) : (
               <div className="text-center py-8">
                 <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900">Connect Family Bank Account</h3>
-                <p className="text-gray-500 mt-2 mb-6">
+                <h3 className="text-lg font-medium text-white">Connect Family Bank Account</h3>
+                <p className="text-white/60 mt-2 mb-6">
                   Link your family's primary bank account. All family members can contribute through round-up investing.
                 </p>
                 <button
@@ -488,7 +488,7 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
         return (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Select Family Goals</label>
+              <label className="block text-sm font-medium text-white/90 mb-3">Select Family Goals</label>
               <div className="space-y-3">
                 {FAMILY_GOAL_TEMPLATES.map(goal => (
                   <button
@@ -498,17 +498,17 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
                     className={`w-full flex items-center p-4 border rounded-lg text-left transition-all ${
                       formData.selectedGoals.includes(goal.id)
                         ? 'border-purple-500 bg-purple-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-white/20 hover:border-gray-300'
                     }`}
                   >
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-900">{goal.name}</span>
+                        <span className="font-medium text-white">{goal.name}</span>
                         {goal.target > 0 && (
-                          <span className="text-sm text-gray-500">${goal.target.toLocaleString()}</span>
+                          <span className="text-sm text-white/60">${goal.target.toLocaleString()}</span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500 mt-1">{goal.description}</p>
+                      <p className="text-sm text-white/60 mt-1">{goal.description}</p>
                     </div>
                     {formData.selectedGoals.includes(goal.id) && (
                       <Check className="w-5 h-5 text-purple-600 ml-3" />
@@ -521,24 +521,24 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
             {formData.selectedGoals.includes('custom') && (
               <div className="p-4 bg-gray-50 rounded-lg space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Goal Name</label>
+                  <label className="block text-sm font-medium text-white/90 mb-1">Goal Name</label>
                   <input
                     type="text"
                     name="customGoalName"
                     value={formData.customGoalName}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500"
                     placeholder="e.g., Family Business"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Amount</label>
+                  <label className="block text-sm font-medium text-white/90 mb-1">Target Amount</label>
                   <input
                     type="number"
                     name="customGoalTarget"
                     value={formData.customGoalTarget}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2 bg-white/10 backdrop-blur-lg/10 border border-white/20 text-white placeholder-white/50 rounded-lg focus:ring-2 focus:ring-purple-500"
                     placeholder="10000"
                   />
                 </div>
@@ -571,12 +571,12 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
                         ? 'bg-green-500 text-white'
                         : isActive
                         ? 'bg-purple-600 text-white'
-                        : 'bg-gray-200 text-gray-500'
+                        : 'bg-gray-200 text-white/60'
                     }`}
                   >
                     {isCompleted ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
                   </div>
-                  <span className={`mt-2 text-xs font-medium ${isActive ? 'text-purple-600' : 'text-gray-500'}`}>
+                  <span className={`mt-2 text-xs font-medium ${isActive ? 'text-purple-600' : 'text-white/60'}`}>
                     {step.title}
                   </span>
                 </div>
@@ -590,8 +590,8 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
       </div>
 
       {/* Step Content */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-6">
+      <div className="bg-white/10 backdrop-blur-lg rounded-xl shadow-lg p-6">
+        <h2 className="text-xl font-bold text-white mb-6">
           {STEPS[currentStep - 1].title}
         </h2>
 
@@ -618,7 +618,7 @@ const FamilyOnboarding = ({ onComplete, onBack }) => {
           <button
             type="button"
             onClick={handleBack}
-            className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+            className="flex items-center px-4 py-2 text-white/70 hover:text-gray-800 transition-colors"
           >
             <ChevronLeft className="w-5 h-5 mr-1" />
             Back
