@@ -8563,6 +8563,57 @@ def admin_manual_submit():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# Clear demo user data for fresh testing
+@app.route('/api/admin/clear-demo-data', methods=['POST'])
+def admin_clear_demo_data():
+    """Clear all transactions and portfolio data for demo_user@kamioi.com"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Find demo user
+        cursor.execute("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", ('demo_user@kamioi.com',))
+        user = cursor.fetchone()
+
+        if not user:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'demo_user@kamioi.com not found'}), 404
+
+        user_id = user[0]
+
+        # Delete transactions
+        cursor.execute('DELETE FROM transactions WHERE user_id = %s', (user_id,))
+        txn_deleted = cursor.rowcount
+
+        # Delete portfolio holdings
+        cursor.execute('DELETE FROM portfolios WHERE user_id = %s', (user_id,))
+        portfolio_deleted = cursor.rowcount
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Demo user data cleared',
+            'data': {
+                'user_id': user_id,
+                'transactions_deleted': txn_deleted,
+                'portfolio_holdings_deleted': portfolio_deleted
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Create demo transactions for testing
 @app.route('/api/admin/create-demo-transactions', methods=['POST'])
 def admin_create_demo_transactions():
