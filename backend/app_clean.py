@@ -607,7 +607,33 @@ def initialize_database():
             cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_type VARCHAR(50) DEFAULT 'individual'")
         except Exception:
             pass  # Column already exists
-        
+
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ticker VARCHAR(20)")
+        except Exception:
+            pass  # Column already exists
+
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS alpaca_order_id VARCHAR(100)")
+        except Exception:
+            pass  # Column already exists
+
+        # Create portfolios table if it doesn't exist (PostgreSQL syntax)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS portfolios (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                ticker VARCHAR(10) NOT NULL,
+                shares REAL NOT NULL DEFAULT 0,
+                average_price REAL NOT NULL DEFAULT 0,
+                current_price REAL,
+                total_value REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
         # Create notifications table if it doesn't exist (PostgreSQL syntax)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS notifications (
@@ -8596,7 +8622,7 @@ def admin_create_demo_transactions():
         transactions_added = []
 
         for i in range(num_transactions):
-            merchant, ticker, category = random.choice(MERCHANTS)
+            merchant, expected_ticker, category = random.choice(MERCHANTS)
             amount = round(random.uniform(5, 150), 2)
             round_up = round(1 - (amount % 1), 2) if (amount % 1) > 0 else round(random.uniform(0.01, 0.99), 2)
             date = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
@@ -8604,20 +8630,51 @@ def admin_create_demo_transactions():
             total_debit = round(amount + round_up + fee, 2)
             description = f"Purchase at {merchant}"
 
+            # First, ensure this merchant exists in llm_mappings (so auto-mapping can find it)
+            cursor.execute("SELECT id FROM llm_mappings WHERE merchant_name = %s AND status = 'approved' LIMIT 1", (merchant,))
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT INTO llm_mappings (merchant_name, ticker_symbol, category, confidence, status, admin_approved, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                """, (merchant, expected_ticker, category, 0.95, 'approved', 1))
+
+            # Insert transaction with 'pending' status - THIS IS THE CORRECT FLOW
             cursor.execute("""
                 INSERT INTO transactions
                 (user_id, amount, merchant, category, date, description, round_up, fee, total_debit, status, account_type, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
             """, (
                 user_id, amount, merchant, category, date, description,
-                round_up, fee, total_debit, 'completed', 'individual', date
+                round_up, fee, total_debit, 'pending', 'individual', date
             ))
+            transaction_id = cursor.fetchone()[0]
+
+            # Run auto-mapping to find the ticker (THE REAL FLOW)
+            mapping_result = auto_process_transaction(cursor, user_id, description, merchant)
+
+            # If we found a high-confidence mapping, update the transaction
+            if mapping_result and mapping_result.get('confidence', 0) > 0.8:
+                cursor.execute("""
+                    UPDATE transactions
+                    SET status = 'mapped', ticker = %s, category = %s
+                    WHERE id = %s
+                """, (mapping_result['suggestedTicker'], mapping_result['category'], transaction_id))
+                final_status = 'mapped'
+                final_ticker = mapping_result['suggestedTicker']
+            else:
+                final_status = 'pending'
+                final_ticker = None
 
             transactions_added.append({
+                'id': transaction_id,
                 'merchant': merchant,
                 'amount': amount,
                 'round_up': round_up,
-                'ticker': ticker
+                'expected_ticker': expected_ticker,
+                'mapped_ticker': final_ticker,
+                'status': final_status,
+                'mapping_confidence': mapping_result.get('confidence', 0) if mapping_result else 0
             })
 
         conn.commit()
@@ -8640,6 +8697,303 @@ def admin_create_demo_transactions():
                 'total_transactions': total_transactions,
                 'password': 'Demo123!',
                 'sample_transactions': transactions_added[:5]
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# INVESTMENT EXECUTION PIPELINE
+# This is the heart of Kamioi - processes mapped transactions into real investments
+# ============================================================================
+
+@app.route('/api/admin/investments/process-mapped', methods=['POST'])
+def admin_process_mapped_investments():
+    """
+    Process all 'mapped' transactions: execute Alpaca trades and update portfolios.
+
+    THE COMPLETE FLOW:
+    1. Find transactions with status='mapped' and ticker set
+    2. For each transaction, call Alpaca API to buy fractional shares
+    3. Update/insert into portfolios table
+    4. Mark transaction as 'completed' with alpaca_order_id
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        # Initialize Alpaca service
+        from alpaca_service import AlpacaService
+        alpaca = AlpacaService()
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Find all mapped transactions with tickers that haven't been processed
+        cursor.execute("""
+            SELECT t.id, t.user_id, t.ticker, t.round_up, t.merchant, t.amount, u.email
+            FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.status = 'mapped'
+            AND t.ticker IS NOT NULL
+            AND t.ticker != 'UNKNOWN'
+            AND (t.alpaca_order_id IS NULL OR t.alpaca_order_id = '')
+            ORDER BY t.created_at ASC
+            LIMIT 100
+        """)
+        mapped_transactions = cursor.fetchall()
+
+        results = {
+            'processed': 0,
+            'succeeded': 0,
+            'failed': 0,
+            'skipped': 0,
+            'details': []
+        }
+
+        # Get or create Alpaca account for the user (in sandbox, we use a test account)
+        # In production, each user would have their own Alpaca account
+        alpaca_accounts = alpaca.get_accounts()
+        if not alpaca_accounts:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'No Alpaca accounts available. Please configure Alpaca API credentials.'
+            }), 500
+
+        # Use the first available account for demo purposes
+        demo_account_id = alpaca_accounts[0].get('id') if alpaca_accounts else None
+
+        for txn in mapped_transactions:
+            txn_id = txn[0]
+            user_id = txn[1]
+            ticker = txn[2]
+            round_up_amount = float(txn[3]) if txn[3] else 1.0
+            merchant = txn[4]
+            amount = float(txn[5]) if txn[5] else 0
+            user_email = txn[6]
+
+            results['processed'] += 1
+
+            try:
+                # Execute the trade via Alpaca
+                order_result = alpaca.buy_fractional_shares(
+                    account_id=demo_account_id,
+                    symbol=ticker,
+                    dollar_amount=round_up_amount
+                )
+
+                if order_result and order_result.get('id'):
+                    # Trade succeeded! Update transaction and portfolio
+                    alpaca_order_id = order_result.get('id')
+
+                    # Mark transaction as completed
+                    cursor.execute("""
+                        UPDATE transactions
+                        SET status = 'completed', alpaca_order_id = %s
+                        WHERE id = %s
+                    """, (alpaca_order_id, txn_id))
+
+                    # Update or insert portfolio holding
+                    # Calculate shares bought (approximate - Alpaca returns this in order)
+                    shares_bought = round_up_amount  # For dollar-based orders
+                    avg_price = 1.0  # Will be updated when order fills
+
+                    # Check if user already has this ticker in portfolio
+                    cursor.execute("""
+                        SELECT id, shares, average_price FROM portfolios
+                        WHERE user_id = %s AND ticker = %s
+                    """, (user_id, ticker))
+                    existing_holding = cursor.fetchone()
+
+                    if existing_holding:
+                        # Update existing holding
+                        old_shares = float(existing_holding[1])
+                        old_avg = float(existing_holding[2])
+                        new_shares = old_shares + shares_bought
+                        # Weighted average price
+                        new_avg = ((old_shares * old_avg) + (shares_bought * avg_price)) / new_shares if new_shares > 0 else avg_price
+                        cursor.execute("""
+                            UPDATE portfolios
+                            SET shares = %s, average_price = %s, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (new_shares, new_avg, existing_holding[0]))
+                    else:
+                        # Insert new holding
+                        cursor.execute("""
+                            INSERT INTO portfolios (user_id, ticker, shares, average_price, created_at, updated_at)
+                            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        """, (user_id, ticker, shares_bought, avg_price))
+
+                    results['succeeded'] += 1
+                    results['details'].append({
+                        'transaction_id': txn_id,
+                        'user_email': user_email,
+                        'ticker': ticker,
+                        'amount': round_up_amount,
+                        'status': 'completed',
+                        'alpaca_order_id': alpaca_order_id
+                    })
+                else:
+                    # Trade failed
+                    results['failed'] += 1
+                    results['details'].append({
+                        'transaction_id': txn_id,
+                        'user_email': user_email,
+                        'ticker': ticker,
+                        'amount': round_up_amount,
+                        'status': 'failed',
+                        'error': 'Alpaca order failed'
+                    })
+
+            except Exception as trade_error:
+                results['failed'] += 1
+                results['details'].append({
+                    'transaction_id': txn_id,
+                    'user_email': user_email,
+                    'ticker': ticker,
+                    'amount': round_up_amount,
+                    'status': 'error',
+                    'error': str(trade_error)
+                })
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Processed {results["processed"]} transactions: {results["succeeded"]} succeeded, {results["failed"]} failed',
+            'results': results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/investments/status', methods=['GET'])
+def admin_investment_status():
+    """Get investment processing status - counts by status"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Get counts by status
+        cursor.execute("""
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'pending') as pending,
+                COUNT(*) FILTER (WHERE status = 'mapped') as mapped,
+                COUNT(*) FILTER (WHERE status = 'completed') as completed,
+                COUNT(*) as total
+            FROM transactions
+        """)
+        counts = cursor.fetchone()
+
+        # Get pending investments (mapped but not yet processed)
+        cursor.execute("""
+            SELECT COUNT(*) FROM transactions
+            WHERE status = 'mapped'
+            AND ticker IS NOT NULL
+            AND ticker != 'UNKNOWN'
+            AND (alpaca_order_id IS NULL OR alpaca_order_id = '')
+        """)
+        ready_for_processing = cursor.fetchone()[0]
+
+        # Get recent investments
+        cursor.execute("""
+            SELECT t.id, t.user_id, t.ticker, t.round_up, t.status, t.alpaca_order_id, t.created_at, u.email
+            FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.status = 'completed' AND t.alpaca_order_id IS NOT NULL
+            ORDER BY t.created_at DESC
+            LIMIT 10
+        """)
+        recent_investments = [{
+            'id': r[0],
+            'user_id': r[1],
+            'ticker': r[2],
+            'round_up': float(r[3]) if r[3] else 0,
+            'status': r[4],
+            'alpaca_order_id': r[5],
+            'created_at': r[6].isoformat() if r[6] else None,
+            'user_email': r[7]
+        } for r in cursor.fetchall()]
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'status': {
+                'pending': counts[0],
+                'mapped': counts[1],
+                'completed': counts[2],
+                'total': counts[3],
+                'ready_for_processing': ready_for_processing
+            },
+            'recent_investments': recent_investments
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/investments/portfolio-summary', methods=['GET'])
+def admin_portfolio_summary():
+    """Get portfolio summary across all users"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Get portfolio summary by ticker
+        cursor.execute("""
+            SELECT ticker, SUM(shares) as total_shares, COUNT(DISTINCT user_id) as investors
+            FROM portfolios
+            GROUP BY ticker
+            ORDER BY total_shares DESC
+            LIMIT 20
+        """)
+        by_ticker = [{
+            'ticker': r[0],
+            'total_shares': float(r[1]) if r[1] else 0,
+            'investors': r[2]
+        } for r in cursor.fetchall()]
+
+        # Get total portfolio value
+        cursor.execute("SELECT SUM(shares * COALESCE(average_price, 1)) FROM portfolios")
+        total_value = cursor.fetchone()[0] or 0
+
+        # Get total users with holdings
+        cursor.execute("SELECT COUNT(DISTINCT user_id) FROM portfolios WHERE shares > 0")
+        total_investors = cursor.fetchone()[0]
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_value': round(float(total_value), 2),
+                'total_investors': total_investors,
+                'by_ticker': by_ticker
             }
         })
 
