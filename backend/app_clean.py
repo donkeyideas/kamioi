@@ -8536,6 +8536,119 @@ def admin_manual_submit():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+# Create demo transactions for testing
+@app.route('/api/admin/create-demo-transactions', methods=['POST'])
+def admin_create_demo_transactions():
+    """Create demo transactions for demo_user@kamioi.com for testing"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        import random
+        from werkzeug.security import generate_password_hash
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Sample merchants
+        MERCHANTS = [
+            ("Starbucks", "SBUX", "Food & Beverage"),
+            ("Amazon", "AMZN", "E-commerce"),
+            ("Apple Store", "AAPL", "Technology"),
+            ("Walmart", "WMT", "Retail"),
+            ("Target", "TGT", "Retail"),
+            ("McDonald's", "MCD", "Food & Beverage"),
+            ("Netflix", "NFLX", "Entertainment"),
+            ("Uber", "UBER", "Transportation"),
+            ("Home Depot", "HD", "Home Improvement"),
+            ("Nike", "NKE", "Apparel"),
+            ("Costco", "COST", "Retail"),
+            ("CVS Pharmacy", "CVS", "Healthcare"),
+            ("Shell Gas", "SHEL", "Energy"),
+            ("Spotify", "SPOT", "Entertainment"),
+            ("Chipotle", "CMG", "Food & Beverage"),
+        ]
+
+        # Find or create demo user
+        cursor.execute("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", ('demo_user@kamioi.com',))
+        user = cursor.fetchone()
+
+        if not user:
+            # Create the demo user
+            hashed_password = generate_password_hash("Demo123!")
+            cursor.execute("""
+                INSERT INTO users (email, password, name, account_type, created_at)
+                VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                RETURNING id
+            """, ('demo_user@kamioi.com', hashed_password, 'Demo User', 'individual'))
+            user_id = cursor.fetchone()[0]
+            conn.commit()
+            user_created = True
+        else:
+            user_id = user[0]
+            user_created = False
+
+        # Add 20 transactions
+        num_transactions = 20
+        now = datetime.now()
+        transactions_added = []
+
+        for i in range(num_transactions):
+            merchant, ticker, category = random.choice(MERCHANTS)
+            amount = round(random.uniform(5, 150), 2)
+            round_up = round(1 - (amount % 1), 2) if (amount % 1) > 0 else round(random.uniform(0.01, 0.99), 2)
+            date = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
+            fee = round(amount * 0.001, 2)
+            total_debit = round(amount + round_up + fee, 2)
+            description = f"Purchase at {merchant}"
+
+            cursor.execute("""
+                INSERT INTO transactions
+                (user_id, amount, merchant, category, date, description, round_up, fee, total_debit, status, account_type, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                user_id, amount, merchant, category, date, description,
+                round_up, fee, total_debit, 'completed', 'individual', date
+            ))
+
+            transactions_added.append({
+                'merchant': merchant,
+                'amount': amount,
+                'round_up': round_up,
+                'ticker': ticker
+            })
+
+        conn.commit()
+
+        # Get total count
+        cursor.execute("SELECT COUNT(*) FROM transactions WHERE user_id = %s", (user_id,))
+        total_transactions = cursor.fetchone()[0]
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Created {num_transactions} demo transactions',
+            'data': {
+                'user_id': user_id,
+                'user_email': 'demo_user@kamioi.com',
+                'user_created': user_created,
+                'transactions_added': num_transactions,
+                'total_transactions': total_transactions,
+                'password': 'Demo123!',
+                'sample_transactions': transactions_added[:5]
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Clear table endpoint
 @app.route('/api/admin/database/clear-table', methods=['POST'])
 def admin_clear_table():
