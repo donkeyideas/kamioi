@@ -1613,7 +1613,7 @@ const Login = ({ initialMode = 'login' }) => {
                     </li>
                   </ul>
                   <div className="mt-4 pt-4 border-t border-white/10">
-                    <span className="text-purple-400 font-semibold">$9/month</span>
+                    <span className="text-white font-bold text-lg">$9/month</span>
                   </div>
                 </button>
 
@@ -1644,7 +1644,7 @@ const Login = ({ initialMode = 'login' }) => {
                     </li>
                   </ul>
                   <div className="mt-4 pt-4 border-t border-white/10">
-                    <span className="text-purple-400 font-semibold">$19/month</span>
+                    <span className="text-white font-bold text-lg">$19/month</span>
                   </div>
                 </button>
 
@@ -1675,7 +1675,7 @@ const Login = ({ initialMode = 'login' }) => {
                     </li>
                   </ul>
                   <div className="mt-4 pt-4 border-t border-white/10">
-                    <span className="text-purple-400 font-semibold">$49/month</span>
+                    <span className="text-white font-bold text-lg">$49/month</span>
                   </div>
                 </button>
               </div>
