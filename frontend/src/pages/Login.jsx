@@ -749,6 +749,12 @@ const Login = ({ initialMode = 'login' }) => {
             riskTolerance: individualData.riskTolerance || 'moderate',
             firstName: individualData.firstName || '',
             lastName: individualData.lastName || '',
+            // DOB and SSN - CRITICAL: These were missing!
+            dateOfBirth: individualData.dateOfBirth || '',
+            dob: individualData.dateOfBirth || '',
+            ssn: individualData.ssn || '',
+            ssnLast4: individualData.ssn ? individualData.ssn.slice(-4) : '',
+            ssn_last4: individualData.ssn ? individualData.ssn.slice(-4) : '',
             agreeToTerms: individualData.agreeToTerms,
             agreeToPrivacy: individualData.agreeToPrivacy,
             agreeToMarketing: individualData.agreeToMarketing,
