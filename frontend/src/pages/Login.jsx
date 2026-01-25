@@ -187,7 +187,7 @@ const Login = ({ initialMode = 'login' }) => {
     // Investment Preferences
     password: '',
     confirmPassword: '',
-    roundUpAmount: 1.50,
+    roundUpAmount: 1.00,
     riskTolerance: 'moderate',
     familyGoals: [],
     
@@ -240,7 +240,7 @@ const Login = ({ initialMode = 'login' }) => {
     // Investment Preferences
     password: '',
     confirmPassword: '',
-    roundUpAmount: 2.00,
+    roundUpAmount: 1.00,
     riskTolerance: 'moderate',
     businessGoals: [],
     
@@ -785,6 +785,9 @@ const Login = ({ initialMode = 'login' }) => {
             employer: familyData.employer || '',
             firstName: familyData.guardianFirstName || '',
             lastName: familyData.guardianLastName || '',
+            roundUpAmount: familyData.roundUpAmount || 1.00,
+            riskTolerance: familyData.riskTolerance || 'moderate',
+            investmentGoals: familyData.familyGoals || [],
             agreeToTerms: familyData.agreeToTerms,
             agreeToPrivacy: familyData.agreeToPrivacy,
             agreeToMarketing: familyData.agreeToMarketing,
@@ -816,6 +819,9 @@ const Login = ({ initialMode = 'login' }) => {
             numberOfEmployees: businessData.numberOfEmployees || '',
             firstName: businessData.contactFirstName || '',
             lastName: businessData.contactLastName || '',
+            roundUpAmount: businessData.roundUpAmount || 1.00,
+            riskTolerance: businessData.riskTolerance || 'moderate',
+            investmentGoals: businessData.businessGoals || [],
             agreeToTerms: businessData.agreeToTerms,
             agreeToPrivacy: businessData.agreeToPrivacy,
             agreeToMarketing: businessData.agreeToMarketing,
@@ -2249,9 +2255,10 @@ const Login = ({ initialMode = 'login' }) => {
                         onChange={(e) => handleInputChange('roundUpAmount', parseFloat(e.target.value))}
                         className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent"
                       >
-                        <option value={0.50}>$0.50</option>
                         <option value={1.00}>$1.00</option>
                         <option value={2.00}>$2.00</option>
+                        <option value={3.00}>$3.00</option>
+                        <option value={4.00}>$4.00</option>
                         <option value={5.00}>$5.00</option>
                       </select>
                     </div>
@@ -2816,9 +2823,9 @@ const Login = ({ initialMode = 'login' }) => {
                       className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent"
                     >
                       <option value={1.00}>$1.00</option>
-                      <option value={1.50}>$1.50</option>
                       <option value={2.00}>$2.00</option>
                       <option value={3.00}>$3.00</option>
+                      <option value={4.00}>$4.00</option>
                       <option value={5.00}>$5.00</option>
                     </select>
                   </div>
@@ -3658,11 +3665,11 @@ const Login = ({ initialMode = 'login' }) => {
                       onChange={(e) => handleInputChange('roundUpAmount', parseFloat(e.target.value))}
                       className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent"
                     >
+                      <option value={1.00}>$1.00</option>
                       <option value={2.00}>$2.00</option>
                       <option value={3.00}>$3.00</option>
+                      <option value={4.00}>$4.00</option>
                       <option value={5.00}>$5.00</option>
-                      <option value={10.00}>$10.00</option>
-                      <option value={25.00}>$25.00</option>
                     </select>
                   </div>
 

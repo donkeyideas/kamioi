@@ -3,7 +3,7 @@ import { Percent, Save, Settings, Info, DollarSign } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const RoundUpSettings = ({ onSettingsChange }) => {
-  const [roundUpAmount, setRoundUpAmount] = useState(2.00)
+  const [roundUpAmount, setRoundUpAmount] = useState(1.00)
   const { isLightMode } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
   
@@ -104,16 +104,16 @@ const RoundUpSettings = ({ onSettingsChange }) => {
                   value={roundUpAmount}
                   onChange={(e) => setRoundUpAmount(parseFloat(e.target.value))}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    isLightMode 
-                      ? 'bg-white border-gray-300 text-gray-900' 
+                    isLightMode
+                      ? 'bg-white border-gray-300 text-gray-900'
                       : 'bg-gray-700 border-gray-600 text-white'
                   }`}
                 >
                   <option value={1.00}>$1.00</option>
                   <option value={2.00}>$2.00</option>
                   <option value={3.00}>$3.00</option>
+                  <option value={4.00}>$4.00</option>
                   <option value={5.00}>$5.00</option>
-                  <option value={10.00}>$10.00</option>
                 </select>
                 <p className={`text-xs mt-1 ${
                   isLightMode ? 'text-gray-500' : 'text-gray-400'

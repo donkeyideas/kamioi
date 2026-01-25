@@ -791,9 +791,11 @@ const UserSettings = () => {
                     <div>
                       <label className="block text-sm text-gray-300 mb-1">Round‑Up Amount</label>
                       <select value={profileForm.roundUpAmount} onChange={(e)=>setProfileForm(p=>({...p,roundUpAmount:e.target.value}))} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
-                        <option value="0.50">$0.50</option>
                         <option value="1.00">$1.00</option>
                         <option value="2.00">$2.00</option>
+                        <option value="3.00">$3.00</option>
+                        <option value="4.00">$4.00</option>
+                        <option value="5.00">$5.00</option>
                       </select>
                     </div>
                     <div>

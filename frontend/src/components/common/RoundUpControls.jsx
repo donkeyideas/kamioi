@@ -13,7 +13,7 @@ const RoundUpControls = ({
   const [isOpen, setIsOpen] = useState(false)
   const [customAmount, setCustomAmount] = useState('')
 
-  const presetAmounts = [1, 2, 3, 5, 10]
+  const presetAmounts = [1, 2, 3, 4, 5]
   
   const getTextClass = () => isLightMode ? 'text-gray-800' : 'text-white'
   const getSubtextClass = () => isLightMode ? 'text-gray-600' : 'text-gray-400'
