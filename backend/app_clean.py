@@ -3655,6 +3655,7 @@ def user_subscriptions():
         except Exception as e:
             # Table might not exist yet, continue to check users table
             print(f"user_subscriptions table check error: {e}")
+            conn.rollback()  # Reset transaction state
 
         # Fall back to checking users.subscription_plan_id for pending selection
         cursor.execute("""
