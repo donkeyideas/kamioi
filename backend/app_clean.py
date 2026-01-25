@@ -3392,7 +3392,9 @@ def user_profile():
                         'annualIncome': user[19] if len(user) > 19 else '',
                         'employmentStatus': user[20] if len(user) > 20 else '',
                         'dateOfBirth': str(user[21]) if len(user) > 21 and user[21] else '',
+                        'dob': str(user[21]) if len(user) > 21 and user[21] else '',
                         'ssnLast4': user[22] if len(user) > 22 else '',
+                        'ssn': user[22] if len(user) > 22 else '',
                         'subscriptionPlanId': user[23] if len(user) > 23 else None,
                         'billingCycle': user[24] if len(user) > 24 else 'monthly'
                     }
@@ -3908,9 +3910,21 @@ def user_bank_connections():
                 import json
                 try:
                     mx_data = json.loads(result[0]) if isinstance(result[0], str) else result[0]
+                    # Format connection data for frontend
+                    connection = {
+                        'id': mx_data.get('member_guid', f'conn_{user_id}'),
+                        'member_guid': mx_data.get('member_guid', ''),
+                        'user_guid': mx_data.get('user_guid', result[1] if result[1] else ''),
+                        'bank_name': mx_data.get('institution_name', mx_data.get('bank_name', 'Connected Bank')),
+                        'institution_name': mx_data.get('institution_name', mx_data.get('bank_name', 'Connected Bank')),
+                        'account_name': mx_data.get('account_name', 'Primary Account'),
+                        'account_type': mx_data.get('account_type', 'checking'),
+                        'status': 'active',
+                        'connected_at': mx_data.get('connected_at', '')
+                    }
                     return jsonify({
                         'success': True,
-                        'connections': [mx_data],
+                        'connections': [connection],
                         'has_connections': True,
                         'message': 'Bank connection found'
                     })
@@ -14344,7 +14358,7 @@ def stripe_create_checkout_session():
         # In production, you would use stripe.checkout.Session.create()
 
         # For now, create a simulated checkout URL that will mark subscription as active
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        frontend_url = os.getenv('FRONTEND_URL', 'https://kamioi-v-1.vercel.app')
 
         # Generate a session ID for tracking
         import uuid
@@ -14450,7 +14464,7 @@ def stripe_create_portal_session():
             }), 404
 
         # In sandbox mode, redirect to a management page
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        frontend_url = os.getenv('FRONTEND_URL', 'https://kamioi-v-1.vercel.app')
         portal_url = f"{frontend_url}/settings?manage_subscription=true"
 
         return jsonify({

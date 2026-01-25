@@ -893,9 +893,13 @@ const Login = ({ initialMode = 'login' }) => {
             const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
             const updateData = {
               userGuid: result.userGuid,
-              mxData: mxConnectData && mxConnectData.accounts && mxConnectData.accounts.length > 0 
-                ? { accounts: mxConnectData.accounts } 
-                : { accounts: [] },
+              mxData: mxConnectData ? {
+                accounts: mxConnectData.accounts || [],
+                member_guid: mxConnectData.member_guid || '',
+                user_guid: mxConnectData.user_guid || result.userGuid || '',
+                institution_name: mxConnectData.institution_name || 'Connected Bank',
+                connected_at: mxConnectData.connected_at || new Date().toISOString()
+              } : { accounts: [] },
               // Include all registration data
               firstName: registrationData.firstName || registrationData.guardianFirstName || registrationData.contactFirstName || '',
               lastName: registrationData.lastName || registrationData.guardianLastName || registrationData.contactLastName || '',
@@ -1145,9 +1149,13 @@ const Login = ({ initialMode = 'login' }) => {
     // This is the final step, complete registration
     try {
       
-      // Clean up the MX data - remove userGuid and connectedAt from the data object
+      // Include full MX data with connection details
       const cleanedMxData = {
-        accounts: data.accounts || []
+        accounts: data.accounts || [],
+        member_guid: data.member_guid || '',
+        user_guid: data.user_guid || currentUserGuid || '',
+        institution_name: data.institution_name || 'Connected Bank',
+        connected_at: new Date().toISOString()
       }
       
       // Get all registration data to send with completion
