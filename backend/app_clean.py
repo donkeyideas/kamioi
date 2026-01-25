@@ -7933,7 +7933,7 @@ def admin_google_analytics():
 
 @app.route('/api/admin/fix-transactions', methods=['POST'])
 def admin_fix_transactions():
-    """One-time fix: Set round_up to user's setting and fee to 0 for all transactions"""
+    """Fix transactions: round_up, fee, status, and clean up orphaned records"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -7942,11 +7942,23 @@ def admin_fix_transactions():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Count transactions before fix
-        cursor.execute("SELECT COUNT(*) FROM transactions")
-        total_before = cursor.fetchone()[0]
+        # Diagnostic: Count by status and user_id
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN user_id IS NULL THEN 1 END) as orphaned,
+                COUNT(CASE WHEN user_id IS NOT NULL THEN 1 END) as linked,
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+                COUNT(CASE WHEN status = 'mapped' THEN 1 END) as mapped
+            FROM transactions
+        """)
+        stats_before = cursor.fetchone()
 
-        # Fix all transactions: set round_up to user's setting, fee to 0
+        # Step 1: Delete orphaned transactions (user_id = NULL)
+        cursor.execute("DELETE FROM transactions WHERE user_id IS NULL")
+        orphans_deleted = cursor.rowcount
+
+        # Step 2: Fix all user transactions: round_up, fee, total_debit
         cursor.execute("""
             UPDATE transactions t
             SET
@@ -7956,13 +7968,31 @@ def admin_fix_transactions():
             FROM users u
             WHERE t.user_id = u.id
         """)
-        rows_updated = cursor.rowcount
+        roundup_fixed = cursor.rowcount
+
+        # Step 3: Auto-map transactions that have a ticker to 'mapped' status
+        cursor.execute("""
+            UPDATE transactions
+            SET status = 'mapped'
+            WHERE ticker IS NOT NULL AND ticker != '' AND ticker != 'UNKNOWN' AND status = 'pending'
+        """)
+        auto_mapped = cursor.rowcount
 
         conn.commit()
 
-        # Verify the fix
+        # Get final stats
         cursor.execute("""
-            SELECT t.id, t.merchant, t.amount, t.round_up, t.fee, t.total_debit
+            SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+                COUNT(CASE WHEN status = 'mapped' THEN 1 END) as mapped
+            FROM transactions
+        """)
+        stats_after = cursor.fetchone()
+
+        # Sample of remaining transactions
+        cursor.execute("""
+            SELECT t.id, t.merchant, t.amount, t.round_up, t.fee, t.total_debit, t.status, t.user_id, t.ticker
             FROM transactions t
             ORDER BY t.created_at DESC
             LIMIT 10
@@ -7974,17 +8004,35 @@ def admin_fix_transactions():
 
         return jsonify({
             'success': True,
-            'message': f'Fixed {rows_updated} transactions',
-            'total_transactions': total_before,
-            'rows_updated': rows_updated,
-            'sample_after_fix': [
+            'message': 'Database cleanup complete',
+            'before': {
+                'total': stats_before[0],
+                'orphaned': stats_before[1],
+                'linked_to_users': stats_before[2],
+                'pending': stats_before[3],
+                'mapped': stats_before[4]
+            },
+            'actions': {
+                'orphans_deleted': orphans_deleted,
+                'roundup_fee_fixed': roundup_fixed,
+                'auto_mapped': auto_mapped
+            },
+            'after': {
+                'total': stats_after[0],
+                'pending': stats_after[1],
+                'mapped': stats_after[2]
+            },
+            'sample': [
                 {
                     'id': row[0],
                     'merchant': row[1],
                     'amount': float(row[2]) if row[2] else 0,
                     'round_up': float(row[3]) if row[3] else 0,
                     'fee': float(row[4]) if row[4] else 0,
-                    'total_debit': float(row[5]) if row[5] else 0
+                    'total_debit': float(row[5]) if row[5] else 0,
+                    'status': row[6],
+                    'user_id': row[7],
+                    'ticker': row[8]
                 }
                 for row in sample
             ]
