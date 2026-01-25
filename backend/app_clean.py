@@ -1234,7 +1234,7 @@ def admin_get_users():
 
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
 def admin_delete_user(user_id):
-    """Delete a user by ID (admin only)"""
+    """Delete a user by ID (admin only) - CASCADE delete all related data"""
     conn = None
     try:
         auth_header = request.headers.get('Authorization')
@@ -1257,43 +1257,55 @@ def admin_delete_user(user_id):
             conn.close()
             return jsonify({'success': False, 'error': 'User not found'}), 404
 
-        # Delete related data first (to avoid foreign key constraints)
-        # List of tables with user_id foreign keys
+        user_email = user[1]
+
+        # First, get a list of all tables that exist
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public'
+        """)
+        existing_tables = set(row[0] for row in cursor.fetchall())
+
+        # Tables to delete from, in order (child tables first)
+        # Format: (table_name, column_name, use_string_for_id)
         tables_to_delete = [
-            ("promo_code_usage", "user_id"),
-            ("subscription_changes", "user_id"),
-            ("user_subscriptions", "user_id"),
-            ("user_settings", "user_id"),
-            ("statements", "user_id"),
-            ("roundup_ledger", "user_id"),
-            ("market_queue", "user_id"),
-            ("notifications", "user_id"),
-            ("transactions", "user_id"),
-            ("goals", "user_id"),
-            ("portfolios", "user_id"),
-            ("llm_mappings", "user_id"),
+            ("llm_mappings", "user_id", True),
+            ("transactions", "user_id", False),
+            ("portfolios", "user_id", False),
+            ("goals", "user_id", False),
+            ("notifications", "user_id", False),
+            ("user_settings", "user_id", False),
+            ("user_subscriptions", "user_id", False),
+            ("subscription_changes", "user_id", False),
+            ("promo_code_usage", "user_id", False),
+            ("statements", "user_id", False),
+            ("roundup_ledger", "user_id", False),
+            ("market_queue", "user_id", False),
+            ("bank_connections", "user_id", False),
+            ("user_profiles", "user_id", False),
         ]
 
-        for table, column in tables_to_delete:
-            try:
-                if table == "llm_mappings":
-                    # llm_mappings uses TEXT for user_id
-                    cursor.execute(f"DELETE FROM {table} WHERE {column} = %s", (str(user_id),))
-                else:
-                    cursor.execute(f"DELETE FROM {table} WHERE {column} = %s", (user_id,))
-            except Exception as e:
-                # Rollback to reset transaction state and continue
-                conn.rollback()
-                print(f"Warning: Could not delete from {table}: {e}")
+        deleted_counts = {}
 
-        # Delete the user
+        # Delete from each table that exists
+        for table_name, column_name, use_string in tables_to_delete:
+            if table_name in existing_tables:
+                param = str(user_id) if use_string else user_id
+                cursor.execute(f"DELETE FROM {table_name} WHERE {column_name} = %s", (param,))
+                deleted_counts[table_name] = cursor.rowcount
+                print(f"Deleted {cursor.rowcount} rows from {table_name} for user {user_id}")
+
+        # Finally delete the user
         cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        deleted_counts['users'] = cursor.rowcount
+
         conn.commit()
         conn.close()
 
         return jsonify({
             'success': True,
-            'message': f'User {user[1]} deleted successfully'
+            'message': f'User {user_email} and all related data deleted successfully',
+            'deleted_counts': deleted_counts
         })
 
     except Exception as e:
@@ -1303,6 +1315,7 @@ def admin_delete_user(user_id):
                 conn.close()
             except:
                 pass
+        print(f"Error deleting user {user_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/family-users', methods=['GET'])
