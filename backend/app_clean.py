@@ -646,50 +646,9 @@ def initialize_database():
             except Exception:
                 pass  # Column already exists
 
-        # Seed test users if missing (for demo/login verification)
-        test_users = [
-            {
-                'email': 'ind.test@kamioi.com',
-                'name': 'Individual Test',
-                'account_type': 'individual',
-                'role': 'individual'
-            },
-            {
-                'email': 'family.test@kamioi.com',
-                'name': 'Family Test',
-                'account_type': 'family',
-                'role': 'family'
-            },
-            {
-                'email': 'business.test@kamioi.com',
-                'name': 'Business Test',
-                'account_type': 'business',
-                'role': 'business'
-            }
-        ]
+        # Test user seeding removed - only real users should be in the system
+        # Users are created through the registration flow only
 
-        for test_user in test_users:
-            cursor.execute("SELECT id FROM users WHERE email = %s", (test_user['email'],))
-            if not cursor.fetchone():
-                cursor.execute("""
-                    INSERT INTO users (email, password, name, role, account_type, round_up_amount, risk_tolerance,
-                                       investment_goals, terms_agreed, privacy_agreed, marketing_agreed, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    test_user['email'],
-                    'Test@1234',
-                    test_user['name'],
-                    test_user['role'],
-                    test_user['account_type'],
-                    1.00,
-                    'moderate',
-                    '[]',
-                    True,
-                    True,
-                    False,
-                    datetime.now()
-                ))
-        
         # Create user_settings table if it doesn't exist (PostgreSQL syntax)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
