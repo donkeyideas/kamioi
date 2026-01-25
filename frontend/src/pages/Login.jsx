@@ -2012,8 +2012,8 @@ const Login = ({ initialMode = 'login' }) => {
                     </div>
                   ) : (
                     <div className="flex justify-center">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
-                        {subscriptionPlans.map((plan) => (
+                      <div className="grid grid-cols-1 gap-4 max-w-md">
+                        {subscriptionPlans.filter(p => p.account_type === 'individual').map((plan) => (
                           <button
                             key={plan.id}
                             onClick={() => {
@@ -2028,8 +2028,8 @@ const Login = ({ initialMode = 'login' }) => {
                           >
                             <h4 className="text-xl font-bold text-white mb-2">{plan.name}</h4>
                             <div className="mb-2">
-                              <span className="text-3xl font-bold text-purple-400">
-                                ${individualData.billingCycle === 'monthly' ? (plan.price_monthly || 0) : (plan.price_yearly || 0)}
+                              <span className="text-3xl font-bold text-white">
+                                ${individualData.billingCycle === 'monthly' ? (plan.price_monthly || plan.price || 0) : (plan.price_yearly || (plan.price * 10) || 0)}
                               </span>
                               <span className="text-lg text-white/70">/{individualData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
                             </div>
@@ -2953,8 +2953,8 @@ const Login = ({ initialMode = 'login' }) => {
                           <p className="text-white/70">No subscription plans available at this time.</p>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {subscriptionPlans.map((plan) => (
+                        <div className="grid grid-cols-1 gap-4 max-w-md mx-auto">
+                          {subscriptionPlans.filter(p => p.account_type === 'family').map((plan) => (
                             <label
                               key={plan.id}
                               className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
@@ -2976,8 +2976,8 @@ const Login = ({ initialMode = 'login' }) => {
                               />
                               <div>
                                 <h4 className="text-xl font-bold text-white mb-2">{plan.name}</h4>
-                                <div className="text-3xl font-bold text-purple-400 mb-2">
-                                  ${familyData.billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly}
+                                <div className="text-3xl font-bold text-white mb-2">
+                                  ${familyData.billingCycle === 'monthly' ? (plan.price_monthly || plan.price || 0) : (plan.price_yearly || (plan.price * 10) || 0)}
                                   <span className="text-lg text-white/70">/{familyData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
                                 </div>
                                 {familyData.billingCycle === 'yearly' && plan.price_yearly && plan.price_monthly && (
@@ -3796,8 +3796,8 @@ const Login = ({ initialMode = 'login' }) => {
                           <p className="text-white/70">No subscription plans available at this time.</p>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {subscriptionPlans.map((plan) => (
+                        <div className="grid grid-cols-1 gap-4 max-w-md mx-auto">
+                          {subscriptionPlans.filter(p => p.account_type === 'business').map((plan) => (
                             <label
                               key={plan.id}
                               className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
@@ -3819,8 +3819,8 @@ const Login = ({ initialMode = 'login' }) => {
                               />
                               <div>
                                 <h4 className="text-xl font-bold text-white mb-2">{plan.name}</h4>
-                                <div className="text-3xl font-bold text-purple-400 mb-2">
-                                  ${businessData.billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly}
+                                <div className="text-3xl font-bold text-white mb-2">
+                                  ${businessData.billingCycle === 'monthly' ? (plan.price_monthly || plan.price || 0) : (plan.price_yearly || (plan.price * 10) || 0)}
                                   <span className="text-lg text-white/70">/{businessData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
                                 </div>
                                 {businessData.billingCycle === 'yearly' && plan.price_yearly && plan.price_monthly && (
