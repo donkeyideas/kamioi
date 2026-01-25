@@ -8454,17 +8454,10 @@ def admin_llm_assets():
         cost_basis = total_mappings * 0.025  # Estimated cost per mapping
         carrying_value = economic_value - cost_basis
 
+        # Format response to match frontend expectations
         return jsonify({
             'success': True,
             'data': {
-                'total_assets': 1,  # The LLM mapping dataset is the primary asset
-                'total_mappings': total_mappings,
-                'cost_basis': round(cost_basis, 2),
-                'economic_value': round(economic_value, 2),
-                'carrying_value': round(carrying_value, 2),
-                'categories': categories,
-                'tickers': tickers,
-                'status_distribution': status_dist,
                 'assets': [
                     {
                         'id': 1,
@@ -8474,9 +8467,26 @@ def admin_llm_assets():
                         'records': total_mappings,
                         'cost_basis': round(cost_basis, 2),
                         'economic_value': round(economic_value, 2),
-                        'last_updated': datetime.now().isoformat()
+                        'carrying_value': round(carrying_value, 2),
+                        'last_updated': datetime.now().isoformat(),
+                        'gl_account': '15200',
+                        'categories': categories,
+                        'tickers': tickers,
+                        'status_distribution': status_dist
                     }
-                ]
+                ],
+                'summary': {
+                    'total_assets': 1,
+                    'total_value': round(economic_value, 2),
+                    'total_cost': round(cost_basis, 2),
+                    'total_cost_basis': round(cost_basis, 2),
+                    'total_economic_value': round(economic_value, 2),
+                    'total_carrying_value': round(carrying_value, 2),
+                    'average_performance': 85.8,  # From dashboard accuracy
+                    'average_roi': round((economic_value - cost_basis) / cost_basis * 100, 1) if cost_basis > 0 else 0,
+                    'gl_account': '15200',
+                    'total_mappings': total_mappings
+                }
             }
         })
 
