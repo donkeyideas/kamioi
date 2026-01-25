@@ -392,8 +392,8 @@ def admin_dashboard_overview():
                     users_count = row[1]
                     break
             user_growth.append({
-                'month': month_name,
-                'users': users_count
+                'name': month_name,
+                'value': users_count
             })
 
         # Revenue trend (weekly for last 5 weeks)
@@ -435,11 +435,12 @@ def admin_dashboard_overview():
         """)
         recent_users = cursor.fetchall()
         recent_activity = []
-        for user in recent_users:
+        for idx, user in enumerate(recent_users):
             recent_activity.append({
-                'type': 'user_signup',
-                'message': f'New {user[3] or "individual"} user: {user[0] or user[1]}',
-                'time': user[2].isoformat() if user[2] else ''
+                'id': f'activity_{idx}',
+                'type': 'user',
+                'description': f'New {user[3] or "individual"} user: {user[0] or user[1]}',
+                'timestamp': user[2].strftime('%b %d, %Y %H:%M') if user[2] else ''
             })
 
         # System status
