@@ -399,8 +399,8 @@ def admin_dashboard_overview():
         # Revenue trend (weekly for last 5 weeks)
         cursor.execute("""
             SELECT
-                'Week ' || EXTRACT(WEEK FROM created_at)::TEXT as week,
-                COUNT(*) as value
+                EXTRACT(WEEK FROM created_at) as week_num,
+                COALESCE(SUM(amount), 0) as value
             FROM transactions
             WHERE created_at >= NOW() - INTERVAL '5 weeks'
             GROUP BY EXTRACT(WEEK FROM created_at)
@@ -408,10 +408,23 @@ def admin_dashboard_overview():
             LIMIT 5
         """)
         revenue_raw = cursor.fetchall()
-        revenue_trend = [{'week': f'Week {i+1}', 'value': 0} for i in range(5)]
+        week_data = [0, 0, 0, 0, 0]
         for idx, row in enumerate(revenue_raw):
             if idx < 5:
-                revenue_trend[idx] = {'week': row[0], 'value': row[1]}
+                week_data[idx] = float(row[1]) if row[1] else 0
+
+        # Calculate revenue trend metrics
+        current_week_revenue = week_data[4] if len(week_data) > 4 else 0
+        previous_week_revenue = week_data[3] if len(week_data) > 3 else 0
+        growth_pct = ((current_week_revenue - previous_week_revenue) / max(previous_week_revenue, 1)) * 100 if previous_week_revenue > 0 else 0
+
+        revenue_trend = {
+            'weekData': week_data,
+            'current_month': total_amount,
+            'growth_percentage': round(growth_pct, 1),
+            'previous_month': sum(week_data[:4]),
+            'trend': 'growing' if growth_pct > 0 else ('declining' if growth_pct < 0 else 'stable')
+        }
 
         # Recent activity
         cursor.execute("""
