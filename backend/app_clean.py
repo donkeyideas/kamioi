@@ -1015,6 +1015,7 @@ def admin_get_users():
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
 def admin_delete_user(user_id):
     """Delete a user by ID (admin only)"""
+    conn = None
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -1037,29 +1038,33 @@ def admin_delete_user(user_id):
             return jsonify({'success': False, 'error': 'User not found'}), 404
 
         # Delete related data first (to avoid foreign key constraints)
-        # Delete user settings
-        try:
-            cursor.execute("DELETE FROM user_settings WHERE user_id = %s", (user_id,))
-        except Exception:
-            pass
+        # List of tables with user_id foreign keys
+        tables_to_delete = [
+            ("promo_code_usage", "user_id"),
+            ("subscription_changes", "user_id"),
+            ("user_subscriptions", "user_id"),
+            ("user_settings", "user_id"),
+            ("statements", "user_id"),
+            ("roundup_ledger", "user_id"),
+            ("market_queue", "user_id"),
+            ("notifications", "user_id"),
+            ("transactions", "user_id"),
+            ("goals", "user_id"),
+            ("portfolios", "user_id"),
+            ("llm_mappings", "user_id"),
+        ]
 
-        # Delete transactions
-        try:
-            cursor.execute("DELETE FROM transactions WHERE user_id = %s", (user_id,))
-        except Exception:
-            pass
-
-        # Delete portfolios
-        try:
-            cursor.execute("DELETE FROM portfolios WHERE user_id = %s", (user_id,))
-        except Exception:
-            pass
-
-        # Delete goals
-        try:
-            cursor.execute("DELETE FROM goals WHERE user_id = %s", (user_id,))
-        except Exception:
-            pass
+        for table, column in tables_to_delete:
+            try:
+                if table == "llm_mappings":
+                    # llm_mappings uses TEXT for user_id
+                    cursor.execute(f"DELETE FROM {table} WHERE {column} = %s", (str(user_id),))
+                else:
+                    cursor.execute(f"DELETE FROM {table} WHERE {column} = %s", (user_id,))
+            except Exception as e:
+                # Rollback to reset transaction state and continue
+                conn.rollback()
+                print(f"Warning: Could not delete from {table}: {e}")
 
         # Delete the user
         cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
@@ -1072,6 +1077,12 @@ def admin_delete_user(user_id):
         })
 
     except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except:
+                pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/family-users', methods=['GET'])
