@@ -3931,7 +3931,7 @@ Errors: ${errorCount}`,
 
                 try {
                   const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_1'
-                  const response = await fetch(`${apiBaseUrl}/api/admin/llm-center/process-pending-transactions`, {
+                  const response = await fetch(buildApiUrl('/api/admin/llm-center/process-pending-transactions'), {
                     method: 'POST',
                     headers: {
                       'Authorization': `Bearer ${token}`,
