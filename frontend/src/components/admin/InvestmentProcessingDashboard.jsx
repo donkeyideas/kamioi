@@ -53,9 +53,12 @@ const InvestmentProcessingDashboard = ({ user, transactions = [], onRefresh }) =
       
       console.log('InvestmentProcessingDashboard - Processing transactions:', transactions.length)
       
-      // Filter transactions by status
-      const staged = transactions.filter(t => t.status === 'mapped' && !t.processed)
-      const processing = transactions.filter(t => t.status === 'pending-mapping' || t.status === 'processing')
+      // Filter transactions by status - ONLY include transactions with valid tickers
+      // Investment Processing is for executing trades, not for mapping
+      const hasValidTicker = (t) => t.ticker && t.ticker !== '' && t.ticker !== 'UNKNOWN' && t.ticker !== 'Unknown'
+
+      const staged = transactions.filter(t => t.status === 'mapped' && hasValidTicker(t) && !t.processed)
+      const processing = transactions.filter(t => t.status === 'processing' && hasValidTicker(t))
       const completed = transactions.filter(t => t.status === 'completed')
       const failed = transactions.filter(t => t.status === 'failed')
       
