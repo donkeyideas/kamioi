@@ -82,15 +82,119 @@ def add_cors_headers(response):
         pass
     return response
 
-# Bulk upload job tracking
-BULK_UPLOAD_JOBS = {}
+# Bulk upload job tracking - uses database for persistence across server restarts
+BULK_UPLOAD_JOBS = {}  # In-memory cache (backup)
 BULK_UPLOAD_LOCK = threading.Lock()
 
 def _update_bulk_upload_job(job_id, **updates):
+    """Update job status in both memory and database for persistence."""
+    # Update in-memory cache
     with BULK_UPLOAD_LOCK:
         job = BULK_UPLOAD_JOBS.get(job_id, {})
         job.update(updates)
         BULK_UPLOAD_JOBS[job_id] = job
+
+    # Also persist to database (survives server restarts)
+    try:
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Build the update fields
+        status = updates.get('status', job.get('status', 'queued'))
+        processed_rows = updates.get('processed_rows', job.get('processed_rows', 0))
+        total_rows = updates.get('total_rows', job.get('total_rows', 0))
+        rows_per_second = updates.get('rows_per_second', job.get('rows_per_second', 0))
+        errors = json.dumps(updates.get('errors', job.get('errors', [])))
+        method = updates.get('method', job.get('method', ''))
+        skip_indexes = updates.get('skip_indexes', job.get('skip_indexes', False))
+        message = updates.get('message', job.get('message', ''))
+        job_data = json.dumps(job)
+
+        # Timestamps
+        started_at = None
+        if 'started_at' in updates:
+            started_at = datetime.fromtimestamp(updates['started_at'])
+        completed_at = None
+        if status in ['completed', 'failed', 'error']:
+            completed_at = datetime.now()
+
+        # Upsert into database
+        cursor.execute("""
+            INSERT INTO bulk_upload_jobs (id, status, processed_rows, total_rows, rows_per_second, errors, method, skip_indexes, message, job_data, started_at, completed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                processed_rows = EXCLUDED.processed_rows,
+                total_rows = EXCLUDED.total_rows,
+                rows_per_second = EXCLUDED.rows_per_second,
+                errors = EXCLUDED.errors,
+                method = COALESCE(EXCLUDED.method, bulk_upload_jobs.method),
+                skip_indexes = COALESCE(EXCLUDED.skip_indexes, bulk_upload_jobs.skip_indexes),
+                message = COALESCE(EXCLUDED.message, bulk_upload_jobs.message),
+                job_data = EXCLUDED.job_data,
+                started_at = COALESCE(EXCLUDED.started_at, bulk_upload_jobs.started_at),
+                completed_at = COALESCE(EXCLUDED.completed_at, bulk_upload_jobs.completed_at)
+        """, (job_id, status, processed_rows, total_rows, rows_per_second, errors, method, skip_indexes, message, job_data, started_at, completed_at))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[BulkUpload] Warning: Failed to persist job {job_id} to database: {e}")
+        # Continue anyway - in-memory tracking still works
+
+
+def _get_bulk_upload_job(job_id):
+    """Get job status from memory first, then database if not found."""
+    # Check in-memory cache first
+    with BULK_UPLOAD_LOCK:
+        job = BULK_UPLOAD_JOBS.get(job_id)
+        if job:
+            return job
+
+    # Fall back to database
+    try:
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT id, status, processed_rows, total_rows, rows_per_second, errors,
+                   method, skip_indexes, message, job_data, created_at, started_at, completed_at
+            FROM bulk_upload_jobs WHERE id = %s
+        """, (job_id,))
+
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if row:
+            job = {
+                'job_id': row['id'],
+                'status': row['status'],
+                'processed_rows': row['processed_rows'] or 0,
+                'total_rows': row['total_rows'] or 0,
+                'rows_per_second': float(row['rows_per_second'] or 0),
+                'errors': json.loads(row['errors'] or '[]'),
+                'method': row['method'],
+                'skip_indexes': row['skip_indexes'],
+                'message': row['message'],
+                'created_at': row['created_at'].timestamp() if row['created_at'] else None,
+                'started_at': row['started_at'].timestamp() if row['started_at'] else None,
+                'completed_at': row['completed_at'].timestamp() if row['completed_at'] else None
+            }
+            # Try to load additional data from job_data
+            try:
+                extra = json.loads(row['job_data'] or '{}')
+                for k, v in extra.items():
+                    if k not in job:
+                        job[k] = v
+            except:
+                pass
+            return job
+    except Exception as e:
+        print(f"[BulkUpload] Warning: Failed to get job {job_id} from database: {e}")
+
+    return None
 
 def _process_bulk_upload_job(job_id, file_path):
     start_time = time.time()
@@ -874,6 +978,25 @@ def initialize_database():
                 cursor.execute(f"ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS {col_name} {col_type} DEFAULT {col_default}")
             except Exception:
                 pass
+
+        # Create bulk_upload_jobs table for persistent job tracking (survives server restarts)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bulk_upload_jobs (
+                id VARCHAR(100) PRIMARY KEY,
+                status VARCHAR(50) DEFAULT 'queued',
+                processed_rows INTEGER DEFAULT 0,
+                total_rows INTEGER DEFAULT 0,
+                rows_per_second DECIMAL(10, 2) DEFAULT 0,
+                errors TEXT DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                method VARCHAR(50),
+                skip_indexes BOOLEAN DEFAULT FALSE,
+                message TEXT,
+                job_data TEXT DEFAULT '{}'
+            )
+        """)
 
         conn.commit()
         print("✅ Database tables created successfully")
@@ -8881,8 +9004,8 @@ def admin_bulk_upload_progress():
         if not job_id:
             return jsonify({'success': False, 'error': 'Missing job_id'}), 400
 
-        with BULK_UPLOAD_LOCK:
-            job = BULK_UPLOAD_JOBS.get(job_id)
+        # Use database-backed job lookup (survives server restarts)
+        job = _get_bulk_upload_job(job_id)
 
         if not job:
             return jsonify({'success': False, 'error': 'Job not found'}), 404
@@ -8891,8 +9014,9 @@ def admin_bulk_upload_progress():
             'success': True,
             'data': job
         })
-        
+
     except Exception as e:
+        print(f"[BulkUpload] Progress check error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
