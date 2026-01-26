@@ -10926,6 +10926,129 @@ def admin_process_mapped_investments():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/investments/process-single', methods=['POST'])
+def admin_process_single_investment():
+    """
+    Process a single transaction: execute Alpaca trade and update portfolio.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        data = request.get_json()
+        transaction_id = data.get('transaction_id')
+
+        if not transaction_id:
+            return jsonify({'success': False, 'error': 'transaction_id is required'}), 400
+
+        # Initialize Alpaca service
+        from alpaca_service import AlpacaService
+        alpaca = AlpacaService()
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn, dict_cursor=True)
+
+        # Get the specific transaction
+        cursor.execute("""
+            SELECT t.id, t.user_id, t.ticker, t.round_up, t.merchant, t.amount, u.email
+            FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.id = %s
+            AND LOWER(t.status) = 'mapped'
+            AND t.ticker IS NOT NULL
+            AND t.ticker != 'UNKNOWN'
+            AND t.ticker != ''
+        """, (transaction_id,))
+        txn = cursor.fetchone()
+
+        if not txn:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Transaction not found or not in mapped status'}), 404
+
+        # Get Alpaca account
+        alpaca_accounts = alpaca.get_accounts()
+        if not alpaca_accounts:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'No Alpaca accounts available. Please configure Alpaca API credentials.'
+            }), 500
+
+        demo_account_id = alpaca_accounts[0].get('id')
+
+        txn_id = txn['id']
+        user_id = txn['user_id']
+        ticker = txn['ticker']
+        round_up_amount = float(txn['round_up']) if txn['round_up'] else 1.0
+
+        # Execute the trade via Alpaca
+        order_result = alpaca.buy_fractional_shares(
+            account_id=demo_account_id,
+            symbol=ticker,
+            dollar_amount=round_up_amount
+        )
+
+        if order_result and order_result.get('id'):
+            alpaca_order_id = order_result.get('id')
+
+            # Mark transaction as completed
+            cursor.execute("""
+                UPDATE transactions
+                SET status = 'completed', alpaca_order_id = %s
+                WHERE id = %s
+            """, (alpaca_order_id, txn_id))
+
+            # Update or insert portfolio holding
+            shares_bought = round_up_amount
+            avg_price = 1.0
+
+            cursor.execute("""
+                SELECT id, shares, average_price FROM portfolios
+                WHERE user_id = %s AND ticker = %s
+            """, (user_id, ticker))
+            existing_holding = cursor.fetchone()
+
+            if existing_holding:
+                old_shares = float(existing_holding['shares'])
+                old_avg = float(existing_holding['average_price'])
+                new_shares = old_shares + shares_bought
+                new_avg = ((old_shares * old_avg) + (shares_bought * avg_price)) / new_shares if new_shares > 0 else avg_price
+                cursor.execute("""
+                    UPDATE portfolios
+                    SET shares = %s, average_price = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (new_shares, new_avg, existing_holding['id']))
+            else:
+                cursor.execute("""
+                    INSERT INTO portfolios (user_id, ticker, shares, average_price, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (user_id, ticker, shares_bought, avg_price))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            return jsonify({
+                'success': True,
+                'message': f'Successfully executed trade for {ticker}',
+                'alpaca_order_id': alpaca_order_id,
+                'ticker': ticker,
+                'amount': round_up_amount
+            })
+        else:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Alpaca order failed'}), 500
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/admin/investments/status', methods=['GET'])
 def admin_investment_status():
     """Get investment processing status - counts by status"""

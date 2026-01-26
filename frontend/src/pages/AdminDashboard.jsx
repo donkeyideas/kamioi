@@ -66,6 +66,44 @@ const AdminDashboard = () => {
     }
   }, [])
 
+  // Refresh transactions data (called after trade execution)
+  const refreshTransactions = async () => {
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+
+      const response = await fetch(`${apiBaseUrl}/api/admin/transactions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.transactions) {
+          console.log('🔄 AdminDashboard - Refreshed transactions:', data.transactions.length)
+          setAllTransactions(data.transactions)
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing transactions:', error)
+    }
+  }
+
+  // Listen for refresh-admin-data event
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('🔄 AdminDashboard - Received refresh event')
+      refreshTransactions()
+    }
+
+    window.addEventListener('refresh-admin-data', handleRefresh)
+    return () => {
+      window.removeEventListener('refresh-admin-data', handleRefresh)
+    }
+  }, [])
+
   // Update activeTab ref when it changes
   useEffect(() => {
     activeTabRef.current = activeTab
@@ -220,7 +258,7 @@ const AdminDashboard = () => {
         console.log('🔍 AdminDashboard - Passing transactions to InvestmentSummary:', allTransactions.length)
         return <InvestmentSummary user={user} transactions={allTransactions} />
       case 'investment-processing':
-        return <InvestmentProcessingDashboard user={user} transactions={allTransactions} />
+        return <InvestmentProcessingDashboard user={user} transactions={allTransactions} onRefresh={refreshTransactions} />
       case 'llm':
         return <LLMCenter />
       case 'llm-data':

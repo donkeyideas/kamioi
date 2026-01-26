@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { TrendingUp, Clock, CheckCircle, XCircle, AlertCircle, Play, Pause, RotateCcw, BarChart3, Users, DollarSign, Activity, Zap, Database, Server, Eye, Settings, X, Filter, User } from 'lucide-react'
+import { TrendingUp, Clock, CheckCircle, XCircle, AlertCircle, Play, Pause, RotateCcw, BarChart3, Users, DollarSign, Activity, Zap, Database, Server, Eye, Settings, X, Filter, User, Send } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import CompanyLogo from '../common/CompanyLogo'
 
-const InvestmentProcessingDashboard = ({ user, transactions = [] }) => {
+// Helper function to build API URLs (avoids localhost issues in production)
+const buildApiUrl = (path) => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+  return `${baseUrl}${path}`
+}
+
+const InvestmentProcessingDashboard = ({ user, transactions = [], onRefresh }) => {
   const { isLightMode, isDarkMode, isCloudMode } = useTheme()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [systemStatus, setSystemStatus] = useState({
@@ -21,7 +27,9 @@ const InvestmentProcessingDashboard = ({ user, transactions = [] }) => {
   const [loading, setLoading] = useState(true)
   const [selectedTransaction, setSelectedTransaction] = useState(null)
   const [showTransactionModal, setShowTransactionModal] = useState(false)
-  
+  const [isExecutingTrades, setIsExecutingTrades] = useState(false)
+  const [executionResults, setExecutionResults] = useState(null)
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -170,6 +178,105 @@ const InvestmentProcessingDashboard = ({ user, transactions = [] }) => {
   const handleRetryTransaction = (transactionId) => {
     console.log('Retrying transaction:', transactionId)
     // Implement retry logic
+  }
+
+  // Execute all mapped transactions via Alpaca
+  const handleExecuteAllTrades = async () => {
+    setIsExecutingTrades(true)
+    setExecutionResults(null)
+
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+
+      const response = await fetch(buildApiUrl('/api/admin/investments/process-mapped'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success !== false) {
+        setExecutionResults({
+          success: true,
+          processed: data.processed || 0,
+          succeeded: data.succeeded || 0,
+          failed: data.failed || 0,
+          details: data.details || []
+        })
+
+        // Trigger refresh of transaction data
+        if (onRefresh) {
+          onRefresh()
+        }
+
+        // Also dispatch event to refresh admin dashboard
+        window.dispatchEvent(new CustomEvent('refresh-admin-data'))
+      } else {
+        setExecutionResults({
+          success: false,
+          error: data.error || 'Failed to execute trades'
+        })
+      }
+    } catch (error) {
+      console.error('Error executing trades:', error)
+      setExecutionResults({
+        success: false,
+        error: error.message || 'Network error while executing trades'
+      })
+    } finally {
+      setIsExecutingTrades(false)
+    }
+  }
+
+  // Execute a single transaction
+  const handleExecuteSingleTrade = async (transaction) => {
+    setIsExecutingTrades(true)
+
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+
+      const response = await fetch(buildApiUrl('/api/admin/investments/process-single'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          transaction_id: transaction.id
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        // Trigger refresh
+        if (onRefresh) {
+          onRefresh()
+        }
+        window.dispatchEvent(new CustomEvent('refresh-admin-data'))
+
+        setExecutionResults({
+          success: true,
+          message: `Successfully executed trade for ${transaction.ticker}`
+        })
+      } else {
+        setExecutionResults({
+          success: false,
+          error: data.error || 'Failed to execute trade'
+        })
+      }
+    } catch (error) {
+      console.error('Error executing single trade:', error)
+      setExecutionResults({
+        success: false,
+        error: error.message || 'Network error'
+      })
+    } finally {
+      setIsExecutingTrades(false)
+    }
   }
 
   const handleViewTransaction = (transaction) => {
@@ -321,7 +428,7 @@ const InvestmentProcessingDashboard = ({ user, transactions = [] }) => {
       {/* Control Panel */}
       <div className={`${getCardClass()} rounded-lg p-6`}>
         <h3 className={`text-lg font-semibold ${getTextClass()} mb-4`}>System Controls</h3>
-        <div className="flex space-x-4">
+        <div className="flex flex-wrap gap-4">
           <button
             onClick={handleStartProcessing}
             disabled={systemStatus.isRunning}
@@ -338,7 +445,61 @@ const InvestmentProcessingDashboard = ({ user, transactions = [] }) => {
             <Pause className="w-4 h-4" />
             <span>Stop Processing</span>
           </button>
+          <button
+            onClick={handleExecuteAllTrades}
+            disabled={isExecutingTrades || stagedTransactions.length === 0}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          >
+            {isExecutingTrades ? (
+              <>
+                <Activity className="w-4 h-4 animate-spin" />
+                <span>Executing...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                <span>Execute All Trades ({stagedTransactions.length})</span>
+              </>
+            )}
+          </button>
         </div>
+
+        {/* Execution Results */}
+        {executionResults && (
+          <div className={`mt-4 p-4 rounded-lg ${
+            executionResults.success
+              ? 'bg-green-500/20 border border-green-500/30'
+              : 'bg-red-500/20 border border-red-500/30'
+          }`}>
+            {executionResults.success ? (
+              <div>
+                <p className="text-green-400 font-medium flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5" />
+                  Trade Execution Complete
+                </p>
+                <div className="mt-2 text-sm text-gray-300">
+                  <p>Processed: {executionResults.processed}</p>
+                  <p>Succeeded: {executionResults.succeeded}</p>
+                  <p>Failed: {executionResults.failed}</p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-red-400 font-medium flex items-center gap-2">
+                  <XCircle className="w-5 h-5" />
+                  Trade Execution Failed
+                </p>
+                <p className="mt-2 text-sm text-gray-300">{executionResults.error}</p>
+              </div>
+            )}
+            <button
+              onClick={() => setExecutionResults(null)}
+              className="mt-2 text-xs text-gray-400 hover:text-gray-300"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -374,7 +535,15 @@ const InvestmentProcessingDashboard = ({ user, transactions = [] }) => {
               </div>
               <div className="flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-yellow-400" />
-                <span className={`text-sm ${getSubtextClass()}`}>Staged</span>
+                <span className={`text-sm ${getSubtextClass()}`}>Mapped</span>
+                <button
+                  onClick={() => handleExecuteSingleTrade(transaction)}
+                  disabled={isExecutingTrades}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center space-x-1"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>Execute</span>
+                </button>
                 <button
                   onClick={() => handleViewTransaction(transaction)}
                   className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center space-x-1"

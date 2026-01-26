@@ -305,6 +305,9 @@ const UserTransactions = () => {
     }
   }, [setTransactions])
 
+  // Safety check: ensure transactions is an array (moved before useEffect that depends on it)
+  const safeTransactions = Array.isArray(transactions) ? transactions : []
+
   // Fetch real stock prices for all tickers in transactions
   useEffect(() => {
     if (safeTransactions && safeTransactions.length > 0) {
@@ -623,9 +626,6 @@ const UserTransactions = () => {
   }
 
 
-  // Safety check: ensure transactions is an array
-  const safeTransactions = Array.isArray(transactions) ? transactions : []
-  
   const filteredTransactions = safeTransactions.filter(transaction => {
     const merchant = transaction.merchant || transaction.description || 'Unknown'
     const category = transaction.category || 'General'
