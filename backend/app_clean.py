@@ -11133,6 +11133,45 @@ def admin_process_single_investment():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/alpaca/status', methods=['GET'])
+def admin_alpaca_status():
+    """Check Alpaca API configuration and connection status"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        from alpaca_service import AlpacaService
+        import os
+
+        alpaca = AlpacaService()
+
+        # Check environment variables
+        env_vars = {
+            'ALPACA_USE_BROKER_API': os.environ.get('ALPACA_USE_BROKER_API', 'NOT SET'),
+            'ALPACA_USE_SANDBOX': os.environ.get('ALPACA_USE_SANDBOX', 'NOT SET'),
+            'ALPACA_API_KEY': 'SET' if os.environ.get('ALPACA_API_KEY') else 'NOT SET',
+            'ALPACA_API_SECRET': 'SET' if os.environ.get('ALPACA_API_SECRET') else 'NOT SET',
+        }
+
+        # Test connection
+        connection_ok = alpaca.test_connection()
+
+        return jsonify({
+            'success': True,
+            'api_type': alpaca.api_type,
+            'base_url': alpaca.base_url,
+            'environment_variables': env_vars,
+            'connection_test': connection_ok,
+            'message': f"Using {alpaca.api_type.upper()} API at {alpaca.base_url}"
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/admin/alpaca/create-account/<int:user_id>', methods=['POST'])
 def admin_create_alpaca_account(user_id):
     """
