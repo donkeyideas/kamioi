@@ -11291,6 +11291,68 @@ def admin_create_alpaca_accounts_bulk():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/investments/debug', methods=['GET'])
+def admin_investments_debug():
+    """Debug endpoint to see why transactions aren't being processed"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn, dict_cursor=True)
+
+        # Get all transactions with their status and ticker info
+        cursor.execute("""
+            SELECT t.id, t.status, t.ticker, t.round_up, t.alpaca_order_id, t.user_id,
+                   (SELECT COUNT(*) FROM users WHERE id = t.user_id) as user_exists
+            FROM transactions t
+            ORDER BY t.id DESC
+            LIMIT 20
+        """)
+        all_transactions = cursor.fetchall()
+
+        # Count by status (case sensitive)
+        cursor.execute("""
+            SELECT status, COUNT(*) as count FROM transactions GROUP BY status
+        """)
+        status_counts = cursor.fetchall()
+
+        # Check specifically for mapped transactions with valid tickers
+        cursor.execute("""
+            SELECT t.id, t.status, t.ticker, t.alpaca_order_id, t.user_id
+            FROM transactions t
+            WHERE LOWER(t.status) = 'mapped'
+        """)
+        mapped_transactions = cursor.fetchall()
+
+        # Check which mapped transactions have matching users
+        cursor.execute("""
+            SELECT t.id, t.status, t.ticker, t.user_id, u.id as matched_user_id
+            FROM transactions t
+            LEFT JOIN users u ON t.user_id = u.id
+            WHERE LOWER(t.status) = 'mapped'
+        """)
+        mapped_with_users = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'status_counts': [dict(row) for row in status_counts],
+            'all_transactions': [dict(row) for row in all_transactions],
+            'mapped_transactions': [dict(row) for row in mapped_transactions],
+            'mapped_with_user_join': [dict(row) for row in mapped_with_users],
+            'note': 'Check if user_id matches and ticker is not UNKNOWN/empty'
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/admin/investments/status', methods=['GET'])
 def admin_investment_status():
     """Get investment processing status - counts by status"""
