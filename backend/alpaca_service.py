@@ -309,6 +309,16 @@ class AlpacaService:
                 account = response.json()
                 print(f"Alpaca account created successfully: {account.get('id')} - Status: {account.get('status')}")
                 return account
+            elif response.status_code == 409:
+                # Account already exists - try to find it by email
+                print(f"Account already exists for {email}, searching for existing account...")
+                existing_account = self.get_account_by_email(email)
+                if existing_account:
+                    print(f"Found existing account: {existing_account.get('id')} - Status: {existing_account.get('status')}")
+                    return existing_account
+                else:
+                    print(f"Could not find existing account for {email}")
+                    return None
             else:
                 print(f"Error creating Alpaca account: {response.status_code} - {response.text}")
                 return None
@@ -317,6 +327,37 @@ class AlpacaService:
             print(f"Exception creating customer account: {e}")
             import traceback
             traceback.print_exc()
+            return None
+
+    def get_account_by_email(self, email):
+        """Find an existing account by email (Broker API)"""
+        if self.api_type != "broker":
+            return None
+
+        try:
+            # Alpaca Broker API allows querying accounts
+            response = requests.get(
+                f"{self.base_url}/v1/accounts",
+                headers=self.headers,
+                params={"query": email},
+                verify=False,
+                timeout=15
+            )
+            if response.status_code == 200:
+                accounts = response.json()
+                # Find matching account by email
+                for account in accounts:
+                    contact = account.get('contact', {})
+                    if contact.get('email_address', '').lower() == email.lower():
+                        return account
+                # If no exact match found but there are results, return first
+                if accounts:
+                    return accounts[0]
+            else:
+                print(f"Error searching accounts: {response.status_code} - {response.text}")
+            return None
+        except Exception as e:
+            print(f"Exception searching accounts: {e}")
             return None
 
     def get_account_by_id(self, account_id):
@@ -339,7 +380,33 @@ class AlpacaService:
         except Exception as e:
             print(f"Exception getting account: {e}")
             return None
-    
+
+    def is_account_active(self, account_id):
+        """Check if an account is ACTIVE and allowed to trade (Broker API)"""
+        if self.api_type != "broker":
+            return True  # Trading API doesn't have this concept
+
+        account = self.get_account_by_id(account_id)
+        if not account:
+            return False
+
+        status = account.get('status', '').upper()
+        print(f"Account {account_id} status: {status}")
+
+        # ACTIVE accounts can trade, SUBMITTED accounts need approval
+        if status == 'ACTIVE':
+            return True
+        elif status == 'SUBMITTED':
+            print(f"Account {account_id} is pending approval (SUBMITTED)")
+            return False
+        elif status == 'APPROVED':
+            # APPROVED but not yet ACTIVE - might need funding
+            print(f"Account {account_id} is APPROVED but not yet ACTIVE")
+            return True  # Try anyway
+        else:
+            print(f"Account {account_id} has status {status} - cannot trade")
+            return False
+
     def get_positions(self, account_id=None):
         """Get positions for the account"""
         try:

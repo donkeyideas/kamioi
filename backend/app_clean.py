@@ -10870,6 +10870,17 @@ def admin_process_mapped_investments():
                         })
                         continue
                 account_id_to_use = user_alpaca_account_id
+
+                # Check if account is active and allowed to trade
+                if not alpaca.is_account_active(account_id_to_use):
+                    results['skipped'] += 1
+                    results['details'].append({
+                        'transaction_id': txn_id,
+                        'user_email': user_email,
+                        'status': 'skipped',
+                        'error': 'Alpaca account not yet active - pending approval'
+                    })
+                    continue
             else:
                 # For Trading API: Use the single account
                 account = alpaca.get_account()
@@ -11056,6 +11067,15 @@ def admin_process_single_investment():
                     conn.close()
                     return jsonify({'success': False, 'error': 'Failed to create Alpaca account for user'}), 500
             account_id_to_use = user_alpaca_account_id
+
+            # Check if account is active and allowed to trade
+            if not alpaca.is_account_active(account_id_to_use):
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Alpaca account not yet active - pending approval. Please wait for account verification.'
+                }), 400
         else:
             # For Trading API: Use the single account
             account = alpaca.get_account()
