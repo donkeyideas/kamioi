@@ -2211,11 +2211,11 @@ def admin_llm_process_pending_transactions():
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
 
-        # Get all pending transactions
+        # Get all pending transactions (case-insensitive status check)
         cursor.execute("""
             SELECT id, merchant, category, user_id, round_up, amount
             FROM transactions
-            WHERE status = 'pending' AND (ticker IS NULL OR ticker = '')
+            WHERE LOWER(status) = 'pending' AND (ticker IS NULL OR ticker = '' OR ticker = 'UNKNOWN')
             ORDER BY id ASC
         """)
         pending_transactions = cursor.fetchall()
@@ -2360,13 +2360,13 @@ def admin_llm_transaction_stats():
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
 
-        # Get transaction counts by status
+        # Get transaction counts by status (case-insensitive comparison)
         cursor.execute("""
             SELECT
-                COUNT(*) FILTER (WHERE status = 'pending' AND (ticker IS NULL OR ticker = '')) as pending,
-                COUNT(*) FILTER (WHERE status = 'pending-mapping') as needs_review,
-                COUNT(*) FILTER (WHERE status = 'mapped' AND ticker IS NOT NULL AND ticker != '') as mapped,
-                COUNT(*) FILTER (WHERE status IN ('invested', 'completed')) as invested,
+                COUNT(*) FILTER (WHERE LOWER(status) = 'pending' AND (ticker IS NULL OR ticker = '' OR ticker = 'UNKNOWN')) as pending,
+                COUNT(*) FILTER (WHERE LOWER(status) = 'pending-mapping' OR LOWER(status) = 'needs_review') as needs_review,
+                COUNT(*) FILTER (WHERE LOWER(status) = 'mapped' AND ticker IS NOT NULL AND ticker != '' AND ticker != 'UNKNOWN') as mapped,
+                COUNT(*) FILTER (WHERE LOWER(status) IN ('invested', 'completed')) as invested,
                 COUNT(*) as total
             FROM transactions
         """)
@@ -2378,21 +2378,21 @@ def admin_llm_transaction_stats():
         invested = stats['invested'] or 0
         total = stats['total'] or 0
 
-        # Get recent transactions for display
+        # Get recent transactions for display (case-insensitive)
         cursor.execute("""
             SELECT id, merchant, category, ticker, status, amount, round_up, date
             FROM transactions
-            WHERE status = 'pending' AND (ticker IS NULL OR ticker = '')
+            WHERE LOWER(status) = 'pending' AND (ticker IS NULL OR ticker = '' OR ticker = 'UNKNOWN')
             ORDER BY id DESC
             LIMIT 20
         """)
         pending_transactions = [dict(row) for row in cursor.fetchall()]
 
-        # Get recently mapped transactions
+        # Get recently mapped transactions (case-insensitive)
         cursor.execute("""
             SELECT id, merchant, category, ticker, status, amount, round_up, date
             FROM transactions
-            WHERE status = 'mapped' AND ticker IS NOT NULL
+            WHERE LOWER(status) = 'mapped' AND ticker IS NOT NULL AND ticker != '' AND ticker != 'UNKNOWN'
             ORDER BY id DESC
             LIMIT 10
         """)
