@@ -91,6 +91,12 @@ const AdminDashboard = () => {
     }
   }
 
+  // Load transactions on mount so they're available for all child pages
+  useEffect(() => {
+    console.log('🔄 AdminDashboard - Initial load, fetching transactions...')
+    refreshTransactions()
+  }, [])
+
   // Listen for refresh-admin-data event
   useEffect(() => {
     const handleRefresh = () => {
