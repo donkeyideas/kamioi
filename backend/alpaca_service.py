@@ -440,17 +440,16 @@ class AlpacaService:
         """
         Fund a sandbox account with simulated money (Broker API sandbox only).
 
-        For Alpaca sandbox:
-        1. Get or create ACH relationship
-        2. Create ACH transfer
-        3. Use sandbox endpoint to instantly complete the transfer
+        Tries multiple methods:
+        1. Journal from firm account (instant)
+        2. ACH transfer with sandbox completion
 
         Args:
             account_id (str): The account ID to fund
             amount (float): Amount to fund in dollars (default $10,000)
 
         Returns:
-            dict: Transfer object or None on failure
+            dict: Transfer/journal object or None on failure
         """
         if self.api_type != "broker":
             print("Sandbox funding only available with Broker API")
@@ -459,17 +458,116 @@ class AlpacaService:
         try:
             print(f"Funding sandbox account {account_id} with ${amount}...")
 
+            # Method 1: Try journal from firm account (instant if firm has funds)
+            journal_result = self._try_firm_journal(account_id, amount)
+            if journal_result:
+                return journal_result
+
+            # Method 2: ACH transfer with sandbox completion
+            print("Journal failed, trying ACH transfer...")
+            return self._try_ach_transfer(account_id, amount)
+
+        except Exception as e:
+            print(f"Exception funding account: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _try_firm_journal(self, account_id, amount):
+        """Try to fund via journal from firm sweep account"""
+        try:
+            # First, get the firm account ID
+            firm_account_id = self._get_firm_account_id()
+            if not firm_account_id:
+                print("Could not find firm account ID")
+                return None
+
+            print(f"Creating journal from firm {firm_account_id} to {account_id}...")
+
+            journal_data = {
+                "from_account": firm_account_id,
+                "to_account": account_id,
+                "entry_type": "JNLC",
+                "amount": str(amount),
+                "description": "Sandbox funding"
+            }
+
+            response = requests.post(
+                f"{self.base_url}/v1/journals",
+                headers=self.headers,
+                json=journal_data,
+                verify=False,
+                timeout=30
+            )
+
+            if response.status_code in [200, 201]:
+                journal = response.json()
+                print(f"Journal created: {journal}")
+                return journal
+            else:
+                print(f"Journal failed: {response.status_code} - {response.text}")
+                return None
+
+        except Exception as e:
+            print(f"Exception in firm journal: {e}")
+            return None
+
+    def _get_firm_account_id(self):
+        """Get the firm/sweep account ID"""
+        try:
+            # Try to get accounts and find the firm account
+            response = requests.get(
+                f"{self.base_url}/v1/accounts",
+                headers=self.headers,
+                params={"query": "firm"},
+                verify=False,
+                timeout=15
+            )
+
+            if response.status_code == 200:
+                accounts = response.json()
+                # Look for firm account type
+                for account in accounts:
+                    if account.get('account_type') == 'firm' or 'firm' in account.get('id', '').lower():
+                        print(f"Found firm account: {account.get('id')}")
+                        return account.get('id')
+
+            # Try getting firm balance which might reveal firm account
+            response = requests.get(
+                f"{self.base_url}/v1/firm/balance",
+                headers=self.headers,
+                verify=False,
+                timeout=15
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                # The response might contain firm account info
+                print(f"Firm balance response: {data}")
+                if 'account_id' in data:
+                    return data['account_id']
+
+            return None
+
+        except Exception as e:
+            print(f"Exception getting firm account: {e}")
+            return None
+
+    def _try_ach_transfer(self, account_id, amount):
+        """Try ACH transfer with sandbox completion"""
+        try:
             # Step 1: Get existing ACH relationships
             ach_relationship_id = self._get_or_create_ach_relationship(account_id)
             if not ach_relationship_id:
                 print("Failed to get/create ACH relationship")
                 return None
 
-            # Step 2: Create ACH transfer
+            # Step 2: Create ACH transfer with instant_amount for sandbox
             transfer_data = {
                 "transfer_type": "ach",
                 "relationship_id": ach_relationship_id,
                 "amount": str(amount),
+                "instant_amount": str(amount),
                 "direction": "INCOMING"
             }
 
@@ -484,24 +582,28 @@ class AlpacaService:
             if response.status_code in [200, 201]:
                 transfer = response.json()
                 transfer_id = transfer.get('id')
-                print(f"ACH transfer created: {transfer_id}, status: {transfer.get('status')}")
+                instant = transfer.get('instant_amount', '0')
+                print(f"ACH transfer created: {transfer_id}, status: {transfer.get('status')}, instant: {instant}")
 
-                # Step 3: For sandbox, complete the transfer instantly
+                # Check if instant amount was credited
+                if float(instant) > 0:
+                    print(f"Instant amount ${instant} should be available!")
+                    return transfer
+
+                # Step 3: For sandbox, try to complete the transfer
                 completed = self._complete_sandbox_transfer(transfer_id)
                 if completed:
-                    print(f"Sandbox transfer completed successfully!")
+                    print(f"Sandbox transfer completed!")
                     return completed
                 else:
-                    print(f"Transfer created but not completed - may need to wait")
+                    print(f"Transfer created but not instantly completed")
                     return transfer
             else:
                 print(f"ACH transfer failed: {response.status_code} - {response.text}")
                 return None
 
         except Exception as e:
-            print(f"Exception funding account: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Exception in ACH transfer: {e}")
             return None
 
     def _get_or_create_ach_relationship(self, account_id):
@@ -593,51 +695,57 @@ class AlpacaService:
 
     def _complete_sandbox_transfer(self, transfer_id):
         """Complete a transfer instantly in sandbox environment"""
+        # Try multiple endpoint variations that Alpaca sandbox might use
+        endpoints_to_try = [
+            f"{self.base_url}/v1/sandbox/simulate/transfers/{transfer_id}",
+            f"{self.base_url}/v1/sandbox/transfers/{transfer_id}",
+            f"{self.base_url}/v1/sandbox/transfers/{transfer_id}/complete",
+        ]
+
+        for endpoint in endpoints_to_try:
+            try:
+                print(f"Trying sandbox endpoint: {endpoint}")
+                response = requests.post(
+                    endpoint,
+                    headers=self.headers,
+                    json={"action": "complete", "status": "COMPLETE"},
+                    verify=False,
+                    timeout=15
+                )
+
+                if response.status_code in [200, 201, 204]:
+                    print(f"Sandbox transfer {transfer_id} completed via {endpoint}!")
+                    if response.text:
+                        try:
+                            return response.json()
+                        except:
+                            pass
+                    return {"id": transfer_id, "status": "COMPLETE"}
+                else:
+                    print(f"Endpoint {endpoint}: {response.status_code} - {response.text[:200] if response.text else 'no response'}")
+
+            except Exception as e:
+                print(f"Exception with endpoint {endpoint}: {e}")
+
+        # Try PATCH method as last resort
         try:
-            # Sandbox endpoint to complete/approve transfer
-            response = requests.post(
-                f"{self.base_url}/v1/sandbox/transfers/{transfer_id}/complete",
-                headers=self.headers,
-                verify=False,
-                timeout=15
-            )
-
-            if response.status_code in [200, 201, 204]:
-                print(f"Sandbox transfer {transfer_id} completed!")
-                if response.text:
-                    return response.json()
-                return {"id": transfer_id, "status": "COMPLETE"}
-            else:
-                print(f"Sandbox transfer complete failed: {response.status_code} - {response.text}")
-                # Try alternative endpoint
-                return self._complete_sandbox_transfer_alt(transfer_id)
-
-        except Exception as e:
-            print(f"Exception completing transfer: {e}")
-            return None
-
-    def _complete_sandbox_transfer_alt(self, transfer_id):
-        """Alternative sandbox transfer completion endpoint"""
-        try:
-            # Try POST without /complete
+            print(f"Trying PATCH on transfer...")
             response = requests.patch(
-                f"{self.base_url}/v1/sandbox/transfers/{transfer_id}",
+                f"{self.base_url}/v1/transfers/{transfer_id}",
                 headers=self.headers,
                 json={"status": "COMPLETE"},
                 verify=False,
                 timeout=15
             )
-
             if response.status_code in [200, 201, 204]:
-                print(f"Transfer {transfer_id} completed via alt endpoint")
+                print(f"Transfer completed via PATCH")
                 return {"id": transfer_id, "status": "COMPLETE"}
             else:
-                print(f"Alt transfer complete: {response.status_code} - {response.text}")
-                return None
-
+                print(f"PATCH failed: {response.status_code} - {response.text[:200] if response.text else 'no response'}")
         except Exception as e:
-            print(f"Exception in alt complete: {e}")
-            return None
+            print(f"PATCH exception: {e}")
+
+        return None
 
     def ensure_account_funded(self, account_id, min_amount=100):
         """
