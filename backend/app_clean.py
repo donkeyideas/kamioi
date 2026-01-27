@@ -3565,28 +3565,19 @@ def user_transactions():
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        # Try with ticker column first, fall back without it
-        try:
-            cursor.execute("""
-                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
-                FROM transactions
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-            """, (user_id,))
-            has_ticker = True
-        except Exception:
-            conn.rollback()
-            cursor.execute("""
-                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit
-                FROM transactions
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-            """, (user_id,))
-            has_ticker = False
+        # Query includes shares and price_per_share for completed trades
+        cursor.execute("""
+            SELECT id, amount, status, created_at, description, merchant, category, date,
+                   round_up, fee, total_debit, ticker, shares, price_per_share
+            FROM transactions
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+        """, (user_id,))
         transactions = cursor.fetchall()
         conn.close()
 
-        # Columns: 0=id, 1=amount, 2=status, 3=created_at, 4=description, 5=merchant, 6=category, 7=date, 8=round_up, 9=fee, 10=total_debit, 11=ticker (if exists)
+        # Columns: 0=id, 1=amount, 2=status, 3=created_at, 4=description, 5=merchant, 6=category,
+        #          7=date, 8=round_up, 9=fee, 10=total_debit, 11=ticker, 12=shares, 13=price_per_share
         transaction_list = []
         for txn in transactions:
             transaction_list.append({
@@ -3601,7 +3592,9 @@ def user_transactions():
                 'round_up': txn[8],
                 'fee': txn[9],
                 'total_debit': txn[10],
-                'ticker': txn[11] if has_ticker and len(txn) > 11 else None
+                'ticker': txn[11] if len(txn) > 11 else None,
+                'shares': float(txn[12]) if len(txn) > 12 and txn[12] else None,
+                'price_per_share': float(txn[13]) if len(txn) > 13 and txn[13] else None
             })
         
         return jsonify({
@@ -5188,9 +5181,10 @@ def family_transactions():
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
-            # PostgreSQL uses %s placeholders
+            # Query includes shares and price_per_share for completed trades
             cursor.execute("""
-                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker
+                SELECT id, amount, status, created_at, description, merchant, category, date,
+                       round_up, fee, total_debit, ticker, shares, price_per_share
                 FROM transactions
                 WHERE user_id = %s OR user_id = %s
                 ORDER BY created_at DESC
@@ -5200,7 +5194,8 @@ def family_transactions():
 
             transaction_list = []
             for txn in transactions:
-                # psycopg2 returns tuples: (id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit, ticker)
+                # Columns: 0=id, 1=amount, 2=status, 3=created_at, 4=description, 5=merchant, 6=category,
+                #          7=date, 8=round_up, 9=fee, 10=total_debit, 11=ticker, 12=shares, 13=price_per_share
                 transaction_list.append({
                     'id': txn[0],
                     'amount': txn[1],
@@ -5213,7 +5208,9 @@ def family_transactions():
                     'round_up': txn[8],
                     'fee': txn[9],
                     'total_debit': txn[10],
-                    'ticker': txn[11]
+                    'ticker': txn[11] if len(txn) > 11 else None,
+                    'shares': float(txn[12]) if len(txn) > 12 and txn[12] else None,
+                    'price_per_share': float(txn[13]) if len(txn) > 13 and txn[13] else None
                 })
             
             return jsonify({
@@ -5904,9 +5901,10 @@ def business_transactions():
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
-            # PostgreSQL uses %s placeholders
+            # Query includes shares and price_per_share for completed trades
             cursor.execute("""
-                SELECT id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit
+                SELECT id, amount, status, created_at, description, merchant, category, date,
+                       round_up, fee, total_debit, ticker, shares, price_per_share
                 FROM transactions
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -5916,7 +5914,8 @@ def business_transactions():
 
             transaction_list = []
             for txn in transactions:
-                # psycopg2 returns tuples: (id, amount, status, created_at, description, merchant, category, date, round_up, fee, total_debit)
+                # Columns: 0=id, 1=amount, 2=status, 3=created_at, 4=description, 5=merchant, 6=category,
+                #          7=date, 8=round_up, 9=fee, 10=total_debit, 11=ticker, 12=shares, 13=price_per_share
                 transaction_list.append({
                     'id': txn[0],
                     'amount': txn[1],
@@ -5928,7 +5927,10 @@ def business_transactions():
                     'date': str(txn[7]) if txn[7] else None,
                     'round_up': txn[8],
                     'fee': txn[9],
-                    'total_debit': txn[10]
+                    'total_debit': txn[10],
+                    'ticker': txn[11] if len(txn) > 11 else None,
+                    'shares': float(txn[12]) if len(txn) > 12 and txn[12] else None,
+                    'price_per_share': float(txn[13]) if len(txn) > 13 and txn[13] else None
                 })
 
             # Return empty transactions if none found (no hardcoded data)
