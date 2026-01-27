@@ -47,7 +47,7 @@ except ImportError as e:
 
 # Initialize Flask app
 print("=" * 60)
-print("KAMIOI BACKEND VERSION: 2026-01-27-v8")
+print("KAMIOI BACKEND VERSION: 2026-01-27-v9")
 print("=" * 60)
 app = Flask(__name__)
 CORS(
@@ -10212,6 +10212,77 @@ def admin_reject_mapping_llm():
             'status': 'rejected'
         })
         
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# URL-pattern approve/reject endpoints (frontend calls these)
+@app.route('/api/admin/mapping/<int:mapping_id>/approve', methods=['POST'])
+def admin_approve_mapping_by_url(mapping_id):
+    """Admin approves a mapping via URL pattern"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            UPDATE llm_mappings
+            SET status = 'approved',
+                admin_approved = 1
+            WHERE id = %s
+        ''', (mapping_id,))
+
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Mapping not found'}), 404
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Mapping approved successfully',
+            'mapping_id': mapping_id,
+            'status': 'approved'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/mapping/<int:mapping_id>/reject', methods=['POST'])
+def admin_reject_mapping_by_url(mapping_id):
+    """Admin rejects a mapping via URL pattern"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            UPDATE llm_mappings
+            SET status = 'rejected',
+                admin_approved = -1
+            WHERE id = %s
+        ''', (mapping_id,))
+
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Mapping not found'}), 404
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Mapping rejected successfully',
+            'mapping_id': mapping_id,
+            'status': 'rejected'
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
