@@ -166,65 +166,43 @@ const createFallbackLogo = (ticker) => {
 
 
 
-// Helper function to calculate shares
-const calculateShares = (amount, ticker) => {
-  // Mock stock prices for calculation
-  const stockPrices = {
-    'AAPL': 150.00,
-    'AMZN': 120.00,
-    'GOOGL': 100.00,
-    'MSFT': 300.00,
-    'TSLA': 200.00,
-    'META': 250.00,
-    'NFLX': 400.00,
-    'NVDA': 500.00,
-    'SBUX': 80.00,
-    'WMT': 150.00,
-    'SPOT': 200.00,
-    'UBER': 50.00,
-    'M': 20.00,
-    'CMG': 2000.00,
-    'DIS': 100.00,
-    'NKE': 120.00,
-    'ADBE': 400.00,
-    'CRM': 200.00,
-    'PYPL': 60.00,
-    'INTC': 30.00,
-    'AMD': 100.00,
-    'ORCL': 100.00,
-    'IBM': 150.00,
-    'CSCO': 50.00,
-    'JPM': 150.00,
-    'BAC': 30.00,
-    'WFC': 40.00,
-    'GS': 300.00,
-    'V': 200.00,
-    'MA': 300.00,
-    'JNJ': 150.00,
-    'PFE': 30.00,
-    'UNH': 500.00,
-    'HD': 300.00,
-    'LOW': 200.00,
-    'KO': 60.00,
-    'PEP': 150.00,
-    'MCD': 250.00,
-    'YUM': 100.00,
-    'TGT': 150.00,
-    'COST': 500.00,
-    'EL': 200.00,
-    'BURL': 30.00,
-    'FL': 40.00,
-    'CHTR': 300.00,
-    'DKS': 100.00
+// Stock price cache - populated from API
+let stockPriceCache = {}
+
+// Fetch real stock prices from API
+const fetchStockPrices = async (tickers) => {
+  if (!tickers || tickers.length === 0) return
+  try {
+    const uniqueTickers = [...new Set(tickers.filter(t => t && t !== 'UNKNOWN'))]
+    if (uniqueTickers.length === 0) return
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+    const response = await fetch(`${apiBaseUrl}/api/stock/prices?symbols=${uniqueTickers.join(',')}`)
+    if (response.ok) {
+      const data = await response.json()
+      if (data.success && data.prices) {
+        Object.entries(data.prices).forEach(([symbol, info]) => {
+          stockPriceCache[symbol] = info.price
+        })
+        console.log('Business: Updated stock prices:', stockPriceCache)
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching stock prices:', error)
   }
-  
-  const price = stockPrices[ticker] || 100.00
+}
+
+// Helper function to calculate shares using cached prices
+const calculateShares = (amount, ticker) => {
+  if (!ticker || !amount) return '0.000'
+
+  // Use cached price or minimal fallback
+  const price = stockPriceCache[ticker?.toUpperCase()] || 100.00
   const shares = amount / price
-  
+
   if (shares < 0.01) {
     return '<0.01'
   }
-  
+
   return shares.toFixed(3)
 }
 
@@ -296,7 +274,19 @@ const BusinessTransactions = ({ user }) => {
 
   // Safety check: ensure transactions is an array (define early so all functions can use it)
   const safeTransactions = Array.isArray(transactions) ? transactions : []
-  
+
+  // Fetch real stock prices for all tickers in transactions
+  useEffect(() => {
+    if (safeTransactions && safeTransactions.length > 0) {
+      const tickers = safeTransactions
+        .map(t => t.ticker)
+        .filter(t => t && t !== 'UNKNOWN' && t !== 'Unknown')
+      if (tickers.length > 0) {
+        fetchStockPrices(tickers)
+      }
+    }
+  }, [safeTransactions])
+
   // Load round-up settings for display purposes
   React.useEffect(() => {
     const loadRoundUpSettings = () => {
@@ -429,97 +419,59 @@ const BusinessTransactions = ({ user }) => {
   const { showSuccessModal, showErrorModal } = useModal()
   const { isLightMode } = useTheme()
 
-  // Helper function to check if transaction has a ticker (from DB or merchant lookup)
+  // Helper function to check if transaction has a ticker from database only
+  // REMOVED hardcoded merchantTickerMap - use database status directly
   const transactionHasTicker = (transaction) => {
-    const hasTicker = transaction.ticker || transaction.stock_symbol || transaction.ticker_symbol
-    
-    if (hasTicker) return true
-    
-    // Try merchant lookup
-    if (transaction.merchant) {
-      const merchantTickerMap = {
-        'NETFLIX': 'NFLX', 'APPLE': 'AAPL', 'APPLE STORE': 'AAPL', 'AMAZON': 'AMZN',
-        'STARBUCKS': 'SBUX', 'WALMART': 'WMT', 'TARGET': 'TGT', 'COSTCO': 'COST',
-        'GOOGLE': 'GOOGL', 'MICROSOFT': 'MSFT', 'META': 'META', 'FACEBOOK': 'META',
-        'TESLA': 'TSLA', 'NVIDIA': 'NVDA', 'SPOTIFY': 'SPOT', 'UBER': 'UBER',
-        'MACY': 'M', 'MACYS': 'M', 'CHIPOTLE': 'CMG', 'DISNEY': 'DIS', 'NIKE': 'NKE',
-        'ADOBE': 'ADBE', 'SALESFORCE': 'CRM', 'PAYPAL': 'PYPL', 'INTEL': 'INTC',
-        'AMD': 'AMD', 'ORACLE': 'ORCL', 'IBM': 'IBM', 'CISCO': 'CSCO',
-        'JPMORGAN': 'JPM', 'BANK OF AMERICA': 'BAC', 'WELLS FARGO': 'WFC',
-        'GOLDMAN SACHS': 'GS', 'VISA': 'V', 'MASTERCARD': 'MA',
-        'JOHNSON & JOHNSON': 'JNJ', 'PFIZER': 'PFE', 'UNITEDHEALTH': 'UNH',
-        'HOME DEPOT': 'HD', 'LOWES': 'LOW', 'COCA-COLA': 'KO', 'PEPSI': 'PEP',
-        'MCDONALDS': 'MCD', 'YUM': 'YUM', 'ESTEE LAUDER': 'EL', 'BURLINGTON': 'BURL',
-        'FOOT LOCKER': 'FL', 'CHARTER': 'CHTR', 'SPECTRUM': 'CHTR',
-        'DICKS': 'DKS', 'DICKS SPORTING GOODS': 'DKS'
-      }
-      const merchantUpper = transaction.merchant.toUpperCase().trim()
-      if (merchantTickerMap[merchantUpper]) return true
-      for (const [key] of Object.entries(merchantTickerMap)) {
-        if (merchantUpper.includes(key)) return true
-      }
-    }
-    return false
+    return !!(transaction.ticker || transaction.stock_symbol || transaction.ticker_symbol)
   }
 
   const getStatusText = (transaction) => {
-    // Use same logic as UserTransactions.jsx
-    // If transaction has a ticker (from DB or merchant lookup), treat as "mapped"
-    const hasTicker = transactionHasTicker(transaction)
-    
-    // If transaction has a ticker, treat as "mapped" (same as UserTransactions logic)
-    const rawStatus = transaction.status
-    const rawStatusLower = (rawStatus || '').toLowerCase().trim()
-    
-    // If has ticker and status is pending/staged, treat as mapped
-    if (hasTicker && (rawStatusLower === 'pending' || rawStatusLower === 'staged')) {
-      return 'Mapped'
-    }
-    
-    // Otherwise use the same logic as UserTransactions
-    switch (rawStatusLower) {
+    // Use database status directly - NO hardcoded overrides
+    const status = (transaction.status || '').toLowerCase().trim()
+    switch (status) {
       case 'completed': return 'Completed'
       case 'mapped': return 'Mapped'
-      case 'staged': return 'Mapped' // Treat staged as mapped
+      case 'staged': return 'Staged'
       case 'pending-mapping': return 'Pending Mapping'
       case 'pending-approval': return 'Pending Approval'
       case 'needs-recognition': return 'Needs Recognition'
       case 'pending': return 'Pending'
       case 'no-investment': return 'No Investment'
+      case 'rejected': return 'Rejected'
       default: return 'Unknown'
     }
   }
 
   const getStatusColor = (transaction) => {
-    // Use same logic as UserTransactions.jsx
-    // Get display status text first (which handles ticker logic)
-    const displayStatus = getStatusText(transaction).toLowerCase()
-    
-    switch (displayStatus) {
+    // Use database status directly
+    const status = (transaction.status || '').toLowerCase().trim()
+    switch (status) {
       case 'completed': return 'bg-green-500/20 text-green-400'
       case 'mapped': return 'bg-green-500/20 text-green-400'
+      case 'staged': return 'bg-blue-500/20 text-blue-400'
       case 'pending-mapping': return 'bg-orange-500/20 text-orange-400'
-      case 'pending approval': return 'bg-yellow-500/20 text-yellow-400'
-      case 'needs recognition': return 'bg-yellow-500/20 text-yellow-400'
+      case 'pending-approval': return 'bg-yellow-500/20 text-yellow-400'
+      case 'needs-recognition': return 'bg-yellow-500/20 text-yellow-400'
       case 'pending': return 'bg-gray-500/20 text-gray-400'
-      case 'no investment': return 'bg-gray-500/20 text-gray-400'
+      case 'no-investment': return 'bg-gray-500/20 text-gray-400'
+      case 'rejected': return 'bg-red-500/20 text-red-400'
       default: return 'bg-gray-500/20 text-gray-400'
     }
   }
 
   const getStatusIcon = (transaction) => {
-    // Use same logic as UserTransactions.jsx
-    // Get display status text first (which handles ticker logic)
-    const displayStatus = getStatusText(transaction).toLowerCase()
-    
-    switch (displayStatus) {
+    // Use database status directly
+    const status = (transaction.status || '').toLowerCase().trim()
+    switch (status) {
       case 'completed': return <CheckCircle className="w-4 h-4" />
       case 'mapped': return <CheckCircle className="w-4 h-4" />
+      case 'staged': return <Clock className="w-4 h-4" />
       case 'pending-mapping': return <Clock className="w-4 h-4" />
-      case 'pending approval': return <Clock className="w-4 h-4" />
-      case 'needs recognition': return <Eye className="w-4 h-4" />
+      case 'pending-approval': return <Clock className="w-4 h-4" />
+      case 'needs-recognition': return <Eye className="w-4 h-4" />
       case 'pending': return <Clock className="w-4 h-4" />
-      case 'no investment': return <AlertTriangle className="w-4 h-4" />
+      case 'no-investment': return <AlertTriangle className="w-4 h-4" />
+      case 'rejected': return <X className="w-4 h-4" />
       default: return <AlertTriangle className="w-4 h-4" />
     }
   }

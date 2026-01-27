@@ -25,6 +25,40 @@ const PortfolioOverview = () => {
   const endIndex = startIndex + itemsPerPage
   const currentHoldings = safeHoldings.slice(startIndex, endIndex)
 
+  // Calculate actual portfolio metrics from holdings data
+  const calculateMetrics = () => {
+    if (!safeHoldings || safeHoldings.length === 0) {
+      return { todayGain: 0, todayGainPct: 0, roi: 0, ytdReturn: 0, ytdReturnPct: 0 }
+    }
+
+    // Calculate totals from holdings
+    const totalValue = safeHoldings.reduce((sum, h) => sum + (parseFloat(h.value) || 0), 0)
+    const totalCost = safeHoldings.reduce((sum, h) => {
+      const shares = parseFloat(h.shares) || 0
+      const avgCost = parseFloat(h.avgCost) || parseFloat(h.avg_cost) || 0
+      return sum + (shares * avgCost)
+    }, 0)
+
+    // Calculate today's gain (using change percentage from each holding)
+    const todayGain = safeHoldings.reduce((sum, h) => {
+      const value = parseFloat(h.value) || 0
+      const changePct = parseFloat(h.change) || 0
+      return sum + (value * changePct / 100)
+    }, 0)
+    const todayGainPct = totalValue > 0 ? (todayGain / totalValue) * 100 : 0
+
+    // Calculate ROI
+    const roi = totalCost > 0 ? ((totalValue - totalCost) / totalCost * 100) : 0
+
+    // YTD return - use same as ROI for now (simplified)
+    const ytdReturn = totalValue - totalCost
+    const ytdReturnPct = roi
+
+    return { todayGain, todayGainPct, roi, ytdReturn, ytdReturnPct }
+  }
+
+  const metrics = calculateMetrics()
+
   const getSelectClass = () => {
     if (isLightMode) return 'bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
     return 'bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -69,53 +103,53 @@ const PortfolioOverview = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white/5 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <TrendingUp className={`w-8 h-8 ${portfolioValue > 0 ? 'text-green-400' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${portfolioValue > 0 ? 'text-green-400' : 'text-gray-400'}`}>
-                {portfolioValue > 0 ? '+0.00%' : '0.00%'}
+              <TrendingUp className={`w-8 h-8 ${metrics.todayGain >= 0 ? 'text-green-400' : 'text-red-400'}`} />
+              <span className={`text-sm font-medium ${metrics.todayGain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {metrics.todayGainPct >= 0 ? '+' : ''}{metrics.todayGainPct.toFixed(2)}%
               </span>
             </div>
             <p className="text-gray-400 text-sm mt-2">Today&apos;s Gain</p>
             <p className="text-white text-xl font-bold">
-              {portfolioValue > 0 ? '$0.00' : '$0.00'}
+              {metrics.todayGain >= 0 ? '+' : ''}${Math.abs(metrics.todayGain).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
-          
+
           <div className="bg-white/5 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <PieChart className={`w-8 h-8 ${holdings.length > 0 ? 'text-blue-400' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${holdings.length > 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                {holdings.length} assets
+              <PieChart className={`w-8 h-8 ${safeHoldings.length > 0 ? 'text-blue-400' : 'text-gray-400'}`} />
+              <span className={`text-sm font-medium ${safeHoldings.length > 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                {safeHoldings.length} assets
               </span>
             </div>
             <p className="text-gray-400 text-sm mt-2">Diversified</p>
             <p className="text-white text-xl font-bold">
-              {holdings.length > 0 ? '0.00% ROI' : 'No investments'}
+              {safeHoldings.length > 0 ? `${metrics.roi >= 0 ? '+' : ''}${metrics.roi.toFixed(2)}% ROI` : 'No investments'}
             </p>
           </div>
-          
+
           <div className="bg-white/5 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <DollarSign className={`w-8 h-8 ${portfolioValue > 0 ? 'text-yellow-400' : 'text-gray-400'}`} />
               <span className={`text-sm font-medium ${portfolioValue > 0 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                {portfolioValue > 0 ? '$0.00' : '$0.00'}
+                ${(portfolioValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-gray-400 text-sm mt-2">Cash Available</p>
+            <p className="text-gray-400 text-sm mt-2">Total Invested</p>
             <p className="text-white text-xl font-bold">
-              {portfolioValue > 0 ? 'Invested' : 'Start investing'}
+              {portfolioValue > 0 ? 'Active' : 'Start investing'}
             </p>
           </div>
-          
+
           <div className="bg-white/5 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <ArrowUpRight className={`w-8 h-8 ${portfolioValue > 0 ? 'text-purple-400' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${portfolioValue > 0 ? 'text-purple-400' : 'text-gray-400'}`}>
-                {portfolioValue > 0 ? '+0.00%' : '0.00%'}
+              <ArrowUpRight className={`w-8 h-8 ${metrics.ytdReturn >= 0 ? 'text-purple-400' : 'text-red-400'}`} />
+              <span className={`text-sm font-medium ${metrics.ytdReturn >= 0 ? 'text-purple-400' : 'text-red-400'}`}>
+                {metrics.ytdReturnPct >= 0 ? '+' : ''}{metrics.ytdReturnPct.toFixed(2)}%
               </span>
             </div>
-            <p className="text-gray-400 text-sm mt-2">YTD Return</p>
+            <p className="text-gray-400 text-sm mt-2">Total Return</p>
             <p className="text-white text-xl font-bold">
-              {portfolioValue > 0 ? '$0.00' : '$0.00'}
+              {metrics.ytdReturn >= 0 ? '+' : ''}${Math.abs(metrics.ytdReturn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
         </div>

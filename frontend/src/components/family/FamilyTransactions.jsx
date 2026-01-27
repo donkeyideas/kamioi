@@ -79,30 +79,48 @@ const createCompanyLogo = (ticker) => {
 
 
 
-// Helper function to calculate shares
+// Stock price cache - populated from API
+let familyStockPriceCache = {}
+
+// Fetch real stock prices from API
+const fetchFamilyStockPrices = async (tickers) => {
+  if (!tickers || tickers.length === 0) return
+  try {
+    const uniqueTickers = [...new Set(tickers.filter(t => t && t !== 'UNKNOWN'))]
+    if (uniqueTickers.length === 0) return
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+    const response = await fetch(`${apiBaseUrl}/api/stock/prices?symbols=${uniqueTickers.join(',')}`)
+    if (response.ok) {
+      const data = await response.json()
+      if (data.success && data.prices) {
+        Object.entries(data.prices).forEach(([symbol, info]) => {
+          familyStockPriceCache[symbol] = info.price
+        })
+        console.log('Family: Updated stock prices:', familyStockPriceCache)
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching stock prices:', error)
+  }
+}
+
+// Helper function to calculate shares using cached prices
 const calculateShares = (amount, ticker, stockPrice = null) => {
   if (!ticker || !amount) {
     return null
   }
-  
-  // If stock price not provided, use estimated price based on common tickers
-  // This allows showing potential shares even when price isn't fetched yet
+
+  // Use provided price, cached price, or minimal fallback
   if (!stockPrice) {
-    const estimatedPrices = {
-      'AAPL': 180, 'MSFT': 380, 'GOOGL': 140, 'AMZN': 150, 'META': 500,
-      'TSLA': 250, 'NVDA': 450, 'NFLX': 450, 'DIS': 100, 'WMT': 160,
-      'TGT': 150, 'SBUX': 100, 'MCD': 280, 'CVS': 80, 'SHEL': 60
-    }
-    
-    stockPrice = estimatedPrices[ticker.toUpperCase()] || 100 // Default to $100 if unknown
+    stockPrice = familyStockPriceCache[ticker?.toUpperCase()] || 100
   }
-  
+
   const shares = amount / stockPrice
-  
+
   if (shares < 0.01) {
     return '<0.01'
   }
-  
+
   return shares.toFixed(3)
 }
 
@@ -137,6 +155,18 @@ const FamilyTransactions = ({ user }) => {
   
   // Safety check: ensure transactions is an array (declare after hook call)
   const safeTransactions = Array.isArray(transactions) ? transactions : []
+
+  // Fetch real stock prices for all tickers in transactions
+  useEffect(() => {
+    if (safeTransactions && safeTransactions.length > 0) {
+      const tickers = safeTransactions
+        .map(t => t.ticker)
+        .filter(t => t && t !== 'UNKNOWN' && t !== 'Unknown')
+      if (tickers.length > 0) {
+        fetchFamilyStockPrices(tickers)
+      }
+    }
+  }, [safeTransactions])
 
   // Status synchronization - listen for status updates from other dashboards
   React.useEffect(() => {
@@ -966,19 +996,19 @@ const FamilyTransactions = ({ user }) => {
                   <td className="py-3 px-4 text-right text-white">{formatCurrency(transaction.amount || transaction.purchase, '$', 2)}</td>
                   <td className="py-3 px-4 text-right text-green-400">{formatCurrency(getDisplayRoundUp(transaction), '$', 2)}</td>
                   <td className="py-3 px-4 text-center">
-                    {transaction.status === 'mapped' && transaction.ticker ? (
+                    {(transaction.status === 'mapped' || transaction.status === 'completed') && transaction.ticker ? (
                       <div className="flex flex-col items-center justify-center space-y-1">
-                        <CompanyLogo 
-                          symbol={transaction.ticker} 
+                        <CompanyLogo
+                          symbol={transaction.ticker}
                           name={getCompanyName(transaction.ticker, transaction.company_name)}
-                          size="w-6 h-6" 
-                          clickable={true} 
+                          size="w-6 h-6"
+                          clickable={true}
                         />
                         <div className="text-green-400 font-medium text-xs">
                           {calculateShares(getDisplayRoundUp(transaction), transaction.ticker, transaction.stock_price) || '-'} shares
                         </div>
                       </div>
-                    ) : transaction.ticker && transaction.status !== 'mapped' ? (
+                    ) : transaction.ticker && transaction.status !== 'mapped' && transaction.status !== 'completed' ? (
                       <div className="flex flex-col items-center justify-center space-y-1">
                         <div className="text-gray-400 text-xs">
                           Potential: {calculateShares(getDisplayRoundUp(transaction), transaction.ticker) || '-'} shares
