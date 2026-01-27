@@ -5494,15 +5494,15 @@ def family_ai_insights():
         # Get family's mapping history - PostgreSQL uses %s placeholders
         cursor.execute('''
             SELECT id, merchant_name, ticker_symbol, category, status,
-                   admin_approved, confidence, notes, created_at, processed_at
+                   admin_approved, confidence, notes, created_at, transaction_id
             FROM llm_mappings
             WHERE user_id = %s AND dashboard_type = 'family'
             ORDER BY created_at DESC
         ''', (family_id,))
-        
+
         mappings = cursor.fetchall()
         conn.close()
-        
+
         # Format mapping data
         mapping_data = []
         for mapping in mappings:
@@ -5516,9 +5516,7 @@ def family_ai_insights():
                 'confidence': mapping[6],
                 'notes': mapping[7],
                 'submitted_at': mapping[8],
-                'processed_at': mapping[9],
-                'transaction_id': mapping[10],
-                'mapping_id': mapping[11]
+                'transaction_id': mapping[9]
             })
         
         # Calculate stats
@@ -6304,15 +6302,15 @@ def business_ai_insights():
         # Get business's mapping history - PostgreSQL uses %s placeholders
         cursor.execute('''
             SELECT id, merchant_name, ticker_symbol, category, status,
-                   admin_approved, confidence, notes, created_at, processed_at
+                   admin_approved, confidence, notes, created_at, transaction_id
             FROM llm_mappings
             WHERE user_id = %s AND dashboard_type = 'business'
             ORDER BY created_at DESC
         ''', (business_id,))
-        
+
         mappings = cursor.fetchall()
         conn.close()
-        
+
         # Format mapping data
         mapping_data = []
         for mapping in mappings:
@@ -6326,9 +6324,7 @@ def business_ai_insights():
                 'confidence': mapping[6],
                 'notes': mapping[7],
                 'submitted_at': mapping[8],
-                'processed_at': mapping[9],
-                'transaction_id': mapping[10],
-                'mapping_id': mapping[11]
+                'transaction_id': mapping[9]
             })
         
         # Calculate stats
