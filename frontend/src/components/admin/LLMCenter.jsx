@@ -897,8 +897,8 @@ const LLMCenter = () => {
           type: 'success' 
         })
         
-        // Refresh data to show updated status
-        await fetchLLMData()
+        // Force refresh data to show updated status
+        await fetchLLMData(true)
       } else {
         setNotification({ show: true, message: result.error || 'Failed to approve mapping', type: 'error' })
       }
@@ -910,31 +910,31 @@ const LLMCenter = () => {
 
   const handleReject = async (mappingId) => {
     try {
-      setNotification({ show: true, message: 'User rejecting mapping...', type: 'info' })
-      
+      setNotification({ show: true, message: 'Rejecting mapping...', type: 'info' })
+
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/mapping/${mappingId}/reject`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3' || 'admin_token_3'}`,
+          'Authorization': `Bearer ${localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          admin_id: 'user_rejection',
-          notes: 'User rejected mapping',
-          admin_approved: -1  // Set user rejection flag
+          admin_id: 'admin_rejection',
+          notes: 'Admin rejected mapping',
+          admin_approved: -1
         })
       })
-      
+
       const result = await response.json()
       if (result.success) {
-        setNotification({ 
-          show: true, 
-          message: `Successfully user-rejected mapping!`, 
-          type: 'success' 
+        setNotification({
+          show: true,
+          message: `Mapping rejected successfully`,
+          type: 'success'
         })
-        
-        // Refresh data to show updated status
-        await fetchLLMData()
+
+        // Force refresh data to show updated status
+        await fetchLLMData(true)
       } else {
         setNotification({ show: true, message: result.error || 'Failed to reject mapping', type: 'error' })
       }

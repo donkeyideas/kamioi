@@ -47,7 +47,7 @@ except ImportError as e:
 
 # Initialize Flask app
 print("=" * 60)
-print("KAMIOI BACKEND VERSION: 2026-01-27-v11")
+print("KAMIOI BACKEND VERSION: 2026-01-27-v12")
 print("=" * 60)
 app = Flask(__name__)
 CORS(
@@ -904,6 +904,20 @@ def initialize_database():
 
         try:
             cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS admin_id VARCHAR(100)")
+        except Exception:
+            pass
+
+        # Fix existing mappings: any with status='pending' should have admin_approved=0
+        # (The old DEFAULT 1 caused pending mappings to show as approved)
+        try:
+            cursor.execute("""
+                UPDATE llm_mappings SET admin_approved = 0
+                WHERE status = 'pending' AND (admin_approved = 1 OR admin_approved IS NULL)
+                AND user_id IS NOT NULL
+            """)
+            fixed = cursor.rowcount
+            if fixed > 0:
+                print(f"Fixed {fixed} pending mappings with wrong admin_approved value")
         except Exception:
             pass
 
@@ -6596,21 +6610,24 @@ def admin_approve_mapping(mapping_id):
                 notes = CASE WHEN notes IS NULL OR notes = '' THEN %s ELSE notes || ' | ' || %s END
             WHERE id = %s
         ''', (admin_notes, admin_notes, mapping_id))
-        
-        # Update the original transaction
-        # PostgreSQL uses %s placeholders
-        cursor.execute('''
-            UPDATE transactions
-            SET status = 'mapped', ticker = %s, category = %s
-            WHERE id = %s
-        ''', (ticker_symbol, category, transaction_id))
+
+        # Update the original transaction to 'mapped' so it appears in Investment Processing
+        if transaction_id:
+            cursor.execute('''
+                UPDATE transactions
+                SET status = 'mapped', ticker = %s, category = %s
+                WHERE id = %s
+            ''', (ticker_symbol, category, transaction_id))
 
         conn.commit()
         conn.close()
 
         return jsonify({
             'success': True,
-            'message': 'Mapping approved successfully'
+            'message': 'Mapping approved successfully',
+            'mapping_id': mapping_id,
+            'status': 'approved',
+            'transaction_updated': bool(transaction_id)
         })
 
     except Exception as e:
@@ -6653,19 +6670,22 @@ def admin_reject_mapping(mapping_id):
             WHERE id = %s
         ''', (admin_notes, admin_notes, mapping_id))
 
-        # Update the original transaction - PostgreSQL uses %s
-        cursor.execute('''
-            UPDATE transactions
-            SET status = 'rejected'
-            WHERE id = %s
-        ''', (transaction_id,))
-        
+        # Update the original transaction back to pending so user can re-submit
+        if transaction_id:
+            cursor.execute('''
+                UPDATE transactions
+                SET status = 'pending'
+                WHERE id = %s
+            ''', (transaction_id,))
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({
             'success': True,
-            'message': 'Mapping rejected successfully'
+            'message': 'Mapping rejected successfully',
+            'mapping_id': mapping_id,
+            'status': 'rejected'
         })
         
     except Exception as e:
@@ -10065,12 +10085,12 @@ def user_submit_mapping():
 
         dashboard_type = data.get('dashboard_type', 'individual')
 
-        # Insert user-submitted mapping as pending
+        # Insert user-submitted mapping as pending (admin_approved=0 means pending review)
         cursor.execute('''
             INSERT INTO llm_mappings (
                 merchant_name, ticker_symbol, category, confidence, status,
-                user_id, transaction_id, company_name, dashboard_type
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                user_id, transaction_id, company_name, dashboard_type, admin_approved
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         ''', (
             data['merchant_name'],
@@ -10081,7 +10101,8 @@ def user_submit_mapping():
             user_id,
             data['transaction_id'],
             data.get('company_name', ''),
-            dashboard_type
+            dashboard_type,
+            0
         ))
 
         result = cursor.fetchone()
