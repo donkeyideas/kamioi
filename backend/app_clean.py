@@ -46,6 +46,9 @@ except ImportError as e:
     market_monitor = DummyMarketMonitor()
 
 # Initialize Flask app
+print("=" * 60)
+print("KAMIOI BACKEND VERSION: 2026-01-27-v4")
+print("=" * 60)
 app = Flask(__name__)
 CORS(
     app,
