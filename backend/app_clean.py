@@ -47,7 +47,7 @@ except ImportError as e:
 
 # Initialize Flask app
 print("=" * 60)
-print("KAMIOI BACKEND VERSION: 2026-01-27-v10")
+print("KAMIOI BACKEND VERSION: 2026-01-27-v11")
 print("=" * 60)
 app = Flask(__name__)
 CORS(
@@ -894,6 +894,16 @@ def initialize_database():
 
         try:
             cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS ai_processing_duration REAL")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS admin_id VARCHAR(100)")
         except Exception:
             pass
 
