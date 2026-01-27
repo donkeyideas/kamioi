@@ -47,7 +47,7 @@ except ImportError as e:
 
 # Initialize Flask app
 print("=" * 60)
-print("KAMIOI BACKEND VERSION: 2026-01-27-v9")
+print("KAMIOI BACKEND VERSION: 2026-01-27-v10")
 print("=" * 60)
 app = Flask(__name__)
 CORS(
@@ -6464,7 +6464,7 @@ def process_pending_mappings():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if token not in ['kamioi_admin_token', 'admin_token_3']:
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         conn = get_db_connection()
@@ -6558,15 +6558,15 @@ def admin_approve_mapping(mapping_id):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if token not in ['kamioi_admin_token', 'admin_token_3']:
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
-        
-        data = request.get_json()
+
+        data = request.get_json() or {}
         admin_notes = data.get('notes', '')
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Get mapping details - PostgreSQL uses %s
         cursor.execute('''
             SELECT user_id, transaction_id, ticker_symbol, category
@@ -6615,10 +6615,10 @@ def admin_reject_mapping(mapping_id):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
         token = auth_header.split(' ')[1]
-        if token not in ['kamioi_admin_token', 'admin_token_3']:
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
 
-        data = request.get_json()
+        data = request.get_json() or {}
         admin_notes = data.get('notes', '')
 
         conn = get_db_connection()
@@ -6670,9 +6670,9 @@ def notify_mapping_outcome():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if token not in ['kamioi_admin_token', 'admin_token_3']:
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
-        
+
         data = request.get_json()
         user_id = data.get('user_id')
         mapping_id = data.get('mapping_id')
@@ -10212,77 +10212,6 @@ def admin_reject_mapping_llm():
             'status': 'rejected'
         })
         
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# URL-pattern approve/reject endpoints (frontend calls these)
-@app.route('/api/admin/mapping/<int:mapping_id>/approve', methods=['POST'])
-def admin_approve_mapping_by_url(mapping_id):
-    """Admin approves a mapping via URL pattern"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'error': 'No token provided'}), 401
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            UPDATE llm_mappings
-            SET status = 'approved',
-                admin_approved = 1
-            WHERE id = %s
-        ''', (mapping_id,))
-
-        if cursor.rowcount == 0:
-            conn.close()
-            return jsonify({'success': False, 'error': 'Mapping not found'}), 404
-
-        conn.commit()
-        conn.close()
-
-        return jsonify({
-            'success': True,
-            'message': 'Mapping approved successfully',
-            'mapping_id': mapping_id,
-            'status': 'approved'
-        })
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/admin/mapping/<int:mapping_id>/reject', methods=['POST'])
-def admin_reject_mapping_by_url(mapping_id):
-    """Admin rejects a mapping via URL pattern"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'error': 'No token provided'}), 401
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            UPDATE llm_mappings
-            SET status = 'rejected',
-                admin_approved = -1
-            WHERE id = %s
-        ''', (mapping_id,))
-
-        if cursor.rowcount == 0:
-            conn.close()
-            return jsonify({'success': False, 'error': 'Mapping not found'}), 404
-
-        conn.commit()
-        conn.close()
-
-        return jsonify({
-            'success': True,
-            'message': 'Mapping rejected successfully',
-            'mapping_id': mapping_id,
-            'status': 'rejected'
-        })
-
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -15772,7 +15701,7 @@ def process_mapping_with_ai():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if token != 'kamioi_admin_token':
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Invalid admin token'}), 401
         
         data = request.get_json()
@@ -15878,7 +15807,7 @@ def process_ai_queue():
         token = auth_header.split(' ')[1]
         print(f"AI Process Queue - Extracted Token: {token}")
         print(f"AI Process Queue - Expected Token: kamioi_admin_token or admin_token_3")
-        if token not in ['kamioi_admin_token', 'admin_token_3']:
+        if not token.startswith('admin_token_'):
             print("AI Process Queue - Invalid admin token")
             return jsonify({'success': False, 'error': 'Invalid admin token'}), 401
         
@@ -16143,7 +16072,7 @@ def get_ai_processing_analytics():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if token not in ['kamioi_admin_token', 'admin_token_3']:
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Invalid admin token'}), 401
         
         conn = get_db_connection()
