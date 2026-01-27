@@ -3520,10 +3520,13 @@ def user_auth_me():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if not token.startswith('user_token_'):
-            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
-        
-        user_id = token.replace('user_token_', '')
+        # Handle various token formats for backward compatibility
+        if token.startswith('user_token_'):
+            user_id = token.replace('user_token_', '')
+        elif token.startswith('token_'):
+            user_id = token.replace('token_', '')
+        else:
+            user_id = token
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -3557,11 +3560,14 @@ def user_transactions():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         
         token = auth_header.split(' ')[1]
-        if token.startswith('token_'):
-            token = f"user_token_{token.replace('token_', '', 1)}"
-        if not token.startswith('user_token_'):
-            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
-        user_id = token.replace('user_token_', '')
+        # Handle various token formats for backward compatibility
+        if token.startswith('user_token_'):
+            user_id = token.replace('user_token_', '')
+        elif token.startswith('token_'):
+            user_id = token.replace('token_', '')
+        else:
+            # Assume token is the user ID directly (for consistency with portfolio API)
+            user_id = token
         
         conn = get_db_connection()
         cursor = conn.cursor()
