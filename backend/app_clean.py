@@ -10958,17 +10958,59 @@ def admin_process_mapped_investments():
                     # Trade succeeded! Update transaction and portfolio
                     alpaca_order_id = order_result.get('id')
 
-                    # Mark transaction as completed
+                    # Get actual fill data from order result
+                    # For market orders, we try to get filled_qty and filled_avg_price
+                    filled_qty = float(order_result.get('filled_qty') or 0)
+                    filled_avg_price = float(order_result.get('filled_avg_price') or 0)
+
+                    # If not filled yet (order still processing), estimate from notional
+                    if filled_qty == 0 or filled_avg_price == 0:
+                        # Get current stock price to calculate shares
+                        stock_price = alpaca.get_stock_price(ticker) if hasattr(alpaca, 'get_stock_price') else 0
+
+                        if stock_price and stock_price > 0:
+                            # Calculate fractional shares: dollar_amount / stock_price
+                            filled_qty = round_up_amount / stock_price
+                            filled_avg_price = stock_price
+                        else:
+                            # Fallback: query market data or use a reasonable estimate
+                            # Try to get the price from Alpaca
+                            try:
+                                import requests as req
+                                price_resp = req.get(
+                                    f"https://data.alpaca.markets/v2/stocks/{ticker}/quotes/latest",
+                                    headers=alpaca.headers,
+                                    timeout=10
+                                )
+                                if price_resp.status_code == 200:
+                                    price_data = price_resp.json()
+                                    if 'quote' in price_data:
+                                        ask_price = float(price_data['quote'].get('ap', 0))
+                                        bid_price = float(price_data['quote'].get('bp', 0))
+                                        stock_price = (ask_price + bid_price) / 2 if ask_price and bid_price else ask_price or bid_price
+                                        if stock_price > 0:
+                                            filled_qty = round_up_amount / stock_price
+                                            filled_avg_price = stock_price
+                            except Exception as price_error:
+                                print(f"Error fetching price for {ticker}: {price_error}")
+
+                        # Ultimate fallback - use notional and a default estimate
+                        if filled_qty == 0 or filled_avg_price == 0:
+                            # Just store the notional as a placeholder - will need manual correction
+                            filled_qty = round_up_amount / 100  # Rough estimate
+                            filled_avg_price = 100  # Placeholder
+
+                    print(f"Portfolio update for {ticker}: shares={filled_qty}, avg_price={filled_avg_price}, dollar_amount={round_up_amount}")
+
+                    shares_bought = filled_qty
+                    avg_price = filled_avg_price
+
+                    # Mark transaction as completed with actual shares info
                     cursor.execute("""
                         UPDATE transactions
-                        SET status = 'completed', alpaca_order_id = %s
+                        SET status = 'completed', alpaca_order_id = %s, shares = %s, price_per_share = %s
                         WHERE id = %s
-                    """, (alpaca_order_id, txn_id))
-
-                    # Update or insert portfolio holding
-                    # Calculate shares bought (approximate - Alpaca returns this in order)
-                    shares_bought = round_up_amount  # For dollar-based orders
-                    avg_price = 1.0  # Will be updated when order fills
+                    """, (alpaca_order_id, shares_bought, avg_price, txn_id))
 
                     # Check if user already has this ticker in portfolio
                     cursor.execute("""
@@ -11149,16 +11191,32 @@ def admin_process_single_investment():
         if order_result and order_result.get('id'):
             alpaca_order_id = order_result.get('id')
 
-            # Mark transaction as completed
+            # Get actual fill data from order result
+            filled_qty = float(order_result.get('filled_qty') or 0)
+            filled_avg_price = float(order_result.get('filled_avg_price') or 0)
+
+            # If not filled yet, calculate from stock price
+            if filled_qty == 0 or filled_avg_price == 0:
+                stock_price = alpaca.get_stock_price(ticker)
+                if stock_price and stock_price > 0:
+                    filled_qty = round_up_amount / stock_price
+                    filled_avg_price = stock_price
+                else:
+                    # Fallback estimate
+                    filled_qty = round_up_amount / 100
+                    filled_avg_price = 100
+
+            print(f"Single trade portfolio update for {ticker}: shares={filled_qty}, avg_price={filled_avg_price}")
+
+            shares_bought = filled_qty
+            avg_price = filled_avg_price
+
+            # Mark transaction as completed with actual shares info
             cursor.execute("""
                 UPDATE transactions
-                SET status = 'completed', alpaca_order_id = %s
+                SET status = 'completed', alpaca_order_id = %s, shares = %s, price_per_share = %s
                 WHERE id = %s
-            """, (alpaca_order_id, txn_id))
-
-            # Update or insert portfolio holding
-            shares_bought = round_up_amount
-            avg_price = 1.0
+            """, (alpaca_order_id, shares_bought, avg_price, txn_id))
 
             cursor.execute("""
                 SELECT id, shares, average_price FROM portfolios

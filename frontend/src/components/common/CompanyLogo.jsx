@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 const CompanyLogo = ({ symbol, name, size = 'w-8 h-8', clickable = false }) => {
-  const [imageError, setImageError] = useState(false)
-  const [imageLoaded, setImageLoaded] = useState(false)
+  const [currentLogoIndex, setCurrentLogoIndex] = useState(0)
+  const [allFailed, setAllFailed] = useState(false)
 
-  // Get company website URL
+  // Get company website URL for the ticker
   const getCompanyWebsite = (symbol) => {
     const websiteMap = {
       'AAPL': 'apple.com',
@@ -135,75 +135,101 @@ const CompanyLogo = ({ symbol, name, size = 'w-8 h-8', clickable = false }) => {
       'SNE': 'sony.com',
       'SONY': 'sony.com'
     }
-
     return websiteMap[symbol?.toUpperCase()] || null
   }
 
-  // Get logo URL using Clearbit
-  const getLogoUrl = (symbol) => {
-    if (!symbol) return null
+  const domain = getCompanyWebsite(symbol || '')
 
-    const domain = getCompanyWebsite(symbol)
-    if (!domain) return null
+  // Multiple logo sources to try in order
+  const getLogoUrls = () => {
+    if (!domain) return []
 
-    return `https://logo.clearbit.com/${domain}`
+    return [
+      // 1. Logo.dev - usually works well
+      `https://img.logo.dev/${domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ`,
+      // 2. Clearbit - good quality but may have CORS
+      `https://logo.clearbit.com/${domain}`,
+      // 3. Google Favicon - always works but lower quality
+      `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+      // 4. DuckDuckGo icons
+      `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+    ]
   }
 
-  // Get logo and website URLs
-  const logoUrl = getLogoUrl(symbol || '')
-  const websiteUrl = getCompanyWebsite(symbol || '')
+  const logoUrls = getLogoUrls()
+
+  // Reset state when symbol changes
+  useEffect(() => {
+    setCurrentLogoIndex(0)
+    setAllFailed(false)
+  }, [symbol])
 
   const handleClick = () => {
-    if (clickable && websiteUrl) {
-      window.open(`https://www.${websiteUrl}`, '_blank', 'noopener,noreferrer')
+    if (clickable && domain) {
+      window.open(`https://www.${domain}`, '_blank', 'noopener,noreferrer')
     }
   }
 
-  const handleImageLoad = () => {
-    setImageLoaded(true)
-    setImageError(false)
-  }
-
   const handleImageError = () => {
-    setImageError(true)
-    setImageLoaded(false)
+    // Try next logo source
+    if (currentLogoIndex < logoUrls.length - 1) {
+      setCurrentLogoIndex(prev => prev + 1)
+    } else {
+      // All sources failed
+      setAllFailed(true)
+    }
   }
 
-  // Render fallback letter icon
-  const renderFallback = () => (
-    <div
-      className={`${size} bg-gradient-to-br from-blue-500/30 to-purple-500/30 rounded-lg flex items-center justify-center ${clickable ? 'cursor-pointer hover:from-blue-500/40 hover:to-purple-500/40 transition-colors' : ''}`}
-      onClick={handleClick}
-      title={clickable && websiteUrl ? `Visit ${name} website` : name || symbol}
-    >
-      <span className="text-white font-bold text-sm">{symbol ? symbol.charAt(0).toUpperCase() : '?'}</span>
-    </div>
-  )
+  // Render fallback letter icon with colored background based on symbol
+  const renderFallback = () => {
+    // Generate consistent color based on symbol
+    const colors = [
+      'from-blue-500 to-blue-600',
+      'from-green-500 to-green-600',
+      'from-purple-500 to-purple-600',
+      'from-pink-500 to-pink-600',
+      'from-indigo-500 to-indigo-600',
+      'from-teal-500 to-teal-600',
+      'from-orange-500 to-orange-600',
+      'from-red-500 to-red-600',
+    ]
+    const colorIndex = symbol ? symbol.charCodeAt(0) % colors.length : 0
+    const bgColor = colors[colorIndex]
 
-  // If no logo URL available, show fallback immediately
-  if (!logoUrl || imageError) {
+    return (
+      <div
+        className={`${size} bg-gradient-to-br ${bgColor} rounded-lg flex items-center justify-center ${clickable ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+        onClick={handleClick}
+        title={name || symbol}
+      >
+        <span className="text-white font-bold text-sm drop-shadow-sm">
+          {symbol ? symbol.charAt(0).toUpperCase() : '?'}
+        </span>
+      </div>
+    )
+  }
+
+  // If no domain mapping or all sources failed, show fallback
+  if (!domain || allFailed || logoUrls.length === 0) {
     return renderFallback()
   }
 
+  const currentUrl = logoUrls[currentLogoIndex]
+
   return (
     <div
-      className={`${size} rounded-lg overflow-hidden bg-white p-0.5 ${clickable && websiteUrl ? 'cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all' : ''}`}
+      className={`${size} rounded-lg overflow-hidden bg-white flex items-center justify-center ${clickable ? 'cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all' : ''}`}
       onClick={handleClick}
-      title={clickable && websiteUrl ? `Visit ${name} website` : name || symbol}
+      title={name || symbol}
     >
-      {/* Show loading placeholder until image loads */}
-      {!imageLoaded && !imageError && (
-        <div className={`${size} bg-gray-200 rounded animate-pulse flex items-center justify-center`}>
-          <span className="text-gray-400 font-bold text-xs">{symbol?.charAt(0)}</span>
-        </div>
-      )}
       <img
-        src={logoUrl}
+        key={currentUrl} // Force re-render on URL change
+        src={currentUrl}
         alt={`${name || symbol} logo`}
-        className={`w-full h-full object-contain ${imageLoaded ? 'block' : 'hidden'}`}
-        onLoad={handleImageLoad}
+        className="w-full h-full object-contain p-0.5"
         onError={handleImageError}
-        crossOrigin="anonymous"
+        loading="lazy"
+        referrerPolicy="no-referrer"
       />
     </div>
   )
