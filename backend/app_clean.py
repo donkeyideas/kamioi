@@ -47,7 +47,7 @@ except ImportError as e:
 
 # Initialize Flask app
 print("=" * 60)
-print("KAMIOI BACKEND VERSION: 2026-01-27-v4")
+print("KAMIOI BACKEND VERSION: 2026-01-27-v5")
 print("=" * 60)
 app = Flask(__name__)
 CORS(
@@ -824,6 +824,50 @@ def initialize_database():
             cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS alpaca_order_id VARCHAR(100)")
         except Exception:
             pass  # Column already exists
+
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS shares REAL DEFAULT 0")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS price_per_share REAL DEFAULT 0")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS stock_price REAL DEFAULT 0")
+        except Exception:
+            pass
+
+        # Add missing columns to llm_mappings table
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS transaction_id INTEGER")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS dashboard_type VARCHAR(50) DEFAULT 'individual'")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS ai_processed BOOLEAN DEFAULT FALSE")
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE llm_mappings ADD COLUMN IF NOT EXISTS ticker VARCHAR(20)")
+        except Exception:
+            pass
+
+        conn.commit()
+        print("All migration columns added successfully")
 
         # Create portfolios table if it doesn't exist (PostgreSQL syntax)
         cursor.execute("""
@@ -9970,10 +10014,9 @@ def user_submit_mapping():
         dashboard_type = data.get('dashboard_type', 'individual')
 
         # Insert user-submitted mapping as pending
-        # Table columns: merchant_name, ticker, category, confidence, status, user_id, transaction_id, company_name, dashboard_type
         cursor.execute('''
             INSERT INTO llm_mappings (
-                merchant_name, ticker, category, confidence, status,
+                merchant_name, ticker_symbol, category, confidence, status,
                 user_id, transaction_id, company_name, dashboard_type
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
