@@ -47,7 +47,7 @@ except ImportError as e:
 
 # Initialize Flask app
 print("=" * 60)
-print("KAMIOI BACKEND VERSION: 2026-01-27-v13")
+print("KAMIOI BACKEND VERSION: 2026-01-28-v14")
 print("=" * 60)
 app = Flask(__name__)
 CORS(
@@ -1098,6 +1098,37 @@ def initialize_database():
                 skip_indexes BOOLEAN DEFAULT FALSE,
                 message TEXT,
                 job_data TEXT DEFAULT '{}'
+            )
+        """)
+
+        # Create trading_limits table for Alpaca trading limits (daily/weekly/monthly)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS trading_limits (
+                id SERIAL PRIMARY KEY,
+                limit_type VARCHAR(20) NOT NULL,
+                max_amount DECIMAL(15, 2) NOT NULL,
+                current_amount DECIMAL(15, 2) DEFAULT 0,
+                max_orders INTEGER DEFAULT NULL,
+                current_orders INTEGER DEFAULT 0,
+                period_start TIMESTAMP NOT NULL,
+                period_end TIMESTAMP NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_limit_type UNIQUE (limit_type)
+            )
+        """)
+
+        # Create trading_limit_log table to track all processed transactions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS trading_limit_log (
+                id SERIAL PRIMARY KEY,
+                transaction_id INTEGER,
+                amount DECIMAL(15, 2) NOT NULL,
+                order_count INTEGER DEFAULT 1,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                limit_type VARCHAR(20),
+                FOREIGN KEY (transaction_id) REFERENCES transactions (id)
             )
         """)
 
@@ -2445,6 +2476,594 @@ def admin_llm_process_pending_transactions():
 
     except Exception as e:
         print(f"Error processing pending transactions: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================
+# TRADING LIMITS MANAGEMENT (Alpaca)
+# ============================================
+
+def get_or_create_trading_limits(cursor):
+    """Get or create trading limits for current periods"""
+    from datetime import datetime, timedelta
+    now = datetime.now()
+
+    limits = {}
+
+    # Daily limit
+    cursor.execute("""
+        SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
+               period_start, period_end, is_active
+        FROM trading_limits WHERE limit_type = 'daily'
+    """)
+    daily = cursor.fetchone()
+
+    # Check if daily limit exists and is current
+    if daily:
+        if isinstance(daily, dict):
+            period_end = daily['period_end']
+        else:
+            period_end = daily[7]
+        if period_end and period_end < now:
+            # Reset daily limit for new day
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            cursor.execute("""
+                UPDATE trading_limits
+                SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE limit_type = 'daily'
+            """, (day_start, day_end))
+            cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'daily'")
+            daily = cursor.fetchone()
+    else:
+        # Create daily limit (default $10,000/day, 100 orders)
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        cursor.execute("""
+            INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
+            VALUES ('daily', 10000.00, 100, %s, %s)
+        """, (day_start, day_end))
+        cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'daily'")
+        daily = cursor.fetchone()
+
+    if daily:
+        if isinstance(daily, dict):
+            limits['daily'] = daily
+        else:
+            limits['daily'] = {
+                'id': daily[0], 'limit_type': daily[1], 'max_amount': float(daily[2]),
+                'current_amount': float(daily[3] or 0), 'max_orders': daily[4],
+                'current_orders': daily[5] or 0, 'period_start': str(daily[6]),
+                'period_end': str(daily[7]), 'is_active': daily[8]
+            }
+
+    # Weekly limit
+    cursor.execute("""
+        SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
+               period_start, period_end, is_active
+        FROM trading_limits WHERE limit_type = 'weekly'
+    """)
+    weekly = cursor.fetchone()
+
+    if weekly:
+        if isinstance(weekly, dict):
+            period_end = weekly['period_end']
+        else:
+            period_end = weekly[7]
+        if period_end and period_end < now:
+            # Reset weekly limit
+            week_start = now - timedelta(days=now.weekday())
+            week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            week_end = week_start + timedelta(days=7)
+            cursor.execute("""
+                UPDATE trading_limits
+                SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE limit_type = 'weekly'
+            """, (week_start, week_end))
+            cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'weekly'")
+            weekly = cursor.fetchone()
+    else:
+        # Create weekly limit (default $50,000/week, 500 orders)
+        week_start = now - timedelta(days=now.weekday())
+        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_end = week_start + timedelta(days=7)
+        cursor.execute("""
+            INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
+            VALUES ('weekly', 50000.00, 500, %s, %s)
+        """, (week_start, week_end))
+        cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'weekly'")
+        weekly = cursor.fetchone()
+
+    if weekly:
+        if isinstance(weekly, dict):
+            limits['weekly'] = weekly
+        else:
+            limits['weekly'] = {
+                'id': weekly[0], 'limit_type': weekly[1], 'max_amount': float(weekly[2]),
+                'current_amount': float(weekly[3] or 0), 'max_orders': weekly[4],
+                'current_orders': weekly[5] or 0, 'period_start': str(weekly[6]),
+                'period_end': str(weekly[7]), 'is_active': weekly[8]
+            }
+
+    # Monthly limit
+    cursor.execute("""
+        SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
+               period_start, period_end, is_active
+        FROM trading_limits WHERE limit_type = 'monthly'
+    """)
+    monthly = cursor.fetchone()
+
+    if monthly:
+        if isinstance(monthly, dict):
+            period_end = monthly['period_end']
+        else:
+            period_end = monthly[7]
+        if period_end and period_end < now:
+            # Reset monthly limit
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if now.month == 12:
+                next_month = month_start.replace(year=now.year+1, month=1)
+            else:
+                next_month = month_start.replace(month=now.month+1)
+            cursor.execute("""
+                UPDATE trading_limits
+                SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE limit_type = 'monthly'
+            """, (month_start, next_month))
+            cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'monthly'")
+            monthly = cursor.fetchone()
+    else:
+        # Create monthly limit (default $200,000/month, 2000 orders)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            next_month = month_start.replace(year=now.year+1, month=1)
+        else:
+            next_month = month_start.replace(month=now.month+1)
+        cursor.execute("""
+            INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
+            VALUES ('monthly', 200000.00, 2000, %s, %s)
+        """, (month_start, next_month))
+        cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'monthly'")
+        monthly = cursor.fetchone()
+
+    if monthly:
+        if isinstance(monthly, dict):
+            limits['monthly'] = monthly
+        else:
+            limits['monthly'] = {
+                'id': monthly[0], 'limit_type': monthly[1], 'max_amount': float(monthly[2]),
+                'current_amount': float(monthly[3] or 0), 'max_orders': monthly[4],
+                'current_orders': monthly[5] or 0, 'period_start': str(monthly[6]),
+                'period_end': str(monthly[7]), 'is_active': monthly[8]
+            }
+
+    return limits
+
+
+def check_trading_limits(cursor, amount_to_process, order_count=1):
+    """Check if processing would exceed any trading limits. Returns (can_process, warnings, limits)"""
+    limits = get_or_create_trading_limits(cursor)
+    warnings = []
+    can_process = True
+
+    for limit_type, limit in limits.items():
+        if not limit.get('is_active', True):
+            continue
+
+        max_amount = limit.get('max_amount', 0)
+        current_amount = limit.get('current_amount', 0)
+        max_orders = limit.get('max_orders')
+        current_orders = limit.get('current_orders', 0)
+
+        # Check amount limit
+        if max_amount > 0:
+            remaining_amount = max_amount - current_amount
+            if amount_to_process > remaining_amount:
+                can_process = False
+                warnings.append({
+                    'type': limit_type,
+                    'reason': 'amount',
+                    'message': f'{limit_type.capitalize()} amount limit would be exceeded. Remaining: ${remaining_amount:,.2f}, Requested: ${amount_to_process:,.2f}'
+                })
+            elif (current_amount + amount_to_process) / max_amount > 0.8:
+                warnings.append({
+                    'type': limit_type,
+                    'reason': 'amount_warning',
+                    'message': f'{limit_type.capitalize()} amount is at {((current_amount + amount_to_process) / max_amount * 100):.1f}% of limit'
+                })
+
+        # Check order count limit
+        if max_orders and max_orders > 0:
+            remaining_orders = max_orders - current_orders
+            if order_count > remaining_orders:
+                can_process = False
+                warnings.append({
+                    'type': limit_type,
+                    'reason': 'orders',
+                    'message': f'{limit_type.capitalize()} order limit would be exceeded. Remaining: {remaining_orders}, Requested: {order_count}'
+                })
+            elif (current_orders + order_count) / max_orders > 0.8:
+                warnings.append({
+                    'type': limit_type,
+                    'reason': 'orders_warning',
+                    'message': f'{limit_type.capitalize()} orders at {((current_orders + order_count) / max_orders * 100):.1f}% of limit'
+                })
+
+    return can_process, warnings, limits
+
+
+def update_trading_limits(cursor, amount_processed, order_count=1):
+    """Update trading limits after processing transactions"""
+    cursor.execute("""
+        UPDATE trading_limits
+        SET current_amount = current_amount + %s,
+            current_orders = current_orders + %s,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE is_active = TRUE
+    """, (amount_processed, order_count))
+
+
+@app.route('/api/admin/trading-limits', methods=['GET'])
+def get_trading_limits():
+    """Get current trading limits and usage"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        limits = get_or_create_trading_limits(cursor)
+        conn.commit()
+
+        # Calculate percentages
+        for limit_type, limit in limits.items():
+            max_amount = limit.get('max_amount', 0)
+            current_amount = limit.get('current_amount', 0)
+            max_orders = limit.get('max_orders', 0)
+            current_orders = limit.get('current_orders', 0)
+
+            limit['amount_percent'] = (current_amount / max_amount * 100) if max_amount > 0 else 0
+            limit['orders_percent'] = (current_orders / max_orders * 100) if max_orders and max_orders > 0 else 0
+            limit['amount_remaining'] = max_amount - current_amount
+            limit['orders_remaining'] = (max_orders - current_orders) if max_orders else None
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'limits': limits
+        })
+
+    except Exception as e:
+        print(f"Error getting trading limits: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/trading-limits', methods=['PUT'])
+def update_trading_limits_config():
+    """Update trading limit configuration"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        data = request.get_json()
+        limit_type = data.get('limit_type')
+        max_amount = data.get('max_amount')
+        max_orders = data.get('max_orders')
+        is_active = data.get('is_active')
+
+        if not limit_type or limit_type not in ['daily', 'weekly', 'monthly']:
+            return jsonify({'success': False, 'error': 'Invalid limit_type'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Build update query dynamically
+        updates = []
+        values = []
+        if max_amount is not None:
+            updates.append("max_amount = %s")
+            values.append(max_amount)
+        if max_orders is not None:
+            updates.append("max_orders = %s")
+            values.append(max_orders)
+        if is_active is not None:
+            updates.append("is_active = %s")
+            values.append(is_active)
+
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(limit_type)
+            cursor.execute(f"""
+                UPDATE trading_limits
+                SET {', '.join(updates)}
+                WHERE limit_type = %s
+            """, values)
+            conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'{limit_type.capitalize()} limit updated'
+        })
+
+    except Exception as e:
+        print(f"Error updating trading limits: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/llm-center/pending-transactions-paginated', methods=['GET'])
+def admin_llm_pending_transactions_paginated():
+    """Get paginated pending transactions with filters for the slide-out panel"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        # Get pagination params
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        offset = (page - 1) * limit
+
+        # Get filter params
+        merchant_filter = request.args.get('merchant', '')
+        category_filter = request.args.get('category', '')
+        min_amount = request.args.get('min_amount')
+        max_amount = request.args.get('max_amount')
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn, dict_cursor=True)
+
+        # Build WHERE clause
+        where_clauses = ["(ticker IS NULL OR ticker = '' OR ticker = 'UNKNOWN' OR LOWER(status) = 'pending')"]
+        params = []
+
+        if merchant_filter:
+            where_clauses.append("merchant ILIKE %s")
+            params.append(f"%{merchant_filter}%")
+
+        if category_filter:
+            where_clauses.append("category ILIKE %s")
+            params.append(f"%{category_filter}%")
+
+        if min_amount:
+            where_clauses.append("round_up >= %s")
+            params.append(float(min_amount))
+
+        if max_amount:
+            where_clauses.append("round_up <= %s")
+            params.append(float(max_amount))
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Get total count
+        cursor.execute(f"SELECT COUNT(*) as count FROM transactions WHERE {where_sql}", params)
+        total = cursor.fetchone()['count']
+
+        # Get paginated transactions
+        cursor.execute(f"""
+            SELECT t.id, t.merchant, t.amount, t.category, t.status, t.created_at,
+                   t.user_id, t.description, t.round_up, t.ticker,
+                   u.email as user_email, u.name as user_name
+            FROM transactions t
+            LEFT JOIN users u ON t.user_id = u.id
+            WHERE {where_sql}
+            ORDER BY t.created_at DESC
+            LIMIT %s OFFSET %s
+        """, params + [limit, offset])
+        rows = cursor.fetchall()
+
+        transactions = []
+        for row in rows:
+            transactions.append({
+                'id': row['id'],
+                'merchant': row['merchant'] or 'Unknown',
+                'amount': float(row['amount']) if row['amount'] else 0,
+                'category': row['category'] or 'Unknown',
+                'status': row['status'] or 'pending',
+                'created_at': str(row['created_at']) if row['created_at'] else None,
+                'user_id': row['user_id'],
+                'user_email': row['user_email'],
+                'user_name': row['user_name'],
+                'description': row['description'],
+                'round_up': float(row['round_up']) if row['round_up'] else 0,
+                'ticker': row['ticker']
+            })
+
+        # Get current trading limits for context
+        limits = get_or_create_trading_limits(cursor)
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'transactions': transactions,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total,
+                'total_pages': (total + limit - 1) // limit,
+                'has_next': offset + limit < total,
+                'has_prev': page > 1
+            },
+            'trading_limits': limits
+        })
+
+    except Exception as e:
+        print(f"Error getting paginated pending transactions: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/llm-center/process-selected-transactions', methods=['POST'])
+def admin_process_selected_transactions():
+    """Process selected transactions with limit checking"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        data = request.get_json()
+        transaction_ids = data.get('transaction_ids', [])
+        force = data.get('force', False)  # Skip limit warnings if True
+
+        if not transaction_ids:
+            return jsonify({'success': False, 'error': 'No transaction IDs provided'}), 400
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn, dict_cursor=True)
+
+        # Get total amount to process
+        placeholders = ','.join(['%s'] * len(transaction_ids))
+        cursor.execute(f"""
+            SELECT id, merchant, round_up, amount, user_id
+            FROM transactions
+            WHERE id IN ({placeholders})
+            AND (ticker IS NULL OR ticker = '' OR ticker = 'UNKNOWN' OR LOWER(status) = 'pending')
+        """, transaction_ids)
+        transactions_to_process = cursor.fetchall()
+
+        if not transactions_to_process:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'No valid pending transactions found'}), 404
+
+        total_amount = sum(float(t['round_up'] or 0) for t in transactions_to_process)
+        order_count = len(transactions_to_process)
+
+        # Check trading limits
+        can_process, warnings, limits = check_trading_limits(cursor, total_amount, order_count)
+
+        if not can_process and not force:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Trading limit would be exceeded',
+                'limit_exceeded': True,
+                'warnings': warnings,
+                'limits': limits,
+                'requested_amount': total_amount,
+                'requested_orders': order_count
+            }), 400
+
+        # Process each transaction
+        processed = 0
+        mapped = 0
+        no_match = 0
+        results = []
+
+        for tx in transactions_to_process:
+            tx_id = tx['id']
+            merchant = tx['merchant'] or ''
+
+            # Look up mapping
+            cursor.execute("""
+                SELECT ticker_symbol, category, confidence
+                FROM llm_mappings
+                WHERE LOWER(merchant_name) = LOWER(%s)
+                AND status = 'approved' AND admin_approved = 1
+                ORDER BY confidence DESC LIMIT 1
+            """, (merchant,))
+            mapping = cursor.fetchone()
+
+            if mapping and mapping['ticker_symbol']:
+                ticker = mapping['ticker_symbol']
+                category = mapping['category'] or tx.get('category') or 'Unknown'
+                confidence = mapping['confidence'] or 0.90
+
+                cursor.execute("""
+                    UPDATE transactions
+                    SET ticker = %s, category = %s, status = 'mapped'
+                    WHERE id = %s
+                """, (ticker, category, tx_id))
+
+                mapped += 1
+                results.append({
+                    'transaction_id': tx_id,
+                    'merchant': merchant,
+                    'ticker': ticker,
+                    'status': 'mapped'
+                })
+            else:
+                # Try fuzzy match
+                cursor.execute("""
+                    SELECT ticker_symbol, category, confidence, merchant_name
+                    FROM llm_mappings
+                    WHERE status = 'approved' AND admin_approved = 1
+                    AND (
+                        LOWER(merchant_name) LIKE LOWER(%s) OR
+                        LOWER(%s) LIKE '%%' || LOWER(merchant_name) || '%%'
+                    )
+                    ORDER BY confidence DESC LIMIT 1
+                """, (f"%{merchant}%", merchant))
+                fuzzy = cursor.fetchone()
+
+                if fuzzy and fuzzy['ticker_symbol']:
+                    ticker = fuzzy['ticker_symbol']
+                    category = fuzzy['category'] or 'Unknown'
+
+                    cursor.execute("""
+                        UPDATE transactions
+                        SET ticker = %s, category = %s, status = 'mapped'
+                        WHERE id = %s
+                    """, (ticker, category, tx_id))
+
+                    mapped += 1
+                    results.append({
+                        'transaction_id': tx_id,
+                        'merchant': merchant,
+                        'ticker': ticker,
+                        'status': 'mapped',
+                        'match_type': 'fuzzy'
+                    })
+                else:
+                    cursor.execute("""
+                        UPDATE transactions SET status = 'pending-mapping' WHERE id = %s
+                    """, (tx_id,))
+
+                    no_match += 1
+                    results.append({
+                        'transaction_id': tx_id,
+                        'merchant': merchant,
+                        'status': 'pending-mapping',
+                        'reason': 'No mapping found'
+                    })
+
+            processed += 1
+
+        # Update trading limits with processed amount
+        if mapped > 0:
+            update_trading_limits(cursor, total_amount, mapped)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Processed {processed} transactions: {mapped} mapped, {no_match} need manual review',
+            'processed': processed,
+            'mapped': mapped,
+            'no_match': no_match,
+            'results': results,
+            'amount_processed': total_amount,
+            'warnings': warnings if warnings else None
+        })
+
+    except Exception as e:
+        print(f"Error processing selected transactions: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500

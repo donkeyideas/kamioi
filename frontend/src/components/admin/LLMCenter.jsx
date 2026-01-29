@@ -276,6 +276,33 @@ const LLMCenter = () => {
     throughput: 0
   })
 
+  // Pending Transactions Panel state
+  const [showPendingPanel, setShowPendingPanel] = useState(false)
+  const [pendingTransactions, setPendingTransactions] = useState([])
+  const [pendingTransactionsLoading, setPendingTransactionsLoading] = useState(false)
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState([])
+  const [pendingTransactionsPagination, setPendingTransactionsPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+    hasPrev: false
+  })
+  const [pendingFilters, setPendingFilters] = useState({
+    merchant: '',
+    category: '',
+    minAmount: '',
+    maxAmount: ''
+  })
+  const [tradingLimits, setTradingLimits] = useState({
+    daily: { max_amount: 10000, current_amount: 0, max_orders: 100, current_orders: 0, amount_percent: 0, orders_percent: 0 },
+    weekly: { max_amount: 50000, current_amount: 0, max_orders: 500, current_orders: 0, amount_percent: 0, orders_percent: 0 },
+    monthly: { max_amount: 200000, current_amount: 0, max_orders: 2000, current_orders: 0, amount_percent: 0, orders_percent: 0 }
+  })
+  const [processingSelected, setProcessingSelected] = useState(false)
+  const [limitWarnings, setLimitWarnings] = useState([])
+
   const [merchantDatabase, setMerchantDatabase] = useState({
     merchants: [],
     searchQuery: '',
@@ -784,6 +811,177 @@ const LLMCenter = () => {
       }
     }
   }, [activeTab])
+
+  // =============================================
+  // PENDING TRANSACTIONS PANEL FUNCTIONS
+  // =============================================
+
+  // Load trading limits
+  const loadTradingLimits = async () => {
+    try {
+      const { getToken, ROLES } = await import('../../services/apiService')
+      const token = getToken(ROLES.ADMIN) || localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      if (!token) return
+
+      const response = await fetch(buildApiUrl('/api/admin/trading-limits'), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.limits) {
+          setTradingLimits(data.limits)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading trading limits:', error)
+    }
+  }
+
+  // Load pending transactions for panel
+  const loadPendingTransactionsPanel = async (page = 1) => {
+    try {
+      setPendingTransactionsLoading(true)
+      const { getToken, ROLES } = await import('../../services/apiService')
+      const token = getToken(ROLES.ADMIN) || localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      if (!token) return
+
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pendingTransactionsPagination.limit.toString(),
+        merchant: pendingFilters.merchant,
+        category: pendingFilters.category,
+        min_amount: pendingFilters.minAmount,
+        max_amount: pendingFilters.maxAmount
+      })
+
+      const response = await fetch(buildApiUrl(`/api/admin/llm-center/pending-transactions-paginated?${params}`), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setPendingTransactions(data.transactions || [])
+          setPendingTransactionsPagination({
+            page: data.pagination.page,
+            limit: data.pagination.limit,
+            total: data.pagination.total,
+            totalPages: data.pagination.total_pages,
+            hasNext: data.pagination.has_next,
+            hasPrev: data.pagination.has_prev
+          })
+          if (data.trading_limits) {
+            setTradingLimits(data.trading_limits)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading pending transactions:', error)
+      addNotification({ type: 'error', message: 'Failed to load pending transactions' })
+    } finally {
+      setPendingTransactionsLoading(false)
+    }
+  }
+
+  // Open pending transactions panel
+  const openPendingPanel = () => {
+    setShowPendingPanel(true)
+    setSelectedTransactionIds([])
+    loadPendingTransactionsPanel(1)
+    loadTradingLimits()
+  }
+
+  // Toggle transaction selection
+  const toggleTransactionSelection = (id) => {
+    setSelectedTransactionIds(prev =>
+      prev.includes(id)
+        ? prev.filter(tid => tid !== id)
+        : [...prev, id]
+    )
+  }
+
+  // Select all transactions on current page
+  const selectAllTransactions = () => {
+    if (selectedTransactionIds.length === pendingTransactions.length) {
+      setSelectedTransactionIds([])
+    } else {
+      setSelectedTransactionIds(pendingTransactions.map(t => t.id))
+    }
+  }
+
+  // Process selected transactions
+  const processSelectedTransactions = async (force = false) => {
+    if (selectedTransactionIds.length === 0) {
+      addNotification({ type: 'warning', message: 'No transactions selected' })
+      return
+    }
+
+    try {
+      setProcessingSelected(true)
+      const { getToken, ROLES } = await import('../../services/apiService')
+      const token = getToken(ROLES.ADMIN) || localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      if (!token) return
+
+      const response = await fetch(buildApiUrl('/api/admin/llm-center/process-selected-transactions'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          transaction_ids: selectedTransactionIds,
+          force: force
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        addNotification({
+          type: 'success',
+          message: `Processed ${data.processed} transactions: ${data.mapped} mapped, ${data.no_match} need review`
+        })
+        // Refresh data
+        setSelectedTransactionIds([])
+        loadPendingTransactionsPanel(pendingTransactionsPagination.page)
+        loadTradingLimits()
+        // Also refresh the dashboard
+        queryClient.invalidateQueries(['llm-dashboard'])
+      } else if (data.limit_exceeded) {
+        // Show limit warning
+        setLimitWarnings(data.warnings || [])
+        setGlassModal({
+          isOpen: true,
+          title: 'Trading Limit Warning',
+          message: `Processing these transactions would exceed trading limits.\n\nRequested: $${data.requested_amount?.toLocaleString()} (${data.requested_orders} orders)\n\n${data.warnings?.map(w => w.message).join('\n') || 'Limit exceeded'}`,
+          type: 'warning',
+          showForceButton: true,
+          onForce: () => processSelectedTransactions(true)
+        })
+      } else {
+        addNotification({ type: 'error', message: data.error || 'Failed to process transactions' })
+      }
+    } catch (error) {
+      console.error('Error processing transactions:', error)
+      addNotification({ type: 'error', message: 'Failed to process transactions' })
+    } finally {
+      setProcessingSelected(false)
+    }
+  }
+
+  // Get selected transactions total amount
+  const getSelectedTotalAmount = () => {
+    return pendingTransactions
+      .filter(t => selectedTransactionIds.includes(t.id))
+      .reduce((sum, t) => sum + (t.round_up || 0), 0)
+  }
 
   // Smart data loading for specific tabs
   const loadTabData = async (tab, page = 1, search = '') => {
@@ -2936,10 +3134,16 @@ Errors: ${errorCount}`,
               </div>
             </div>
             <div className="flex items-center space-x-6 text-sm">
-              <div className="text-center">
-                <div className="text-yellow-400 font-bold">{realTimeStatus.processingQueue || 0}</div>
-                <div className="text-gray-400">Pending</div>
-              </div>
+              <button
+                onClick={openPendingPanel}
+                className="text-center hover:bg-yellow-500/20 p-2 rounded-lg transition-all cursor-pointer group"
+                title="Click to view and process pending transactions"
+              >
+                <div className="text-yellow-400 font-bold group-hover:scale-110 transition-transform">
+                  {realTimeStatus.processingQueue || 0}
+                </div>
+                <div className="text-gray-400 group-hover:text-yellow-300 transition-colors">Pending</div>
+              </button>
               <div className="text-center">
                 <div className="text-green-400 font-bold">{realTimeStatus.mappedPending || 0}</div>
                 <div className="text-gray-400">Mapped</div>
@@ -5013,6 +5217,234 @@ Errors: ${errorCount}`,
           </div>
         </div>
       )}
+
+      {/* Pending Transactions Slide-Out Panel */}
+      <AnimatePresence>
+        {showPendingPanel && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPendingPanel(false)}
+              className="fixed inset-0 bg-black/50 z-40"
+            />
+
+            {/* Slide-out Panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 h-full w-full max-w-2xl bg-gray-900 border-l border-white/10 shadow-2xl z-50 overflow-hidden flex flex-col"
+            >
+              {/* Panel Header */}
+              <div className="p-4 border-b border-white/10 bg-gradient-to-r from-yellow-500/10 to-orange-500/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-yellow-400" />
+                      Pending Transactions
+                    </h2>
+                    <p className="text-gray-400 text-sm mt-1">
+                      {pendingTransactionsPagination.total} transactions awaiting processing
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowPendingPanel(false)}
+                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+
+                {/* Trading Limits Summary */}
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {['daily', 'weekly', 'monthly'].map(type => (
+                    <div key={type} className="bg-white/5 rounded-lg p-2">
+                      <div className="text-xs text-gray-400 capitalize">{type}</div>
+                      <div className="flex items-center gap-1">
+                        <div className={`text-sm font-semibold ${
+                          (tradingLimits[type]?.amount_percent || 0) > 80 ? 'text-red-400' :
+                          (tradingLimits[type]?.amount_percent || 0) > 50 ? 'text-yellow-400' : 'text-green-400'
+                        }`}>
+                          {(tradingLimits[type]?.amount_percent || 0).toFixed(0)}%
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          (${((tradingLimits[type]?.amount_remaining || 0)).toLocaleString()} left)
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1 mt-1">
+                        <div
+                          className={`h-1 rounded-full ${
+                            (tradingLimits[type]?.amount_percent || 0) > 80 ? 'bg-red-500' :
+                            (tradingLimits[type]?.amount_percent || 0) > 50 ? 'bg-yellow-500' : 'bg-green-500'
+                          }`}
+                          style={{ width: `${Math.min(tradingLimits[type]?.amount_percent || 0, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="p-3 border-b border-white/10 bg-white/5">
+                <div className="grid grid-cols-4 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Merchant..."
+                    value={pendingFilters.merchant}
+                    onChange={(e) => setPendingFilters(prev => ({ ...prev, merchant: e.target.value }))}
+                    className="bg-white/10 border border-white/20 rounded px-2 py-1 text-sm text-white placeholder-gray-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Category..."
+                    value={pendingFilters.category}
+                    onChange={(e) => setPendingFilters(prev => ({ ...prev, category: e.target.value }))}
+                    className="bg-white/10 border border-white/20 rounded px-2 py-1 text-sm text-white placeholder-gray-500"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Min $"
+                    value={pendingFilters.minAmount}
+                    onChange={(e) => setPendingFilters(prev => ({ ...prev, minAmount: e.target.value }))}
+                    className="bg-white/10 border border-white/20 rounded px-2 py-1 text-sm text-white placeholder-gray-500"
+                  />
+                  <button
+                    onClick={() => loadPendingTransactionsPanel(1)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white rounded px-2 py-1 text-sm flex items-center justify-center gap-1"
+                  >
+                    <Filter className="w-3 h-3" />
+                    Filter
+                  </button>
+                </div>
+              </div>
+
+              {/* Selection Actions Bar */}
+              <div className="p-3 border-b border-white/10 bg-gradient-to-r from-blue-500/10 to-purple-500/10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedTransactionIds.length === pendingTransactions.length && pendingTransactions.length > 0}
+                        onChange={selectAllTransactions}
+                        className="w-4 h-4 rounded border-white/20 bg-white/10"
+                      />
+                      <span className="text-sm text-gray-300">
+                        {selectedTransactionIds.length > 0
+                          ? `${selectedTransactionIds.length} selected ($${getSelectedTotalAmount().toFixed(2)})`
+                          : 'Select all'}
+                      </span>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => processSelectedTransactions(false)}
+                      disabled={selectedTransactionIds.length === 0 || processingSelected}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded text-sm flex items-center gap-1"
+                    >
+                      {processingSelected ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4" />
+                          Process Selected
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transactions List */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {pendingTransactionsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
+                  </div>
+                ) : pendingTransactions.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+                    <p className="text-gray-400">No pending transactions</p>
+                  </div>
+                ) : (
+                  pendingTransactions.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className={`bg-white/5 rounded-lg p-3 border transition-all ${
+                        selectedTransactionIds.includes(tx.id)
+                          ? 'border-blue-500/50 bg-blue-500/10'
+                          : 'border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedTransactionIds.includes(tx.id)}
+                          onChange={() => toggleTransactionSelection(tx.id)}
+                          className="mt-1 w-4 h-4 rounded border-white/20 bg-white/10"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white truncate">{tx.merchant || 'Unknown'}</span>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
+                                {tx.category || 'Uncategorized'}
+                              </span>
+                            </div>
+                            <span className="text-green-400 font-semibold whitespace-nowrap">
+                              ${(tx.round_up || 0).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                            <span>ID: {tx.id}</span>
+                            <span>User: {tx.user_email || tx.user_id}</span>
+                            <span>{tx.created_at ? formatToEasternTime(tx.created_at) : 'N/A'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Pagination */}
+              {pendingTransactionsPagination.totalPages > 1 && (
+                <div className="p-3 border-t border-white/10 bg-white/5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">
+                      Page {pendingTransactionsPagination.page} of {pendingTransactionsPagination.totalPages}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => loadPendingTransactionsPanel(pendingTransactionsPagination.page - 1)}
+                        disabled={!pendingTransactionsPagination.hasPrev}
+                        className="px-3 py-1 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm text-white"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => loadPendingTransactionsPanel(pendingTransactionsPagination.page + 1)}
+                        disabled={!pendingTransactionsPagination.hasNext}
+                        className="px-3 py-1 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm text-white"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Glass Modal */}
       <GlassModal
