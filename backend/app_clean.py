@@ -8482,12 +8482,22 @@ def admin_messaging_campaigns():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
-        # Return empty data - no mock data
+
+        # Return complete structure expected by frontend
         return jsonify({
             'success': True,
             'data': {
-                'campaigns': []
+                'campaigns': [],
+                'templates': [],
+                'analytics': {
+                    'totalSent': 0,
+                    'totalDelivered': 0,
+                    'totalOpened': 0,
+                    'totalClicked': 0,
+                    'deliveryRate': 0,
+                    'openRate': 0,
+                    'clickRate': 0
+                }
             }
         })
     except Exception as e:
@@ -8499,11 +8509,17 @@ def messages_admin_all():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
-        # Return empty data - no mock data
+
+        # Return complete structure expected by frontend
         return jsonify({
             'success': True,
-            'messages': []
+            'messages': [],
+            'stats': {
+                'totalMessages': 0,
+                'supportRequests': 0,
+                'unreadSupport': 0,
+                'channels': []
+            }
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
