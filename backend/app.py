@@ -16754,15 +16754,15 @@ def admin_ai_seo_optimize():
     try:
         data = request.get_json()
         post_id = data.get('post_id')
-        content = data.get('content', '')
-        title = data.get('title', '')
+        content = data.get('content') or ''
+        title = data.get('title') or ''
 
         # post_id is optional - if not provided, just analyze without saving to DB
         # This allows SEO analysis for new posts that haven't been saved yet
 
         # AI SEO Analysis (simulated - in production, use real AI service)
-        word_count = len(content.split())
-        title_length = len(title)
+        word_count = len(content.split()) if content else 0
+        title_length = len(title) if title else 0
         
         # Calculate SEO score
         seo_score = 0
@@ -16781,20 +16781,21 @@ def admin_ai_seo_optimize():
             suggestions.append("Content should be at least 300 words for better SEO")
         
         # Keyword density (simplified)
-        keywords = data.get('seo_keywords', '').split(',')
+        seo_keywords = data.get('seo_keywords') or ''
+        keywords = seo_keywords.split(',') if seo_keywords else []
         density = 0
         if keywords and keywords[0]:
             keyword = keywords[0].strip().lower()
-            keyword_count = content.lower().count(keyword)
+            keyword_count = content.lower().count(keyword) if keyword else 0
             density = (keyword_count / word_count) * 100 if word_count > 0 else 0
-            
+
             if 1 <= density <= 3:
                 seo_score += 20
             else:
                 suggestions.append(f"Keyword density should be 1-3%. Current: {density:.1f}%")
-        
+
         # Meta description
-        meta_desc = data.get('seo_description', '')
+        meta_desc = data.get('seo_description') or ''
         if 120 <= len(meta_desc) <= 160:
             seo_score += 20
         else:
