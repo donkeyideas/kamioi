@@ -2552,150 +2552,150 @@ def get_or_create_trading_limits(cursor):
     try:
         # Daily limit
         cursor.execute("""
-        SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
-               period_start, period_end, is_active
-        FROM trading_limits WHERE limit_type = 'daily'
-    """)
-    daily = cursor.fetchone()
+            SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
+                   period_start, period_end, is_active
+            FROM trading_limits WHERE limit_type = 'daily'
+        """)
+        daily = cursor.fetchone()
 
-    # Check if daily limit exists and is current
-    if daily:
-        if isinstance(daily, dict):
-            period_end = daily['period_end']
+        # Check if daily limit exists and is current
+        if daily:
+            if isinstance(daily, dict):
+                period_end = daily['period_end']
+            else:
+                period_end = daily[7]
+            if period_end and period_end < now:
+                # Reset daily limit for new day
+                day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+                cursor.execute("""
+                    UPDATE trading_limits
+                    SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE limit_type = 'daily'
+                """, (day_start, day_end))
+                cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'daily'")
+                daily = cursor.fetchone()
         else:
-            period_end = daily[7]
-        if period_end and period_end < now:
-            # Reset daily limit for new day
+            # Create daily limit (default $10,000/day, 100 orders)
             day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = day_start + timedelta(days=1)
             cursor.execute("""
-                UPDATE trading_limits
-                SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
-                WHERE limit_type = 'daily'
+                INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
+                VALUES ('daily', 10000.00, 100, %s, %s)
             """, (day_start, day_end))
             cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'daily'")
             daily = cursor.fetchone()
-    else:
-        # Create daily limit (default $10,000/day, 100 orders)
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
+
+        if daily:
+            if isinstance(daily, dict):
+                limits['daily'] = daily
+            else:
+                limits['daily'] = {
+                    'id': daily[0], 'limit_type': daily[1], 'max_amount': float(daily[2]),
+                    'current_amount': float(daily[3] or 0), 'max_orders': daily[4],
+                    'current_orders': daily[5] or 0, 'period_start': str(daily[6]),
+                    'period_end': str(daily[7]), 'is_active': daily[8]
+                }
+
+        # Weekly limit
         cursor.execute("""
-            INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
-            VALUES ('daily', 10000.00, 100, %s, %s)
-        """, (day_start, day_end))
-        cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'daily'")
-        daily = cursor.fetchone()
+            SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
+                   period_start, period_end, is_active
+            FROM trading_limits WHERE limit_type = 'weekly'
+        """)
+        weekly = cursor.fetchone()
 
-    if daily:
-        if isinstance(daily, dict):
-            limits['daily'] = daily
+        if weekly:
+            if isinstance(weekly, dict):
+                period_end = weekly['period_end']
+            else:
+                period_end = weekly[7]
+            if period_end and period_end < now:
+                # Reset weekly limit
+                week_start = now - timedelta(days=now.weekday())
+                week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+                week_end = week_start + timedelta(days=7)
+                cursor.execute("""
+                    UPDATE trading_limits
+                    SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE limit_type = 'weekly'
+                """, (week_start, week_end))
+                cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'weekly'")
+                weekly = cursor.fetchone()
         else:
-            limits['daily'] = {
-                'id': daily[0], 'limit_type': daily[1], 'max_amount': float(daily[2]),
-                'current_amount': float(daily[3] or 0), 'max_orders': daily[4],
-                'current_orders': daily[5] or 0, 'period_start': str(daily[6]),
-                'period_end': str(daily[7]), 'is_active': daily[8]
-            }
-
-    # Weekly limit
-    cursor.execute("""
-        SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
-               period_start, period_end, is_active
-        FROM trading_limits WHERE limit_type = 'weekly'
-    """)
-    weekly = cursor.fetchone()
-
-    if weekly:
-        if isinstance(weekly, dict):
-            period_end = weekly['period_end']
-        else:
-            period_end = weekly[7]
-        if period_end and period_end < now:
-            # Reset weekly limit
+            # Create weekly limit (default $50,000/week, 500 orders)
             week_start = now - timedelta(days=now.weekday())
             week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
             week_end = week_start + timedelta(days=7)
             cursor.execute("""
-                UPDATE trading_limits
-                SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
-                WHERE limit_type = 'weekly'
+                INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
+                VALUES ('weekly', 50000.00, 500, %s, %s)
             """, (week_start, week_end))
             cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'weekly'")
             weekly = cursor.fetchone()
-    else:
-        # Create weekly limit (default $50,000/week, 500 orders)
-        week_start = now - timedelta(days=now.weekday())
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_end = week_start + timedelta(days=7)
+
+        if weekly:
+            if isinstance(weekly, dict):
+                limits['weekly'] = weekly
+            else:
+                limits['weekly'] = {
+                    'id': weekly[0], 'limit_type': weekly[1], 'max_amount': float(weekly[2]),
+                    'current_amount': float(weekly[3] or 0), 'max_orders': weekly[4],
+                    'current_orders': weekly[5] or 0, 'period_start': str(weekly[6]),
+                    'period_end': str(weekly[7]), 'is_active': weekly[8]
+                }
+
+        # Monthly limit
         cursor.execute("""
-            INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
-            VALUES ('weekly', 50000.00, 500, %s, %s)
-        """, (week_start, week_end))
-        cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'weekly'")
-        weekly = cursor.fetchone()
+            SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
+                   period_start, period_end, is_active
+            FROM trading_limits WHERE limit_type = 'monthly'
+        """)
+        monthly = cursor.fetchone()
 
-    if weekly:
-        if isinstance(weekly, dict):
-            limits['weekly'] = weekly
+        if monthly:
+            if isinstance(monthly, dict):
+                period_end = monthly['period_end']
+            else:
+                period_end = monthly[7]
+            if period_end and period_end < now:
+                # Reset monthly limit
+                month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                if now.month == 12:
+                    next_month = month_start.replace(year=now.year+1, month=1)
+                else:
+                    next_month = month_start.replace(month=now.month+1)
+                cursor.execute("""
+                    UPDATE trading_limits
+                    SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE limit_type = 'monthly'
+                """, (month_start, next_month))
+                cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'monthly'")
+                monthly = cursor.fetchone()
         else:
-            limits['weekly'] = {
-                'id': weekly[0], 'limit_type': weekly[1], 'max_amount': float(weekly[2]),
-                'current_amount': float(weekly[3] or 0), 'max_orders': weekly[4],
-                'current_orders': weekly[5] or 0, 'period_start': str(weekly[6]),
-                'period_end': str(weekly[7]), 'is_active': weekly[8]
-            }
-
-    # Monthly limit
-    cursor.execute("""
-        SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders,
-               period_start, period_end, is_active
-        FROM trading_limits WHERE limit_type = 'monthly'
-    """)
-    monthly = cursor.fetchone()
-
-    if monthly:
-        if isinstance(monthly, dict):
-            period_end = monthly['period_end']
-        else:
-            period_end = monthly[7]
-        if period_end and period_end < now:
-            # Reset monthly limit
+            # Create monthly limit (default $200,000/month, 2000 orders)
             month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             if now.month == 12:
                 next_month = month_start.replace(year=now.year+1, month=1)
             else:
                 next_month = month_start.replace(month=now.month+1)
             cursor.execute("""
-                UPDATE trading_limits
-                SET current_amount = 0, current_orders = 0, period_start = %s, period_end = %s, updated_at = CURRENT_TIMESTAMP
-                WHERE limit_type = 'monthly'
+                INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
+                VALUES ('monthly', 200000.00, 2000, %s, %s)
             """, (month_start, next_month))
             cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'monthly'")
             monthly = cursor.fetchone()
-    else:
-        # Create monthly limit (default $200,000/month, 2000 orders)
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if now.month == 12:
-            next_month = month_start.replace(year=now.year+1, month=1)
-        else:
-            next_month = month_start.replace(month=now.month+1)
-        cursor.execute("""
-            INSERT INTO trading_limits (limit_type, max_amount, max_orders, period_start, period_end)
-            VALUES ('monthly', 200000.00, 2000, %s, %s)
-        """, (month_start, next_month))
-        cursor.execute("SELECT id, limit_type, max_amount, current_amount, max_orders, current_orders, period_start, period_end, is_active FROM trading_limits WHERE limit_type = 'monthly'")
-        monthly = cursor.fetchone()
 
-    if monthly:
-        if isinstance(monthly, dict):
-            limits['monthly'] = monthly
-        else:
-            limits['monthly'] = {
-                'id': monthly[0], 'limit_type': monthly[1], 'max_amount': float(monthly[2]),
-                'current_amount': float(monthly[3] or 0), 'max_orders': monthly[4],
-                'current_orders': monthly[5] or 0, 'period_start': str(monthly[6]),
-                'period_end': str(monthly[7]), 'is_active': monthly[8]
-            }
+        if monthly:
+            if isinstance(monthly, dict):
+                limits['monthly'] = monthly
+            else:
+                limits['monthly'] = {
+                    'id': monthly[0], 'limit_type': monthly[1], 'max_amount': float(monthly[2]),
+                    'current_amount': float(monthly[3] or 0), 'max_orders': monthly[4],
+                    'current_orders': monthly[5] or 0, 'period_start': str(monthly[6]),
+                    'period_end': str(monthly[7]), 'is_active': monthly[8]
+                }
 
         return limits
 
