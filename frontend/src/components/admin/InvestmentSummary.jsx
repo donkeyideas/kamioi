@@ -40,9 +40,9 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
     { value: '1y', label: 'Last Year' }
   ]
 
-  // Dispatch page load completion event
+  // Dispatch page load completion event when transactions are available
   useEffect(() => {
-    // Small delay to ensure AdminDashboard listener is ready
+    // Dispatch when transactions are loaded or component mounts
     const timer = setTimeout(() => {
       console.log('📊 InvestmentSummary - Dispatching admin-page-load-complete for investments')
       window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
@@ -50,7 +50,7 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
       }))
     }, 100)
     return () => clearTimeout(timer)
-  }, [])
+  }, [transactions])
 
   // Process transactions when they change
   useEffect(() => {

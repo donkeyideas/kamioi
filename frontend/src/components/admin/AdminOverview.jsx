@@ -103,7 +103,19 @@ const AdminOverview = ({ user }) => {
       }))
     }
   })
-  
+
+  // Dispatch page load completion for cached data (useEffect fallback)
+  useEffect(() => {
+    if (data && !isLoading) {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
+          detail: { pageId: 'overview' }
+        }))
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [data, isLoading])
+
   // 🚀 PERFORMANCE FIX: All data pre-calculated by backend - no frontend processing
   const stats = data?.stats || {
     totalTransactions: 0,

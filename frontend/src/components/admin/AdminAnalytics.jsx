@@ -102,7 +102,19 @@ const AdminAnalytics = ({ user }) => {
       }))
     }
   })
-  
+
+  // Dispatch page load completion for cached data (useEffect fallback)
+  useEffect(() => {
+    if (analytics && !loading) {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
+          detail: { pageId: 'analytics' }
+        }))
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [analytics, loading])
+
   // Default analytics data if query hasn't loaded yet
   const analyticsData = analytics || {
     totalClicks: 0,

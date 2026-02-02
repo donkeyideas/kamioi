@@ -179,7 +179,19 @@ const UserManagement = () => {
       }))
     }
   })
-  
+
+  // Dispatch page load completion for cached data (useEffect fallback)
+  useEffect(() => {
+    if (data && !isLoading) {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
+          detail: { pageId: 'users2' }
+        }))
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [data, isLoading])
+
   // 🚀 PERFORMANCE FIX: Extract data from query - NO frontend processing
   const users = data?.users || []
   const pagination = data?.pagination || { page: 1, limit: itemsPerPage, total: 0, totalPages: 1 }
