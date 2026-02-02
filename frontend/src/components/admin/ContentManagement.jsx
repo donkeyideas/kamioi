@@ -153,7 +153,7 @@ const ContentManagement = ({ user }) => {
           headers: { 'Authorization': `Bearer ${adminToken}` },
           signal: signal
         }).catch(() => ({ ok: false })),
-        fetch(`${apiBaseUrl}/api/admin/blog/posts`, {
+        fetch(`${apiBaseUrl}/api/admin/blog/posts?limit=1000`, {
           headers: { 'Authorization': `Bearer ${adminToken}` },
           signal: signal
         }).catch(() => ({ ok: false })),

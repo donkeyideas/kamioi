@@ -9,7 +9,7 @@ const BlogListing = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const [postsPerPage] = useState(9) // 9 posts per page (3 columns x 3 rows)
+  const [postsPerPage] = useState(6) // 6 posts per page (3 columns x 2 rows)
   const [isMenuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
 
