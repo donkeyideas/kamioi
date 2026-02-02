@@ -16657,7 +16657,7 @@ def admin_update_blog_post(post_id):
             'category', 'tags', 'seo_title', 'seo_description', 'seo_keywords',
             'meta_robots', 'canonical_url', 'og_title', 'og_description',
             'og_image', 'twitter_title', 'twitter_description', 'twitter_image',
-            'schema_markup'
+            'schema_markup', 'ai_seo_score', 'ai_seo_suggestions'
         ]
         
         for field in updatable_fields:

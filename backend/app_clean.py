@@ -18879,8 +18879,8 @@ def admin_create_blog_post():
                 category, tags, seo_title, seo_description, seo_keywords, meta_robots,
                 canonical_url, og_title, og_description, og_image, twitter_title,
                 twitter_description, twitter_image, schema_markup, read_time, word_count,
-                published_at, created_at, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ai_seo_score, ai_seo_suggestions, published_at, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             data['title'], slug, data['content'], data.get('excerpt', ''),
@@ -18893,8 +18893,9 @@ def admin_create_blog_post():
             data.get('og_description', ''), data.get('og_image', ''),
             data.get('twitter_title', ''), data.get('twitter_description', ''),
             data.get('twitter_image', ''), data.get('schema_markup', ''),
-            read_time, word_count, published_at,
-            datetime.now().isoformat(), datetime.now().isoformat()
+            read_time, word_count,
+            data.get('ai_seo_score', 0), data.get('ai_seo_suggestions', '[]'),
+            published_at, datetime.now().isoformat(), datetime.now().isoformat()
         ))
 
         result = cursor.fetchone()
@@ -18938,7 +18939,8 @@ def admin_update_blog_post(post_id):
         for field in ['title', 'content', 'excerpt', 'featured_image', 'status', 'category',
                      'seo_title', 'seo_description', 'seo_keywords', 'meta_robots',
                      'canonical_url', 'og_title', 'og_description', 'og_image',
-                     'twitter_title', 'twitter_description', 'twitter_image', 'schema_markup']:
+                     'twitter_title', 'twitter_description', 'twitter_image', 'schema_markup',
+                     'ai_seo_score', 'ai_seo_suggestions']:
             if field in data:
                 update_fields.append(f"{field} = %s")
                 if field == 'tags':

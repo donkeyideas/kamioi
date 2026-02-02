@@ -364,7 +364,9 @@ const BlogEditor = ({ post, onSave, onCancel, isEditing = false }) => {
       
       const requestData = {
         ...formData,
-        status: 'published' // Always publish directly
+        status: 'published', // Always publish directly
+        ai_seo_score: seoScore,
+        ai_seo_suggestions: JSON.stringify(seoSuggestions)
       }
       
       const response = await fetch(url, {
