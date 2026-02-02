@@ -15,7 +15,7 @@ const ContentManagement = ({ user }) => {
   console.log('🟢 ContentManagement component loaded - NEW CODE VERSION')
   
   const { isLightMode, isDarkMode, isCloudMode } = useTheme()
-  const [activeTab, setActiveTab] = useState('pages')
+  const [activeTab, setActiveTab] = useState('blogs')
   const [pageTab, setPageTab] = useState('homepage')
   const [isEditing, setIsEditing] = useState(false)
   const [selectedContent, setSelectedContent] = useState(null)
@@ -30,7 +30,6 @@ const ContentManagement = ({ user }) => {
   const getCardClass = () => isLightMode ? 'bg-white/80 backdrop-blur-lg rounded-2xl p-6 border border-gray-200' : 'bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20'
 
   // Real content data from API
-  const [pages, setPages] = useState([])
   const [blogs, setBlogs] = useState([])
   const [frontendContent, setFrontendContent] = useState([])
   const [currentFrontendContent, setCurrentFrontendContent] = useState({})
@@ -77,22 +76,19 @@ const ContentManagement = ({ user }) => {
       const headers = { 'Authorization': `Bearer ${adminToken}` }
       
       try {
-        const [pagesRes, blogsRes, frontendRes, currentContentRes] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/admin/content/pages`, { headers }),
+        const [blogsRes, frontendRes, currentContentRes] = await Promise.all([
           fetch(`${apiBaseUrl}/api/admin/content/blogs`, { headers }),
           fetch(`${apiBaseUrl}/api/admin/content/frontend`, { headers }),
           fetch(`${apiBaseUrl}/api/admin/content/frontend/current`, { headers })
         ])
-        
-        const [pagesData, blogsData, frontendData, currentContentData] = await Promise.all([
-          pagesRes.ok ? pagesRes.json() : null,
+
+        const [blogsData, frontendData, currentContentData] = await Promise.all([
           blogsRes.ok ? blogsRes.json() : null,
           frontendRes.ok ? frontendRes.json() : null,
           currentContentRes.ok ? currentContentRes.json() : null
         ])
-        
+
         return {
-          pages: pagesData?.pages || pagesData?.data || [],
           blogs: blogsData?.data?.posts || blogsData?.posts || blogsData?.blogs || blogsData?.data || [],
           frontendContent: frontendData?.content || frontendData?.data || [],
           currentFrontendContent: currentContentData?.content || currentContentData?.data || {}
@@ -110,7 +106,6 @@ const ContentManagement = ({ user }) => {
     const cached = prefetchService.getCached('content')
     if (cached) {
       console.log('🚀 ContentManagement - Using cached data, showing immediately')
-      if (cached.pages) setPages(cached.pages)
       if (cached.blogs) setBlogs(cached.blogs)
       if (cached.frontendContent) setFrontendContent(cached.frontendContent)
       if (cached.currentFrontendContent) setCurrentFrontendContent(cached.currentFrontendContent)
@@ -148,11 +143,7 @@ const ContentManagement = ({ user }) => {
       const currentContentResponse = await fetch(`${apiBaseUrl}/api/frontend-content`, { signal: signal }).catch(() => null)
       
       // Try to fetch from admin endpoints (may not exist yet)
-      const [pagesResponse, blogsResponse, frontendResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/admin/content/pages`, {
-          headers: { 'Authorization': `Bearer ${adminToken}` },
-          signal: signal
-        }).catch(() => ({ ok: false })),
+      const [blogsResponse, frontendResponse] = await Promise.all([
         fetch(`${apiBaseUrl}/api/admin/blog/posts?limit=1000`, {
           headers: { 'Authorization': `Bearer ${adminToken}` },
           signal: signal
@@ -162,14 +153,7 @@ const ContentManagement = ({ user }) => {
           signal: signal
         }).catch(() => ({ ok: false }))
       ])
-      
-      if (pagesResponse?.ok) {
-        const pagesResult = await pagesResponse.json()
-        if (pagesResult.success) {
-          setPages(pagesResult.data.pages || [])
-        }
-      }
-      
+
       if (blogsResponse?.ok) {
         const blogsResult = await blogsResponse.json()
         if (blogsResult.success) {
@@ -331,10 +315,10 @@ const ContentManagement = ({ user }) => {
       const contentData = selectedContent || newContent
       const finalContentData = {
         ...contentData,
-        type: activeTab === 'pages' ? 'page' : 'blog',
+        type: 'blog',
         updatedAt: new Date().toISOString()
       }
-      
+
       const adminToken = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const response = await fetch(`${apiBaseUrl}/api/admin/content`, {
@@ -345,21 +329,14 @@ const ContentManagement = ({ user }) => {
         },
         body: JSON.stringify(finalContentData)
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
-          if (activeTab === 'pages') {
-            const updatedPages = selectedContent 
-              ? pages.map(p => p.id === selectedContent.id ? { ...selectedContent, lastModified: new Date().toISOString().split('T')[0] } : p)
-              : [...pages, { ...result.data, id: result.data.id || Date.now(), author: '', views: 0, lastModified: new Date().toISOString().split('T')[0] }]
-            setPages(updatedPages)
-          } else {
-            const updatedBlogs = selectedContent 
-              ? blogs.map(b => b.id === selectedContent.id ? { ...selectedContent, publishDate: selectedContent.status === 'published' ? new Date().toISOString().split('T')[0] : null } : b)
-              : [...blogs, { ...result.data, id: result.data.id || Date.now(), author: '', views: 0, publishDate: result.data.status === 'published' ? new Date().toISOString().split('T')[0] : null }]
-            setBlogs(updatedBlogs)
-          }
+          const updatedBlogs = selectedContent
+            ? blogs.map(b => b.id === selectedContent.id ? { ...selectedContent, publishDate: selectedContent.status === 'published' ? new Date().toISOString().split('T')[0] : null } : b)
+            : [...blogs, { ...result.data, id: result.data.id || Date.now(), author: '', views: 0, publishDate: result.data.status === 'published' ? new Date().toISOString().split('T')[0] : null }]
+          setBlogs(updatedBlogs)
           
           setIsEditing(false)
           setSelectedContent(null)
@@ -414,26 +391,17 @@ const ContentManagement = ({ user }) => {
         return
       }
       
-      let deleteUrl
-      if (activeTab === 'pages') {
-        deleteUrl = `${apiBaseUrl}/api/admin/content/${contentToDelete}`
-      } else {
-        deleteUrl = `${apiBaseUrl}/api/admin/blog/posts/${contentToDelete}`
-      }
-      
+      const deleteUrl = `${apiBaseUrl}/api/admin/blog/posts/${contentToDelete}`
+
       const response = await fetch(deleteUrl, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${adminToken}` }
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
-          if (activeTab === 'pages') {
-            setPages(pages.filter(p => p.id !== contentToDelete))
-          } else {
-            setBlogs(blogs.filter(b => b.id !== contentToDelete))
-          }
+          setBlogs(blogs.filter(b => b.id !== contentToDelete))
           setModal({
             isOpen: true,
             type: 'success',
@@ -778,98 +746,6 @@ const ContentManagement = ({ user }) => {
       })
     }
   }
-
-  const renderPagesTab = () => (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className={`text-xl font-semibold ${getTextColor()}`}>Website Pages</h3>
-        <button 
-          onClick={() => {
-            setSelectedContent(null)
-            setIsEditing(true)
-          }}
-          className="bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg px-4 py-2 text-blue-400 flex items-center space-x-2 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Page</span>
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-white/10">
-              <th className="text-left pb-3 text-gray-400 font-medium">Title</th>
-              <th className="text-left pb-3 text-gray-400 font-medium">Slug</th>
-              <th className="text-left pb-3 text-gray-400 font-medium">Status</th>
-              <th className="text-left pb-3 text-gray-400 font-medium">Last Modified</th>
-              <th className="text-left pb-3 text-gray-400 font-medium">Views</th>
-              <th className="text-right pb-3 text-gray-400 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pages && Array.isArray(pages) && pages.map(page => (
-              <tr key={page.id} className="border-b border-white/5 last:border-b-0">
-                <td className="py-3 pr-3">
-                  <div>
-                    <p className={`${getTextColor()} font-medium`}>{page.title}</p>
-                    <p className={`${getSubtextClass()} text-sm`}>by {page.author}</p>
-                  </div>
-                </td>
-                <td className="py-3 px-3 text-gray-300">{page.slug}</td>
-                <td className="py-3 px-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    page.status === 'published' 
-                      ? 'bg-green-500/20 text-green-400' 
-                      : 'bg-yellow-500/20 text-yellow-400'
-                  }`}>
-                    {page.status}
-                  </span>
-                </td>
-                <td className="py-3 px-3 text-gray-300">{page.lastModified}</td>
-                <td className="py-3 px-3 text-gray-300">{page.views?.toLocaleString() || '0'}</td>
-                <td className="py-3 pl-3 text-right">
-                  <div className="flex items-center justify-end space-x-2">
-                    <button 
-                      onClick={() => setShowPreview(true)}
-                      className="p-1 hover:bg-white/10 rounded transition-colors"
-                      title="Preview"
-                    >
-                      <Eye className="w-4 h-4 text-gray-400" />
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setSelectedContent(page)
-                        setIsEditing(true)
-                      }}
-                      className="p-1 hover:bg-white/10 rounded transition-colors"
-                      title="Edit"
-                    >
-                      <Edit className="w-4 h-4 text-blue-400" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteContent(page.id)}
-                      className="p-1 hover:bg-white/10 rounded transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {(!pages || !Array.isArray(pages) || pages.length === 0) && (
-              <tr>
-                <td colSpan="6" className="text-center py-8 text-gray-400">
-                  No pages found. Create your first page to get started.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
 
   const renderBlogsTab = () => (
     <div className="space-y-6">
@@ -5529,7 +5405,6 @@ const ContentManagement = ({ user }) => {
 
       <div className="flex space-x-1 bg-white/5 rounded-lg p-1">
         {[
-          { id: 'pages', label: 'Pages', icon: FileText },
           { id: 'blogs', label: 'Blog Posts', icon: Edit },
           { id: 'frontend', label: 'Frontend Content', icon: Globe },
           { id: 'seo', label: 'SEO Settings', icon: Settings },
@@ -5554,7 +5429,6 @@ const ContentManagement = ({ user }) => {
         <GoogleAnalytics user={user} />
       ) : (
         <div className={getCardClass()}>
-          {activeTab === 'pages' && renderPagesTab()}
           {activeTab === 'blogs' && renderBlogsTab()}
           {activeTab === 'frontend' && renderFrontendContentTab()}
           {activeTab === 'seo' && renderSEOTab()}
@@ -5576,7 +5450,7 @@ const ContentManagement = ({ user }) => {
           isEditing={!!selectedContent}
         />
       )}
-      {(isEditing && activeTab === 'pages' && renderContentEditor()) || (isEditing && activeTab === 'frontend' && renderContentEditor())}
+      {isEditing && activeTab === 'frontend' && renderContentEditor()}
 
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
