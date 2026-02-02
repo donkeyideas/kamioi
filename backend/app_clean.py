@@ -8708,13 +8708,12 @@ def admin_content_pages():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
-        # Return empty data - no mock data
+
+        # Frontend expects: pagesData?.pages || pagesData?.data || []
         return jsonify({
             'success': True,
-            'data': {
-                'pages': []
-            }
+            'pages': [],
+            'data': []
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -8726,10 +8725,13 @@ def admin_content_blogs():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
+        # Frontend expects: blogsData?.data?.posts || blogsData?.posts || blogsData?.blogs || blogsData?.data || []
         return jsonify({
             'success': True,
+            'posts': [],
+            'blogs': [],
             'data': {
-                'blogs': []
+                'posts': []
             }
         })
     except Exception as e:
@@ -8742,11 +8744,11 @@ def admin_content_frontend():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
+        # Frontend expects: frontendData?.content || frontendData?.data || []
         return jsonify({
             'success': True,
-            'data': {
-                'sections': []
-            }
+            'content': [],
+            'data': []
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -8758,8 +8760,10 @@ def admin_content_frontend_current():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
+        # Frontend expects: currentContentData?.content || currentContentData?.data || {}
         return jsonify({
             'success': True,
+            'content': {},
             'data': {}
         })
     except Exception as e:
