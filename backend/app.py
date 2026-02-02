@@ -15233,18 +15233,49 @@ def admin_get_employees():
     ok, res = require_role('admin')
     if ok is False:
         return res
-    
+
+    conn = None
     try:
         conn = db_manager.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, email, name, role, permissions, is_active, created_at 
-            FROM admins 
-            ORDER BY created_at DESC
-        """)
-        rows = cur.fetchall()
-        conn.close()
-        
+
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            # First ensure is_active column exists
+            try:
+                conn.execute(text("ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"))
+                conn.commit()
+            except Exception:
+                pass
+
+            result = conn.execute(text("""
+                SELECT id, email, name, role, permissions,
+                       COALESCE(is_active, TRUE) as is_active, created_at
+                FROM admins
+                ORDER BY created_at DESC
+            """))
+            rows = result.fetchall()
+        else:
+            cur = conn.cursor()
+            # SQLite - check if is_active column exists
+            cur.execute("PRAGMA table_info(admins)")
+            columns = [col[1] for col in cur.fetchall()]
+
+            if 'is_active' not in columns:
+                try:
+                    cur.execute("ALTER TABLE admins ADD COLUMN is_active INTEGER DEFAULT 1")
+                    conn.commit()
+                except Exception:
+                    pass
+
+            cur.execute("""
+                SELECT id, email, name, role, permissions,
+                       COALESCE(is_active, 1) as is_active, created_at
+                FROM admins
+                ORDER BY created_at DESC
+            """)
+            rows = cur.fetchall()
+            cur.close()
+
         employees = []
         for row in rows:
             employees.append({
@@ -15253,13 +15284,22 @@ def admin_get_employees():
                 'name': row[2],
                 'role': row[3],
                 'permissions': json.loads(row[4]) if row[4] else {},
-                'is_active': bool(row[5]),
+                'is_active': bool(row[5]) if row[5] is not None else True,
                 'created_at': row[6]
             })
-        
+
         return jsonify({'success': True, 'employees': employees})
     except Exception as e:
+        import traceback
+        print(f"[EMPLOYEES] Error: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': f'Failed to fetch employees: {str(e)}'}), 500
+    finally:
+        if conn:
+            if db_manager._use_postgresql:
+                db_manager.release_connection(conn)
+            else:
+                conn.close()
 
 @app.route('/api/admin/employees', methods=['POST'])
 def admin_add_employee():
@@ -15267,50 +15307,76 @@ def admin_add_employee():
     ok, res = require_role('admin')
     if ok is False:
         return res
-    
+
     data = request.get_json() or {}
     email = data.get('email', '').strip().lower()
     password = data.get('password', '').strip()
     name = data.get('name', '').strip()
     role = data.get('role', 'admin').strip()
     permissions = data.get('permissions', {})
-    
+
     if not email or not password or not name:
         return jsonify({'success': False, 'error': 'Email, password, and name are required'}), 400
-    
+
+    conn = None
     try:
         conn = db_manager.get_connection()
-        cur = conn.cursor()
-        
-        # Check if email already exists
-        cur.execute("SELECT id FROM admins WHERE email = ?", (email,))
-        if cur.fetchone():
-            return jsonify({'success': False, 'error': 'Employee with this email already exists'}), 400
-        
-        # Insert new employee
-        cur.execute("""
-            INSERT INTO admins (email, password, name, role, permissions, is_active)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            email,
-            password,
-            name,
-            role,
-            json.dumps(permissions),
-            1
-        ))
-        
-        employee_id = cur.lastrowid
-        conn.commit()
-        conn.close()
-        
+
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            # Check if email already exists
+            result = conn.execute(text("SELECT id FROM admins WHERE email = :email"), {'email': email})
+            if result.fetchone():
+                db_manager.release_connection(conn)
+                return jsonify({'success': False, 'error': 'Employee with this email already exists'}), 400
+
+            # Insert new employee
+            result = conn.execute(text("""
+                INSERT INTO admins (email, password, name, role, permissions, is_active)
+                VALUES (:email, :password, :name, :role, :permissions, TRUE)
+                RETURNING id
+            """), {
+                'email': email,
+                'password': password,
+                'name': name,
+                'role': role,
+                'permissions': json.dumps(permissions)
+            })
+            employee_id = result.fetchone()[0]
+            conn.commit()
+        else:
+            cur = conn.cursor()
+            # Check if email already exists
+            cur.execute("SELECT id FROM admins WHERE email = ?", (email,))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({'success': False, 'error': 'Employee with this email already exists'}), 400
+
+            # Insert new employee
+            cur.execute("""
+                INSERT INTO admins (email, password, name, role, permissions, is_active)
+                VALUES (?, ?, ?, ?, ?, 1)
+            """, (email, password, name, role, json.dumps(permissions)))
+            employee_id = cur.lastrowid
+            conn.commit()
+            cur.close()
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'message': 'Employee added successfully',
             'employee_id': employee_id
         })
     except Exception as e:
+        import traceback
+        print(f"[EMPLOYEES ADD] Error: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': f'Failed to add employee: {str(e)}'}), 500
+    finally:
+        if conn:
+            if db_manager._use_postgresql:
+                db_manager.release_connection(conn)
+            else:
+                conn.close()
 
 @app.route('/api/admin/employees/<int:employee_id>', methods=['PUT'])
 def admin_update_employee(employee_id):
@@ -15318,51 +15384,90 @@ def admin_update_employee(employee_id):
     ok, res = require_role('admin')
     if ok is False:
         return res
-    
+
     data = request.get_json() or {}
     email = data.get('email', '').strip().lower()
     password = data.get('password', '').strip()
     name = data.get('name', '').strip()
     role = data.get('role', 'admin').strip()
     permissions = data.get('permissions', {})
-    
+
     if not email or not name:
         return jsonify({'success': False, 'error': 'Email and name are required'}), 400
-    
+
+    conn = None
     try:
         conn = db_manager.get_connection()
-        cur = conn.cursor()
-        
-        # Check if employee exists
-        cur.execute("SELECT id FROM admins WHERE id = ?", (employee_id,))
-        if not cur.fetchone():
-            return jsonify({'success': False, 'error': 'Employee not found'}), 404
-        
-        # Check if email is taken by another employee
-        cur.execute("SELECT id FROM admins WHERE email = ? AND id != ?", (email, employee_id))
-        if cur.fetchone():
-            return jsonify({'success': False, 'error': 'Email is already taken by another employee'}), 400
-        
-        # Update employee
-        if password:
-            cur.execute("""
-                UPDATE admins 
-                SET email = ?, password = ?, name = ?, role = ?, permissions = ?
-                WHERE id = ?
-            """, (email, password, name, role, json.dumps(permissions), employee_id))
+
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            # Check if employee exists
+            result = conn.execute(text("SELECT id FROM admins WHERE id = :id"), {'id': employee_id})
+            if not result.fetchone():
+                return jsonify({'success': False, 'error': 'Employee not found'}), 404
+
+            # Check if email is taken by another employee
+            result = conn.execute(text("SELECT id FROM admins WHERE email = :email AND id != :id"),
+                                  {'email': email, 'id': employee_id})
+            if result.fetchone():
+                return jsonify({'success': False, 'error': 'Email is already taken by another employee'}), 400
+
+            # Update employee
+            if password:
+                conn.execute(text("""
+                    UPDATE admins
+                    SET email = :email, password = :password, name = :name, role = :role, permissions = :permissions
+                    WHERE id = :id
+                """), {'email': email, 'password': password, 'name': name, 'role': role,
+                       'permissions': json.dumps(permissions), 'id': employee_id})
+            else:
+                conn.execute(text("""
+                    UPDATE admins
+                    SET email = :email, name = :name, role = :role, permissions = :permissions
+                    WHERE id = :id
+                """), {'email': email, 'name': name, 'role': role,
+                       'permissions': json.dumps(permissions), 'id': employee_id})
+            conn.commit()
         else:
-            cur.execute("""
-                UPDATE admins 
-                SET email = ?, name = ?, role = ?, permissions = ?
-                WHERE id = ?
-            """, (email, name, role, json.dumps(permissions), employee_id))
-        
-        conn.commit()
-        conn.close()
-        
+            cur = conn.cursor()
+            # Check if employee exists
+            cur.execute("SELECT id FROM admins WHERE id = ?", (employee_id,))
+            if not cur.fetchone():
+                return jsonify({'success': False, 'error': 'Employee not found'}), 404
+
+            # Check if email is taken by another employee
+            cur.execute("SELECT id FROM admins WHERE email = ? AND id != ?", (email, employee_id))
+            if cur.fetchone():
+                return jsonify({'success': False, 'error': 'Email is already taken by another employee'}), 400
+
+            # Update employee
+            if password:
+                cur.execute("""
+                    UPDATE admins
+                    SET email = ?, password = ?, name = ?, role = ?, permissions = ?
+                    WHERE id = ?
+                """, (email, password, name, role, json.dumps(permissions), employee_id))
+            else:
+                cur.execute("""
+                    UPDATE admins
+                    SET email = ?, name = ?, role = ?, permissions = ?
+                    WHERE id = ?
+                """, (email, name, role, json.dumps(permissions), employee_id))
+            conn.commit()
+            cur.close()
+
         return jsonify({'success': True, 'message': 'Employee updated successfully'})
     except Exception as e:
+        import traceback
+        print(f"[EMPLOYEES UPDATE] Error: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': f'Failed to update employee: {str(e)}'}), 500
+    finally:
+        if conn:
+            if db_manager._use_postgresql:
+                db_manager.release_connection(conn)
+            else:
+                conn.close()
 
 @app.route('/api/admin/employees/<int:employee_id>', methods=['DELETE'])
 def admin_delete_employee(employee_id):
@@ -15370,29 +15475,55 @@ def admin_delete_employee(employee_id):
     ok, res = require_role('admin')
     if ok is False:
         return res
-    
+
+    conn = None
     try:
         conn = db_manager.get_connection()
-        cur = conn.cursor()
-        
-        # Check if employee exists and get role
-        cur.execute("SELECT role FROM admins WHERE id = ?", (employee_id,))
-        row = cur.fetchone()
-        if not row:
-            return jsonify({'success': False, 'error': 'Employee not found'}), 404
-        
-        # Prevent deletion of superadmin
-        if row[0] == 'superadmin':
-            return jsonify({'success': False, 'error': 'Cannot delete superadmin account'}), 400
-        
-        # Delete employee
-        cur.execute("DELETE FROM admins WHERE id = ?", (employee_id,))
-        conn.commit()
-        conn.close()
-        
+
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            # Check if employee exists and get role
+            result = conn.execute(text("SELECT role FROM admins WHERE id = :id"), {'id': employee_id})
+            row = result.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'Employee not found'}), 404
+
+            # Prevent deletion of superadmin
+            if row[0] == 'superadmin':
+                return jsonify({'success': False, 'error': 'Cannot delete superadmin account'}), 400
+
+            # Delete employee
+            conn.execute(text("DELETE FROM admins WHERE id = :id"), {'id': employee_id})
+            conn.commit()
+        else:
+            cur = conn.cursor()
+            # Check if employee exists and get role
+            cur.execute("SELECT role FROM admins WHERE id = ?", (employee_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'Employee not found'}), 404
+
+            # Prevent deletion of superadmin
+            if row[0] == 'superadmin':
+                return jsonify({'success': False, 'error': 'Cannot delete superadmin account'}), 400
+
+            # Delete employee
+            cur.execute("DELETE FROM admins WHERE id = ?", (employee_id,))
+            conn.commit()
+            cur.close()
+
         return jsonify({'success': True, 'message': 'Employee deleted successfully'})
     except Exception as e:
+        import traceback
+        print(f"[EMPLOYEES DELETE] Error: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': f'Failed to delete employee: {str(e)}'}), 500
+    finally:
+        if conn:
+            if db_manager._use_postgresql:
+                db_manager.release_connection(conn)
+            else:
+                conn.close()
 
 
 # Journal Entries Endpoints

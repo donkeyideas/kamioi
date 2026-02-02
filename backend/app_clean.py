@@ -684,6 +684,7 @@ def initialize_database():
                 role VARCHAR(50) DEFAULT 'admin',
                 password VARCHAR(255) NOT NULL,
                 permissions TEXT DEFAULT '[]',
+                is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -691,6 +692,12 @@ def initialize_database():
         # Add permissions column if missing (PostgreSQL syntax)
         try:
             cursor.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT '[]'")
+        except Exception:
+            pass
+
+        # Add is_active column if missing (PostgreSQL syntax)
+        try:
+            cursor.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
         except Exception:
             pass
 
