@@ -1868,32 +1868,54 @@ def admin_get_employees():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # Ensure is_active column exists
         try:
-            cursor.execute("SELECT id, name, email, role, permissions FROM admins")
-        except sqlite3.OperationalError:
-            cursor.execute("SELECT id, name, email, role FROM admins")
+            cursor.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+            conn.commit()
+        except Exception:
+            pass
+
+        # Select employees with COALESCE for is_active
+        cursor.execute("""
+            SELECT id, name, email, role, permissions, COALESCE(is_active, TRUE) as is_active, created_at
+            FROM admins
+            ORDER BY created_at DESC
+        """)
         employees = cursor.fetchall()
         conn.close()
-        
+
         employee_list = []
         for emp in employees:
+            # PostgreSQL returns tuples, use integer indices
+            permissions_raw = emp[4] if len(emp) > 4 else '[]'
+            try:
+                permissions = json.loads(permissions_raw) if permissions_raw else {}
+            except (json.JSONDecodeError, TypeError):
+                permissions = {}
+
             employee_list.append({
-                'id': emp['id'],
-                'name': emp['name'],
-                'email': emp['email'],
-                'role': emp['role'],
-                'permissions': emp['permissions'] if 'permissions' in emp.keys() else '[]'
+                'id': emp[0],
+                'name': emp[1],
+                'email': emp[2],
+                'role': emp[3],
+                'permissions': permissions,
+                'is_active': bool(emp[5]) if len(emp) > 5 and emp[5] is not None else True,
+                'created_at': emp[6] if len(emp) > 6 else None
             })
-        
+
         return jsonify({
             'success': True,
             'employees': employee_list
         })
-        
+
     except Exception as e:
+        import traceback
+        print(f"[EMPLOYEES GET] Error: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/employees/<int:employee_id>', methods=['PUT', 'DELETE'])
