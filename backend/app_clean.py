@@ -17004,7 +17004,9 @@ def public_get_blog_posts():
 
         return jsonify({
             'success': True,
-            'posts': post_list,
+            'data': {
+                'posts': post_list  # Frontend expects data.data.posts
+            },
             'pagination': {
                 'page': page,
                 'limit': limit,
@@ -17015,7 +17017,7 @@ def public_get_blog_posts():
 
     except Exception as e:
         print(f"Error in public_get_blog_posts: {e}")
-        return jsonify({'success': True, 'posts': [], 'pagination': {'page': 1, 'limit': 6, 'total': 0, 'pages': 0}})
+        return jsonify({'success': True, 'data': {'posts': []}, 'pagination': {'page': 1, 'limit': 6, 'total': 0, 'pages': 0}})
 
 @app.route('/api/blog/posts/<slug>', methods=['GET'])
 def public_get_blog_post(slug):
