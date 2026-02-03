@@ -657,6 +657,276 @@ def get_category_distribution():
         print(f"Error getting category distribution: {e}")
         return {}
 
+
+# ==========================================
+# JOURNAL ENTRY AUTOMATION FUNCTIONS
+# ==========================================
+
+def create_journal_entry(entry_date, description, lines, transaction_type='manual', reference='', created_by='system', source='system', source_id=None, auto_post=True):
+    """
+    Create a double-entry journal entry with the given lines.
+
+    Args:
+        entry_date: Date of the entry (string or date object)
+        description: Description of the transaction
+        lines: List of dicts with 'account_number', 'debit', 'credit', 'description'
+        transaction_type: Type of transaction (subscription, investment, fee, etc.)
+        reference: Optional reference number
+        created_by: Who created this entry
+        source: Source of the entry (system, webhook, manual, etc.)
+        source_id: ID from the source system
+        auto_post: If True, automatically post the entry
+
+    Returns:
+        dict with success status and entry_id or error
+    """
+    try:
+        # Validate debits = credits
+        total_debits = sum(float(line.get('debit', 0) or 0) for line in lines)
+        total_credits = sum(float(line.get('credit', 0) or 0) for line in lines)
+
+        if abs(total_debits - total_credits) > 0.01:
+            return {'success': False, 'error': f'Debits ({total_debits}) must equal credits ({total_credits})'}
+
+        if len(lines) < 2:
+            return {'success': False, 'error': 'At least two lines required for double-entry'}
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        status = 'posted' if auto_post else 'draft'
+
+        # Insert journal entry
+        cursor.execute("""
+            INSERT INTO journal_entries (entry_date, reference, description, transaction_type, status, created_by, source, source_id, posted_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CASE WHEN %s = 'posted' THEN CURRENT_TIMESTAMP ELSE NULL END)
+            RETURNING id
+        """, (entry_date, reference, description, transaction_type, status, created_by, source, source_id, status))
+
+        entry_id = cursor.fetchone()[0]
+
+        # Insert journal entry lines
+        for line in lines:
+            account_number = line.get('account_number')
+            debit = float(line.get('debit', 0) or 0)
+            credit = float(line.get('credit', 0) or 0)
+            line_description = line.get('description', '')
+
+            cursor.execute("""
+                INSERT INTO journal_entry_lines (journal_entry_id, account_number, debit, credit, description)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (entry_id, account_number, debit, credit, line_description))
+
+        conn.commit()
+        conn.close()
+
+        print(f"[JOURNAL] Created entry JE-{entry_id:06d}: {description} (${total_debits:.2f})")
+        return {'success': True, 'entry_id': entry_id, 'journal_entry_id': f'JE-{entry_id:06d}'}
+
+    except Exception as e:
+        print(f"[JOURNAL ERROR] Failed to create entry: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+
+def create_subscription_payment_entry(amount, account_type, reference='', user_id=None):
+    """
+    Record a subscription payment: DR Cash, CR Deferred Revenue
+
+    Args:
+        amount: Payment amount
+        account_type: 'individual', 'family', or 'business'
+        reference: Payment reference (e.g., Stripe payment ID)
+        user_id: User ID for tracking
+    """
+    # Map account type to deferred revenue account
+    deferred_accounts = {
+        'individual': '23010',  # Deferred Revenue – Individual Accounts
+        'family': '23020',      # Deferred Revenue – Family Accounts
+        'business': '23030'     # Deferred Revenue – Business Accounts
+    }
+    deferred_account = deferred_accounts.get(account_type, '23000')  # Default to general deferred
+
+    lines = [
+        {'account_number': '10100', 'debit': amount, 'credit': 0, 'description': 'Cash received'},
+        {'account_number': deferred_account, 'debit': 0, 'credit': amount, 'description': f'Deferred revenue - {account_type}'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description=f'Subscription payment - {account_type.title()} Account',
+        lines=lines,
+        transaction_type='subscription',
+        reference=reference,
+        source='subscription',
+        source_id=str(user_id) if user_id else None
+    )
+
+
+def create_revenue_recognition_entry(amount, account_type, reference=''):
+    """
+    Recognize revenue from deferred: DR Deferred Revenue, CR Revenue
+
+    Args:
+        amount: Amount to recognize
+        account_type: 'individual', 'family', or 'business'
+        reference: Optional reference
+    """
+    # Map account type to accounts
+    deferred_accounts = {
+        'individual': '23010',
+        'family': '23020',
+        'business': '23030'
+    }
+    revenue_accounts = {
+        'individual': '40100',  # Revenue – Individual Accounts
+        'family': '40200',      # Revenue – Family Accounts
+        'business': '40300'     # Revenue – Business Accounts
+    }
+
+    deferred_account = deferred_accounts.get(account_type, '23000')
+    revenue_account = revenue_accounts.get(account_type, '40400')
+
+    lines = [
+        {'account_number': deferred_account, 'debit': amount, 'credit': 0, 'description': 'Deferred revenue recognized'},
+        {'account_number': revenue_account, 'debit': 0, 'credit': amount, 'description': f'Revenue recognized - {account_type}'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description=f'Revenue recognition - {account_type.title()} Account',
+        lines=lines,
+        transaction_type='revenue_recognition',
+        reference=reference,
+        source='system'
+    )
+
+
+def create_investment_entry(amount, reference='', user_id=None):
+    """
+    Record a round-up investment: DR Investments, CR Cash
+
+    Args:
+        amount: Investment amount
+        reference: Transaction reference
+        user_id: User ID for tracking
+    """
+    lines = [
+        {'account_number': '13000', 'debit': amount, 'credit': 0, 'description': 'Investment asset acquired'},
+        {'account_number': '10100', 'debit': 0, 'credit': amount, 'description': 'Cash used for investment'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description='Round-up investment processed',
+        lines=lines,
+        transaction_type='investment',
+        reference=reference,
+        source='investment',
+        source_id=str(user_id) if user_id else None
+    )
+
+
+def create_platform_fee_entry(amount, reference=''):
+    """
+    Record platform fee collection: DR Cash, CR Fee Revenue
+
+    Args:
+        amount: Fee amount
+        reference: Transaction reference
+    """
+    lines = [
+        {'account_number': '10100', 'debit': amount, 'credit': 0, 'description': 'Fee collected'},
+        {'account_number': '40700', 'debit': 0, 'credit': amount, 'description': 'Platform fee revenue'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description='Platform fee collected',
+        lines=lines,
+        transaction_type='fee',
+        reference=reference,
+        source='system'
+    )
+
+
+def create_user_deposit_entry(amount, reference='', user_id=None):
+    """
+    Record user deposit/contribution: DR Cash, CR Owner Contributions
+
+    Args:
+        amount: Deposit amount
+        reference: Transaction reference
+        user_id: User ID for tracking
+    """
+    lines = [
+        {'account_number': '10100', 'debit': amount, 'credit': 0, 'description': 'Deposit received'},
+        {'account_number': '30200', 'debit': 0, 'credit': amount, 'description': 'Owner contribution'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description='User deposit received',
+        lines=lines,
+        transaction_type='deposit',
+        reference=reference,
+        source='deposit',
+        source_id=str(user_id) if user_id else None
+    )
+
+
+def create_expense_entry(amount, expense_account, description, reference='', vendor=''):
+    """
+    Record an expense: DR Expense Account, CR Accounts Payable
+
+    Args:
+        amount: Expense amount
+        expense_account: GL account number for the expense
+        description: Description of the expense
+        reference: Invoice or reference number
+        vendor: Vendor name
+    """
+    lines = [
+        {'account_number': expense_account, 'debit': amount, 'credit': 0, 'description': description},
+        {'account_number': '20000', 'debit': 0, 'credit': amount, 'description': f'Payable - {vendor}'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description=f'{description} - {vendor}' if vendor else description,
+        lines=lines,
+        transaction_type='expense',
+        reference=reference,
+        source='expense'
+    )
+
+
+def create_payment_entry(amount, payable_account='20000', reference='', description='Vendor payment'):
+    """
+    Record a payment: DR Accounts Payable, CR Cash
+
+    Args:
+        amount: Payment amount
+        payable_account: GL account for the payable (default: 20000 AP)
+        reference: Check or payment reference
+        description: Payment description
+    """
+    lines = [
+        {'account_number': payable_account, 'debit': amount, 'credit': 0, 'description': 'Liability reduced'},
+        {'account_number': '10100', 'debit': 0, 'credit': amount, 'description': 'Cash paid'}
+    ]
+
+    return create_journal_entry(
+        entry_date=datetime.now().strftime('%Y-%m-%d'),
+        description=description,
+        lines=lines,
+        transaction_type='payment',
+        reference=reference,
+        source='payment'
+    )
+
+
 def initialize_database():
     """Initialize database with required tables and columns"""
     conn = get_db_connection()
@@ -1316,6 +1586,141 @@ def initialize_database():
                 FOREIGN KEY (transaction_id) REFERENCES transactions (id)
             )
         """)
+
+        # ========== FINANCIAL/ACCOUNTING TABLES ==========
+
+        # Create chart_of_accounts table for GL structure
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chart_of_accounts (
+                account_number VARCHAR(10) PRIMARY KEY,
+                account_name VARCHAR(255) NOT NULL,
+                account_type VARCHAR(50) NOT NULL,
+                category VARCHAR(50) NOT NULL,
+                normal_balance VARCHAR(10) NOT NULL,
+                subcategory VARCHAR(100),
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Create journal_entries table for double-entry bookkeeping
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS journal_entries (
+                id SERIAL PRIMARY KEY,
+                entry_date DATE NOT NULL,
+                reference VARCHAR(100),
+                description TEXT NOT NULL,
+                transaction_type VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'draft',
+                created_by VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                posted_at TIMESTAMP,
+                source VARCHAR(50) DEFAULT 'manual',
+                source_id VARCHAR(100)
+            )
+        """)
+
+        # Create journal_entry_lines table for individual debits/credits
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS journal_entry_lines (
+                id SERIAL PRIMARY KEY,
+                journal_entry_id INTEGER NOT NULL,
+                account_number VARCHAR(10) NOT NULL,
+                debit DECIMAL(15, 2) DEFAULT 0,
+                credit DECIMAL(15, 2) DEFAULT 0,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (journal_entry_id) REFERENCES journal_entries (id) ON DELETE CASCADE,
+                FOREIGN KEY (account_number) REFERENCES chart_of_accounts (account_number)
+            )
+        """)
+
+        # Seed chart of accounts if empty (all balances start at $0)
+        cursor.execute("SELECT COUNT(*) FROM chart_of_accounts")
+        coa_count = cursor.fetchone()[0]
+        if coa_count == 0:
+            print("Seeding chart of accounts...")
+            chart_of_accounts_data = [
+                # Assets
+                ('10100', 'Cash – Bank of America', 'Asset', 'Assets', 'Debit'),
+                ('10150', 'Petty Cash', 'Asset', 'Assets', 'Debit'),
+                ('11000', 'Accounts Receivable', 'Asset', 'Assets', 'Debit'),
+                ('12000', 'Prepaid Expenses', 'Asset', 'Assets', 'Debit'),
+                ('13000', 'Investments – Short Term', 'Asset', 'Assets', 'Debit'),
+                ('14000', 'Equipment & Computers', 'Asset', 'Assets', 'Debit'),
+                ('15000', 'Software & Development Assets', 'Asset', 'Assets', 'Debit'),
+                ('15100', 'Cloud Credits / Deferred Tech Assets', 'Asset', 'Assets', 'Debit'),
+                ('15200', 'LLM Data Assets', 'Asset', 'Assets', 'Debit'),
+                ('16000', 'Security Deposits', 'Asset', 'Assets', 'Debit'),
+                ('17000', 'Intercompany Receivable', 'Asset', 'Assets', 'Debit'),
+                # Liabilities
+                ('20000', 'Accounts Payable', 'Liability', 'Liabilities', 'Credit'),
+                ('20100', 'Credit Card Payable', 'Liability', 'Liabilities', 'Credit'),
+                ('21000', 'Accrued Expenses', 'Liability', 'Liabilities', 'Credit'),
+                ('22000', 'Payroll Liabilities', 'Liability', 'Liabilities', 'Credit'),
+                ('23000', 'Deferred Revenue', 'Liability', 'Liabilities', 'Credit'),
+                ('23010', 'Deferred Revenue – Individual Accounts', 'Liability', 'Liabilities', 'Credit'),
+                ('23020', 'Deferred Revenue – Family Accounts', 'Liability', 'Liabilities', 'Credit'),
+                ('23030', 'Deferred Revenue – Business Accounts', 'Liability', 'Liabilities', 'Credit'),
+                ('23040', 'Deferred Revenue – Failed Payments', 'Liability', 'Liabilities', 'Credit'),
+                ('24000', 'Taxes Payable', 'Liability', 'Liabilities', 'Credit'),
+                ('25000', 'Intercompany Payable', 'Liability', 'Liabilities', 'Credit'),
+                ('26000', 'Customer Deposits', 'Liability', 'Liabilities', 'Credit'),
+                # Equity
+                ('30000', 'Common Stock', 'Equity', 'Equity', 'Credit'),
+                ('30100', 'Additional Paid-in Capital', 'Equity', 'Equity', 'Credit'),
+                ('30200', 'Owner Contributions', 'Equity', 'Equity', 'Credit'),
+                ('31000', 'Retained Earnings', 'Equity', 'Equity', 'Credit'),
+                ('32000', 'Current Year Earnings', 'Equity', 'Equity', 'Credit'),
+                # Revenue
+                ('40100', 'Revenue – Individual Accounts', 'Revenue', 'Revenue', 'Credit'),
+                ('40200', 'Revenue – Family Accounts', 'Revenue', 'Revenue', 'Credit'),
+                ('40300', 'Revenue – Business Accounts', 'Revenue', 'Revenue', 'Credit'),
+                ('40400', 'Subscription Revenue', 'Revenue', 'Revenue', 'Credit'),
+                ('40500', 'AI Insight Revenue', 'Revenue', 'Revenue', 'Credit'),
+                ('40600', 'Advertisement Revenue', 'Revenue', 'Revenue', 'Credit'),
+                ('40700', 'Platform Fee Revenue', 'Revenue', 'Revenue', 'Credit'),
+                ('40800', 'Data Licensing / API Revenue', 'Revenue', 'Revenue', 'Credit'),
+                ('40900', 'Other Revenue', 'Revenue', 'Revenue', 'Credit'),
+                # COGS
+                ('50100', 'Cloud Compute (AWS, Azure, GCP)', 'COGS', 'COGS', 'Debit'),
+                ('50200', 'Data Acquisition & Labeling', 'COGS', 'COGS', 'Debit'),
+                ('50300', 'AI/LLM Training Costs', 'COGS', 'COGS', 'Debit'),
+                ('50400', 'Model Hosting & API Costs', 'COGS', 'COGS', 'Debit'),
+                ('50500', 'Payment Processing Fees', 'COGS', 'COGS', 'Debit'),
+                ('50600', 'Content Moderation & Review', 'COGS', 'COGS', 'Debit'),
+                ('50700', 'Direct DevOps Support', 'COGS', 'COGS', 'Debit'),
+                ('50800', 'Data Storage', 'COGS', 'COGS', 'Debit'),
+                ('50900', 'AI Compute Hardware Depreciation', 'COGS', 'COGS', 'Debit'),
+                # Expenses
+                ('60100', 'Salaries – Full-Time Employees', 'Expense', 'Expense', 'Debit'),
+                ('60110', 'Salaries – Founders', 'Expense', 'Expense', 'Debit'),
+                ('60120', 'Contractor Payments', 'Expense', 'Expense', 'Debit'),
+                ('60130', 'Payroll Taxes', 'Expense', 'Expense', 'Debit'),
+                ('60140', 'Employee Benefits', 'Expense', 'Expense', 'Debit'),
+                ('61000', 'Cloud Services (AWS, Azure, GCP)', 'Expense', 'Expense', 'Debit'),
+                ('61010', 'LLM Hosting & API Costs', 'Expense', 'Expense', 'Debit'),
+                ('62000', 'Paid Advertising', 'Expense', 'Expense', 'Debit'),
+                ('62010', 'Social Media Marketing', 'Expense', 'Expense', 'Debit'),
+                ('63000', 'Rent & Office Space', 'Expense', 'Expense', 'Debit'),
+                ('63010', 'Utilities', 'Expense', 'Expense', 'Debit'),
+                ('63020', 'Insurance – General Liability', 'Expense', 'Expense', 'Debit'),
+                ('63030', 'Legal Fees', 'Expense', 'Expense', 'Debit'),
+                ('63040', 'Accounting & Audit', 'Expense', 'Expense', 'Debit'),
+                ('67010', 'Amortization Expense', 'Expense', 'Expense', 'Debit'),
+                # Other Income/Expense
+                ('70100', 'Interest Income', 'Other Income', 'Other Income/Expense', 'Credit'),
+                ('70200', 'Interest Expense', 'Other Expense', 'Other Income/Expense', 'Debit'),
+                ('70300', 'FX Gain/Loss', 'Other Income/Expense', 'Other Income/Expense', 'Credit'),
+            ]
+            for acc in chart_of_accounts_data:
+                cursor.execute("""
+                    INSERT INTO chart_of_accounts (account_number, account_name, account_type, category, normal_balance)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (account_number) DO NOTHING
+                """, acc)
+            print("✅ Chart of accounts seeded successfully")
 
         conn.commit()
         print("✅ Database tables created successfully")
@@ -4038,29 +4443,92 @@ def business_stress_test_categories():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Financial Cash Flow endpoint
+# Financial Cash Flow endpoint - queries real journal entries for cash account movements
 @app.route('/api/financial/cash-flow', methods=['GET'])
 def financial_cash_flow():
     try:
         period = request.args.get('period', 'month')
-        
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Get date range based on period
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        if period == 'week':
+            start_date = today - timedelta(days=7)
+        elif period == 'month':
+            start_date = today - timedelta(days=30)
+        elif period == 'quarter':
+            start_date = today - timedelta(days=90)
+        elif period == 'year':
+            start_date = today - timedelta(days=365)
+        else:
+            start_date = today - timedelta(days=30)
+
+        # Cash accounts are 10xxx series
+        # Inflows = credits to cash from revenue/equity accounts
+        # Outflows = debits from cash for expenses/liabilities
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN jel.debit > 0 THEN jel.debit ELSE 0 END), 0) as total_debits,
+                COALESCE(SUM(CASE WHEN jel.credit > 0 THEN jel.credit ELSE 0 END), 0) as total_credits
+            FROM journal_entry_lines jel
+            JOIN journal_entries je ON jel.journal_entry_id = je.id
+            WHERE jel.account_number LIKE '10%%'
+            AND je.status = 'posted'
+            AND je.entry_date >= %s
+        """, (start_date.date(),))
+
+        row = cursor.fetchone()
+        cash_debits = float(row[0]) if row[0] else 0.0  # Cash in (debits to cash = increase)
+        cash_credits = float(row[1]) if row[1] else 0.0  # Cash out (credits to cash = decrease)
+
+        # Get breakdown by transaction type
+        cursor.execute("""
+            SELECT
+                je.transaction_type,
+                COALESCE(SUM(jel.debit), 0) as debits,
+                COALESCE(SUM(jel.credit), 0) as credits
+            FROM journal_entry_lines jel
+            JOIN journal_entries je ON jel.journal_entry_id = je.id
+            WHERE jel.account_number LIKE '10%%'
+            AND je.status = 'posted'
+            AND je.entry_date >= %s
+            GROUP BY je.transaction_type
+        """, (start_date.date(),))
+
+        categories = []
+        for cat_row in cursor.fetchall():
+            trans_type = cat_row[0] or 'Other'
+            debits = float(cat_row[1]) if cat_row[1] else 0.0
+            credits = float(cat_row[2]) if cat_row[2] else 0.0
+            net = debits - credits
+            if net > 0:
+                categories.append({'name': trans_type.title(), 'amount': net, 'type': 'inflow'})
+            elif net < 0:
+                categories.append({'name': trans_type.title(), 'amount': abs(net), 'type': 'outflow'})
+
+        conn.close()
+
+        net_cash_flow = cash_debits - cash_credits
+        trend = 'positive' if net_cash_flow >= 0 else 'negative'
+
         return jsonify({
             'success': True,
             'cash_flow': {
                 'period': period,
-                'inflow': 2500.00,
-                'outflow': 1800.00,
-                'net_cash_flow': 700.00,
-                'categories': [
-                    {'name': 'Income', 'amount': 2500.00, 'type': 'inflow'},
-                    {'name': 'Expenses', 'amount': 1200.00, 'type': 'outflow'},
-                    {'name': 'Investments', 'amount': 600.00, 'type': 'outflow'}
-                ],
-                'trend': 'positive'
+                'inflow': round(cash_debits, 2),
+                'outflow': round(cash_credits, 2),
+                'net_cash_flow': round(net_cash_flow, 2),
+                'categories': categories,
+                'trend': trend
             }
         })
-        
+
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # Financial User Analytics endpoint
@@ -4097,36 +4565,131 @@ def financial_user_analytics():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Financial Balance Sheet endpoint
+# Financial Balance Sheet endpoint - queries real GL account balances
 @app.route('/api/financial/balance-sheet', methods=['GET'])
 def financial_balance_sheet():
     try:
         period = request.args.get('period', 'month')
-        
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Query all balance sheet accounts (Assets, Liabilities, Equity) with calculated balances
+        cursor.execute("""
+            SELECT
+                coa.account_number,
+                coa.account_name,
+                coa.account_type,
+                coa.category,
+                coa.normal_balance,
+                COALESCE(
+                    CASE
+                        WHEN coa.normal_balance = 'Debit' THEN SUM(COALESCE(jel.debit, 0)) - SUM(COALESCE(jel.credit, 0))
+                        ELSE SUM(COALESCE(jel.credit, 0)) - SUM(COALESCE(jel.debit, 0))
+                    END, 0
+                ) as balance
+            FROM chart_of_accounts coa
+            LEFT JOIN journal_entry_lines jel ON coa.account_number = jel.account_number
+            LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id AND je.status = 'posted'
+            WHERE coa.category IN ('Assets', 'Liabilities', 'Equity')
+            GROUP BY coa.account_number, coa.account_name, coa.account_type, coa.category, coa.normal_balance
+            ORDER BY coa.account_number
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Organize by category
+        assets = {'total': 0.0, 'cash': 0.0, 'receivables': 0.0, 'investments': 0.0, 'fixed': 0.0, 'other': 0.0, 'accounts': []}
+        liabilities = {'total': 0.0, 'payables': 0.0, 'deferred_revenue': 0.0, 'other': 0.0, 'accounts': []}
+        equity = {'total': 0.0, 'common_stock': 0.0, 'retained_earnings': 0.0, 'paid_in_capital': 0.0, 'other': 0.0, 'accounts': []}
+
+        for row in rows:
+            account_number = row[0]
+            account_name = row[1]
+            category = row[3]
+            balance = float(row[5]) if row[5] else 0.0
+
+            account_data = {'account_number': account_number, 'account_name': account_name, 'balance': balance}
+
+            if category == 'Assets':
+                assets['total'] += balance
+                assets['accounts'].append(account_data)
+                # Categorize assets
+                if account_number.startswith('10'):
+                    assets['cash'] += balance
+                elif account_number.startswith('11'):
+                    assets['receivables'] += balance
+                elif account_number.startswith('13'):
+                    assets['investments'] += balance
+                elif account_number.startswith('14') or account_number.startswith('15'):
+                    assets['fixed'] += balance
+                else:
+                    assets['other'] += balance
+
+            elif category == 'Liabilities':
+                liabilities['total'] += balance
+                liabilities['accounts'].append(account_data)
+                # Categorize liabilities
+                if account_number.startswith('20'):
+                    liabilities['payables'] += balance
+                elif account_number.startswith('23'):
+                    liabilities['deferred_revenue'] += balance
+                else:
+                    liabilities['other'] += balance
+
+            elif category == 'Equity':
+                equity['total'] += balance
+                equity['accounts'].append(account_data)
+                # Categorize equity
+                if account_number == '30000':
+                    equity['common_stock'] += balance
+                elif account_number == '31000':
+                    equity['retained_earnings'] += balance
+                elif account_number == '30100' or account_number == '30200':
+                    equity['paid_in_capital'] += balance
+                else:
+                    equity['other'] += balance
+
+        # Verify accounting equation: Assets = Liabilities + Equity
+        is_balanced = abs(assets['total'] - (liabilities['total'] + equity['total'])) < 0.01
+
         return jsonify({
             'success': True,
             'balance_sheet': {
                 'period': period,
+                'as_of_date': datetime.now().strftime('%Y-%m-%d'),
                 'assets': {
-                    'total': 50000.00,
-                    'cash': 15000.00,
-                    'investments': 30000.00,
-                    'other': 5000.00
+                    'total': round(assets['total'], 2),
+                    'cash': round(assets['cash'], 2),
+                    'receivables': round(assets['receivables'], 2),
+                    'investments': round(assets['investments'], 2),
+                    'fixed': round(assets['fixed'], 2),
+                    'other': round(assets['other'], 2),
+                    'accounts': assets['accounts']
                 },
                 'liabilities': {
-                    'total': 10000.00,
-                    'debt': 5000.00,
-                    'other': 5000.00
+                    'total': round(liabilities['total'], 2),
+                    'payables': round(liabilities['payables'], 2),
+                    'deferred_revenue': round(liabilities['deferred_revenue'], 2),
+                    'other': round(liabilities['other'], 2),
+                    'accounts': liabilities['accounts']
                 },
                 'equity': {
-                    'total': 40000.00,
-                    'retained_earnings': 25000.00,
-                    'paid_in_capital': 15000.00
-                }
+                    'total': round(equity['total'], 2),
+                    'common_stock': round(equity['common_stock'], 2),
+                    'retained_earnings': round(equity['retained_earnings'], 2),
+                    'paid_in_capital': round(equity['paid_in_capital'], 2),
+                    'other': round(equity['other'], 2),
+                    'accounts': equity['accounts']
+                },
+                'is_balanced': is_balanced
             }
         })
-        
+
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # Admin Security Settings endpoint
@@ -10516,107 +11079,102 @@ def admin_financial_accounts():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
         if request.method == 'POST':
-            # Create new account - just return success for now
+            # Create new account in database
             data = request.get_json() or {}
-            return jsonify({
-                'success': True,
-                'data': {
-                    'id': 999,
-                    'account_number': data.get('account_number', '99999'),
-                    'account_name': data.get('account_name', 'New Account'),
-                    'account_type': data.get('account_type', 'Asset'),
-                    'category': data.get('category', 'Assets'),
-                    'normal_balance': data.get('normal_balance', 'Debit'),
-                    'balance': 0
-                }
-            })
+            account_number = data.get('account_number', '').strip()
+            account_name = data.get('account_name', '').strip()
+            account_type = data.get('account_type', 'Asset')
+            category = data.get('category', 'Assets')
+            normal_balance = data.get('normal_balance', 'Debit')
+            subcategory = data.get('subcategory', '')
 
-        # GET - Return chart of accounts
+            if not account_number or not account_name:
+                return jsonify({'success': False, 'error': 'Account number and name are required'}), 400
+
+            conn = get_db_connection()
+            cursor = get_db_cursor(conn)
+
+            try:
+                cursor.execute("""
+                    INSERT INTO chart_of_accounts (account_number, account_name, account_type, category, normal_balance, subcategory)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING account_number, account_name, account_type, category, normal_balance, subcategory, is_active
+                """, (account_number, account_name, account_type, category, normal_balance, subcategory))
+                row = cursor.fetchone()
+                conn.commit()
+                conn.close()
+
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'account_number': row[0],
+                        'account_name': row[1],
+                        'account_type': row[2],
+                        'category': row[3],
+                        'normal_balance': row[4],
+                        'subcategory': row[5],
+                        'is_active': row[6],
+                        'balance': 0
+                    }
+                })
+            except Exception as e:
+                conn.close()
+                if 'duplicate key' in str(e).lower() or 'unique' in str(e).lower():
+                    return jsonify({'success': False, 'error': 'Account number already exists'}), 400
+                raise
+
+        # GET - Return chart of accounts from database with calculated balances
         category_filter = request.args.get('category', 'all')
 
-        # Full chart of accounts matching the GL structure
-        gl_accounts = [
-            # Assets
-            {'account_number': '10100', 'account_name': 'Cash – Bank of America', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 125000.00},
-            {'account_number': '10150', 'account_name': 'Petty Cash', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 500.00},
-            {'account_number': '11000', 'account_name': 'Accounts Receivable', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 45000.00},
-            {'account_number': '12000', 'account_name': 'Prepaid Expenses', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 8500.00},
-            {'account_number': '13000', 'account_name': 'Investments – Short Term', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 50000.00},
-            {'account_number': '14000', 'account_name': 'Equipment & Computers', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 35000.00},
-            {'account_number': '15000', 'account_name': 'Software & Development Assets', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 120000.00},
-            {'account_number': '15100', 'account_name': 'Cloud Credits / Deferred Tech Assets', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 25000.00},
-            {'account_number': '15200', 'account_name': 'LLM Data Assets', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 180000.00},
-            {'account_number': '16000', 'account_name': 'Security Deposits', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 5000.00},
-            {'account_number': '17000', 'account_name': 'Intercompany Receivable – Basketball LLC', 'account_type': 'Asset', 'category': 'Assets', 'normal_balance': 'Debit', 'balance': 12000.00},
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
 
-            # Liabilities
-            {'account_number': '20000', 'account_name': 'Accounts Payable', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 28000.00},
-            {'account_number': '20100', 'account_name': 'Credit Card Payable', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 5500.00},
-            {'account_number': '21000', 'account_name': 'Accrued Expenses', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 12000.00},
-            {'account_number': '22000', 'account_name': 'Payroll Liabilities', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 18000.00},
-            {'account_number': '23000', 'account_name': 'Deferred Revenue', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 35000.00},
-            {'account_number': '23010', 'account_name': 'Deferred Revenue – Individual Accounts', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 8500.00},
-            {'account_number': '23020', 'account_name': 'Deferred Revenue – Family Accounts', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 12000.00},
-            {'account_number': '23030', 'account_name': 'Deferred Revenue – Business Accounts', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 25000.00},
-            {'account_number': '23040', 'account_name': 'Deferred Revenue – Failed Payments', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 1500.00},
-            {'account_number': '24000', 'account_name': 'Taxes Payable', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 15000.00},
-            {'account_number': '25000', 'account_name': 'Intercompany Payable – Basketball LLC', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 8000.00},
-            {'account_number': '26000', 'account_name': 'Customer Deposits', 'account_type': 'Liability', 'category': 'Liabilities', 'normal_balance': 'Credit', 'balance': 6000.00},
-
-            # Equity
-            {'account_number': '30000', 'account_name': 'Common Stock', 'account_type': 'Equity', 'category': 'Equity', 'normal_balance': 'Credit', 'balance': 100000.00},
-            {'account_number': '30100', 'account_name': 'Additional Paid-in Capital', 'account_type': 'Equity', 'category': 'Equity', 'normal_balance': 'Credit', 'balance': 250000.00},
-            {'account_number': '30200', 'account_name': 'Owner Contributions', 'account_type': 'Equity', 'category': 'Equity', 'normal_balance': 'Credit', 'balance': 75000.00},
-            {'account_number': '31000', 'account_name': 'Retained Earnings', 'account_type': 'Equity', 'category': 'Equity', 'normal_balance': 'Credit', 'balance': 45000.00},
-            {'account_number': '32000', 'account_name': 'Current Year Earnings', 'account_type': 'Equity', 'category': 'Equity', 'normal_balance': 'Credit', 'balance': 0.00},
-
-            # Revenue
-            {'account_number': '40100', 'account_name': 'Revenue – Individual Accounts', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 125000.00},
-            {'account_number': '40200', 'account_name': 'Revenue – Family Accounts', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 85000.00},
-            {'account_number': '40300', 'account_name': 'Revenue – Business Accounts', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 175000.00},
-            {'account_number': '40400', 'account_name': 'Subscription Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 95000.00},
-            {'account_number': '40500', 'account_name': 'AI Insight Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 45000.00},
-            {'account_number': '40600', 'account_name': 'Advertisement Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 35000.00},
-            {'account_number': '40700', 'account_name': 'Platform Fee Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 28000.00},
-            {'account_number': '40800', 'account_name': 'Data Licensing / API Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 18000.00},
-            {'account_number': '40900', 'account_name': 'Other Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'normal_balance': 'Credit', 'balance': 5000.00},
-
-            # COGS
-            {'account_number': '50100', 'account_name': 'Cloud Compute (AWS, Azure, GCP)', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 45000.00},
-            {'account_number': '50200', 'account_name': 'Data Acquisition & Labeling', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 12000.00},
-            {'account_number': '50300', 'account_name': 'AI/LLM Training Costs', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 28000.00},
-            {'account_number': '50400', 'account_name': 'Model Hosting & API Costs', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 18000.00},
-            {'account_number': '50500', 'account_name': 'Payment Processing Fees', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 8500.00},
-            {'account_number': '50600', 'account_name': 'Content Moderation & Review', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 5000.00},
-            {'account_number': '50700', 'account_name': 'Direct DevOps Support', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 6500.00},
-            {'account_number': '50800', 'account_name': 'Data Storage', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 4500.00},
-            {'account_number': '50900', 'account_name': 'AI Compute Hardware Depreciation', 'account_type': 'COGS', 'category': 'COGS', 'normal_balance': 'Debit', 'balance': 3500.00},
-
-            # Expenses
-            {'account_number': '60100', 'account_name': 'Salaries – Full-Time Employees', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 180000.00},
-            {'account_number': '60110', 'account_name': 'Salaries – Founders', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 120000.00},
-            {'account_number': '60120', 'account_name': 'Contractor Payments', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 45000.00},
-            {'account_number': '60130', 'account_name': 'Payroll Taxes', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 28000.00},
-            {'account_number': '60140', 'account_name': 'Employee Benefits', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 35000.00},
-            {'account_number': '61000', 'account_name': 'Cloud Services (AWS, Azure, GCP)', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 25000.00},
-            {'account_number': '61010', 'account_name': 'LLM Hosting & API Costs', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 18000.00},
-            {'account_number': '62000', 'account_name': 'Paid Advertising', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 15000.00},
-            {'account_number': '62010', 'account_name': 'Social Media Marketing', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 8000.00},
-            {'account_number': '63000', 'account_name': 'Rent & Office Space', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 36000.00},
-            {'account_number': '63010', 'account_name': 'Utilities', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 4800.00},
-            {'account_number': '63020', 'account_name': 'Insurance – General Liability', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 6000.00},
-            {'account_number': '63030', 'account_name': 'Legal Fees', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 12000.00},
-            {'account_number': '63040', 'account_name': 'Accounting & Audit', 'account_type': 'Expense', 'category': 'Expense', 'normal_balance': 'Debit', 'balance': 8000.00},
-
-            # Other Income/Expense
-            {'account_number': '70100', 'account_name': 'Interest Income', 'account_type': 'Other Income', 'category': 'Other Income/Expense', 'normal_balance': 'Credit', 'balance': 2500.00},
-            {'account_number': '70200', 'account_name': 'Interest Expense', 'account_type': 'Other Expense', 'category': 'Other Income/Expense', 'normal_balance': 'Debit', 'balance': 1500.00},
-            {'account_number': '70300', 'account_name': 'FX Gain/Loss', 'account_type': 'Other Income/Expense', 'category': 'Other Income/Expense', 'normal_balance': 'Credit', 'balance': 500.00},
-        ]
-
-        # Filter by category if specified
+        # Query chart of accounts with calculated balances from journal_entry_lines
+        # For Debit-normal accounts: Balance = SUM(debit) - SUM(credit)
+        # For Credit-normal accounts: Balance = SUM(credit) - SUM(debit)
+        category_where = ""
         if category_filter and category_filter != 'all':
-            gl_accounts = [acc for acc in gl_accounts if acc['category'] == category_filter]
+            category_where = f"WHERE coa.category = '{category_filter}'"
+
+        cursor.execute(f"""
+            SELECT
+                coa.account_number,
+                coa.account_name,
+                coa.account_type,
+                coa.category,
+                coa.normal_balance,
+                coa.subcategory,
+                coa.is_active,
+                COALESCE(
+                    CASE
+                        WHEN coa.normal_balance = 'Debit' THEN SUM(COALESCE(jel.debit, 0)) - SUM(COALESCE(jel.credit, 0))
+                        ELSE SUM(COALESCE(jel.credit, 0)) - SUM(COALESCE(jel.debit, 0))
+                    END, 0
+                ) as balance
+            FROM chart_of_accounts coa
+            LEFT JOIN journal_entry_lines jel ON coa.account_number = jel.account_number
+            LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id AND je.status = 'posted'
+            {category_where}
+            GROUP BY coa.account_number, coa.account_name, coa.account_type,
+                     coa.category, coa.normal_balance, coa.subcategory, coa.is_active
+            ORDER BY coa.account_number
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        gl_accounts = []
+        for row in rows:
+            gl_accounts.append({
+                'account_number': row[0],
+                'account_name': row[1],
+                'account_type': row[2],
+                'category': row[3],
+                'normal_balance': row[4],
+                'subcategory': row[5],
+                'is_active': row[6],
+                'balance': float(row[7]) if row[7] else 0.0
+            })
 
         return jsonify({'success': True, 'data': gl_accounts})
     except Exception as e:
@@ -10649,254 +11207,481 @@ def admin_financial_transactions():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
-        # Sample transactions for the financial ledger
-        transactions = [
-            {
-                'id': 1,
-                'journal_entry_id': 'JE-001',
-                'date': '2025-01-15',
-                'reference': 'INV-2025-001',
-                'transaction_type': 'revenue',
-                'entry_type': 'revenue',
-                'merchant': 'Subscription Payment',
-                'from_account': '10100',
-                'to_account': '40400',
-                'from_account_name': 'Cash – Bank of America',
-                'to_account_name': 'Subscription Revenue',
-                'amount': 4999.00,
-                'description': 'Monthly subscription revenue - Business accounts',
-                'status': 'posted',
-                'debit': 4999.00,
-                'credit': 0
-            },
-            {
-                'id': 2,
-                'journal_entry_id': 'JE-002',
-                'date': '2025-01-14',
-                'reference': 'EXP-2025-001',
-                'transaction_type': 'expense',
-                'entry_type': 'expense',
-                'merchant': 'AWS',
-                'from_account': '61000',
-                'to_account': '20000',
-                'from_account_name': 'Cloud Services (AWS, Azure, GCP)',
-                'to_account_name': 'Accounts Payable',
-                'amount': 2500.00,
-                'description': 'AWS cloud services - January',
-                'status': 'posted',
-                'debit': 2500.00,
-                'credit': 0
-            },
-            {
-                'id': 3,
-                'journal_entry_id': 'JE-003',
-                'date': '2025-01-13',
-                'reference': 'PAY-2025-001',
-                'transaction_type': 'payment',
-                'entry_type': 'payment',
-                'merchant': 'Vendor Payment',
-                'from_account': '20000',
-                'to_account': '10100',
-                'from_account_name': 'Accounts Payable',
-                'to_account_name': 'Cash – Bank of America',
-                'amount': 1500.00,
-                'description': 'Vendor payment - Software licenses',
-                'status': 'posted',
-                'debit': 0,
-                'credit': 1500.00
-            },
-            {
-                'id': 4,
-                'journal_entry_id': 'JE-004',
-                'date': '2025-01-12',
-                'reference': 'INV-2025-002',
-                'transaction_type': 'revenue',
-                'entry_type': 'revenue',
-                'merchant': 'API Revenue',
-                'from_account': '11000',
-                'to_account': '40800',
-                'from_account_name': 'Accounts Receivable',
-                'to_account_name': 'Data Licensing / API Revenue',
-                'amount': 8500.00,
-                'description': 'API usage revenue - Enterprise client',
-                'status': 'posted',
-                'debit': 8500.00,
-                'credit': 0
-            },
-            {
-                'id': 5,
-                'journal_entry_id': 'JE-005',
-                'date': '2025-01-11',
-                'reference': 'PAYROLL-2025-001',
-                'transaction_type': 'expense',
-                'entry_type': 'payroll',
-                'merchant': 'Payroll',
-                'from_account': '60100',
-                'to_account': '10100',
-                'from_account_name': 'Salaries – Full-Time Employees',
-                'to_account_name': 'Cash – Bank of America',
-                'amount': 45000.00,
-                'description': 'Bi-weekly payroll',
-                'status': 'posted',
-                'debit': 45000.00,
-                'credit': 0
-            }
-        ]
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
 
-        return jsonify({'success': True, 'data': transactions})
+        # Get transactions from journal entry lines with journal entry details
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 50, type=int)
+        offset = (page - 1) * limit
+
+        cursor.execute("""
+            SELECT
+                jel.id,
+                je.id as journal_entry_id,
+                je.entry_date,
+                je.reference,
+                je.transaction_type,
+                je.description as entry_description,
+                je.status,
+                jel.account_number,
+                coa.account_name,
+                jel.debit,
+                jel.credit,
+                jel.description as line_description
+            FROM journal_entry_lines jel
+            JOIN journal_entries je ON jel.journal_entry_id = je.id
+            LEFT JOIN chart_of_accounts coa ON jel.account_number = coa.account_number
+            ORDER BY je.entry_date DESC, je.id DESC, jel.id
+            LIMIT %s OFFSET %s
+        """, (limit, offset))
+
+        rows = cursor.fetchall()
+
+        # Get total count
+        cursor.execute("SELECT COUNT(*) FROM journal_entry_lines")
+        total_count = cursor.fetchone()[0]
+
+        conn.close()
+
+        transactions = []
+        for row in rows:
+            debit = float(row[9]) if row[9] else 0.0
+            credit = float(row[10]) if row[10] else 0.0
+            amount = debit if debit > 0 else credit
+
+            transactions.append({
+                'id': row[0],
+                'journal_entry_id': f'JE-{row[1]:06d}',
+                'date': str(row[2]) if row[2] else None,
+                'reference': row[3] or '',
+                'transaction_type': row[4] or 'manual',
+                'entry_type': row[4] or 'manual',
+                'description': row[5] or row[11] or '',
+                'status': row[6] or 'draft',
+                'account_number': row[7],
+                'account_name': row[8] or 'Unknown Account',
+                'debit': debit,
+                'credit': credit,
+                'amount': amount
+            })
+
+        return jsonify({
+            'success': True,
+            'data': transactions,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total_count,
+                'total_pages': (total_count + limit - 1) // limit
+            }
+        })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/financial-analytics', methods=['GET'])
-def admin_financial_analytics_stub():
+def admin_financial_analytics():
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
-        # Return GL accounts data for financial analytics
-        gl_accounts = [
-            # Assets
-            {'account_number': '10100', 'account_name': 'Cash – Bank of America', 'account_type': 'Asset', 'category': 'Assets', 'balance': 125000.00},
-            {'account_number': '10150', 'account_name': 'Petty Cash', 'account_type': 'Asset', 'category': 'Assets', 'balance': 500.00},
-            {'account_number': '11000', 'account_name': 'Accounts Receivable', 'account_type': 'Asset', 'category': 'Assets', 'balance': 45000.00},
-            {'account_number': '15200', 'account_name': 'LLM Data Assets', 'account_type': 'Asset', 'category': 'Assets', 'balance': 180000.00},
-            # Liabilities
-            {'account_number': '20000', 'account_name': 'Accounts Payable', 'account_type': 'Liability', 'category': 'Liabilities', 'balance': 28000.00},
-            {'account_number': '23000', 'account_name': 'Deferred Revenue', 'account_type': 'Liability', 'category': 'Liabilities', 'balance': 35000.00},
-            # Equity
-            {'account_number': '30000', 'account_name': 'Common Stock', 'account_type': 'Equity', 'category': 'Equity', 'balance': 100000.00},
-            {'account_number': '31000', 'account_name': 'Retained Earnings', 'account_type': 'Equity', 'category': 'Equity', 'balance': 45000.00},
-            # Revenue
-            {'account_number': '40100', 'account_name': 'Revenue – Individual Accounts', 'account_type': 'Revenue', 'category': 'Revenue', 'balance': 125000.00},
-            {'account_number': '40400', 'account_name': 'Subscription Revenue', 'account_type': 'Revenue', 'category': 'Revenue', 'balance': 95000.00},
-            # COGS
-            {'account_number': '50100', 'account_name': 'Cloud Compute (AWS, Azure, GCP)', 'account_type': 'COGS', 'category': 'COGS', 'balance': 45000.00},
-            # Expenses
-            {'account_number': '60100', 'account_name': 'Salaries – Full-Time Employees', 'account_type': 'Expense', 'category': 'Expense', 'balance': 180000.00},
-        ]
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Query all GL accounts with calculated balances from journal_entry_lines
+        cursor.execute("""
+            SELECT
+                coa.account_number,
+                coa.account_name,
+                coa.account_type,
+                coa.category,
+                coa.normal_balance,
+                COALESCE(
+                    CASE
+                        WHEN coa.normal_balance = 'Debit' THEN SUM(COALESCE(jel.debit, 0)) - SUM(COALESCE(jel.credit, 0))
+                        ELSE SUM(COALESCE(jel.credit, 0)) - SUM(COALESCE(jel.debit, 0))
+                    END, 0
+                ) as balance
+            FROM chart_of_accounts coa
+            LEFT JOIN journal_entry_lines jel ON coa.account_number = jel.account_number
+            LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id AND je.status = 'posted'
+            GROUP BY coa.account_number, coa.account_name, coa.account_type, coa.category, coa.normal_balance
+            ORDER BY coa.account_number
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        gl_accounts = []
+        total_assets = 0.0
+        total_liabilities = 0.0
+        total_equity = 0.0
+        total_revenue = 0.0
+        total_cogs = 0.0
+        total_expenses = 0.0
+
+        for row in rows:
+            balance = float(row[5]) if row[5] else 0.0
+            account = {
+                'account_number': row[0],
+                'account_name': row[1],
+                'account_type': row[2],
+                'category': row[3],
+                'normal_balance': row[4],
+                'balance': balance
+            }
+            gl_accounts.append(account)
+
+            # Sum by category for summary
+            category = row[3]
+            if category == 'Assets':
+                total_assets += balance
+            elif category == 'Liabilities':
+                total_liabilities += balance
+            elif category == 'Equity':
+                total_equity += balance
+            elif category == 'Revenue':
+                total_revenue += balance
+            elif category == 'COGS':
+                total_cogs += balance
+            elif category == 'Expense':
+                total_expenses += balance
+
+        # Net income = Revenue - COGS - Expenses
+        net_income = total_revenue - total_cogs - total_expenses
 
         return jsonify({
             'success': True,
             'data': {
                 'gl_accounts': gl_accounts,
                 'summary': {
-                    'total_assets': 350500.00,
-                    'total_liabilities': 63000.00,
-                    'total_equity': 145000.00,
-                    'total_revenue': 220000.00,
-                    'total_expenses': 225000.00,
-                    'net_income': -5000.00
+                    'total_assets': round(total_assets, 2),
+                    'total_liabilities': round(total_liabilities, 2),
+                    'total_equity': round(total_equity, 2),
+                    'total_revenue': round(total_revenue, 2),
+                    'total_cogs': round(total_cogs, 2),
+                    'total_expenses': round(total_expenses, 2),
+                    'net_income': round(net_income, 2)
                 }
             }
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/admin/journal-entries', methods=['GET'])
-def admin_journal_entries_stub():
+@app.route('/api/admin/journal-entries', methods=['GET', 'POST'])
+def admin_journal_entries():
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
-        # Sample journal entries
-        journal_entries = [
-            {
-                'id': 1,
-                'journal_entry_id': 'JE-2025-001',
-                'transaction_date': '2025-01-15',
-                'date': '2025-01-15',
-                'reference': 'INV-2025-001',
-                'description': 'Monthly subscription revenue - Business accounts',
-                'entry_type': 'revenue',
-                'transaction_type': 'revenue',
-                'merchant': 'Subscription Payment',
-                'amount': 4999.00,
-                'status': 'posted',
-                'lines': [
-                    {'account_code': '10100', 'account_name': 'Cash – Bank of America', 'debit': 4999.00, 'credit': 0, 'description': 'Cash received'},
-                    {'account_code': '40400', 'account_name': 'Subscription Revenue', 'debit': 0, 'credit': 4999.00, 'description': 'Revenue recognized'}
-                ]
-            },
-            {
-                'id': 2,
-                'journal_entry_id': 'JE-2025-002',
-                'transaction_date': '2025-01-14',
-                'date': '2025-01-14',
-                'reference': 'EXP-2025-001',
-                'description': 'AWS cloud services - January',
-                'entry_type': 'expense',
-                'transaction_type': 'expense',
-                'merchant': 'AWS',
-                'amount': 2500.00,
-                'status': 'posted',
-                'lines': [
-                    {'account_code': '61000', 'account_name': 'Cloud Services (AWS, Azure, GCP)', 'debit': 2500.00, 'credit': 0, 'description': 'Cloud expense'},
-                    {'account_code': '20000', 'account_name': 'Accounts Payable', 'debit': 0, 'credit': 2500.00, 'description': 'Liability recorded'}
-                ]
-            },
-            {
-                'id': 3,
-                'journal_entry_id': 'JE-2025-003',
-                'transaction_date': '2025-01-13',
-                'date': '2025-01-13',
-                'reference': 'PAY-2025-001',
-                'description': 'Vendor payment - Software licenses',
-                'entry_type': 'payment',
-                'transaction_type': 'payment',
-                'merchant': 'Vendor Payment',
-                'amount': 1500.00,
-                'status': 'posted',
-                'lines': [
-                    {'account_code': '20000', 'account_name': 'Accounts Payable', 'debit': 1500.00, 'credit': 0, 'description': 'Liability reduced'},
-                    {'account_code': '10100', 'account_name': 'Cash – Bank of America', 'debit': 0, 'credit': 1500.00, 'description': 'Cash paid'}
-                ]
-            },
-            {
-                'id': 4,
-                'journal_entry_id': 'JE-2025-004',
-                'transaction_date': '2025-01-12',
-                'date': '2025-01-12',
-                'reference': 'INV-2025-002',
-                'description': 'API usage revenue - Enterprise client',
-                'entry_type': 'revenue',
-                'transaction_type': 'revenue',
-                'merchant': 'API Revenue',
-                'amount': 8500.00,
-                'status': 'posted',
-                'lines': [
-                    {'account_code': '11000', 'account_name': 'Accounts Receivable', 'debit': 8500.00, 'credit': 0, 'description': 'Receivable recorded'},
-                    {'account_code': '40800', 'account_name': 'Data Licensing / API Revenue', 'debit': 0, 'credit': 8500.00, 'description': 'Revenue recognized'}
-                ]
-            },
-            {
-                'id': 5,
-                'journal_entry_id': 'JE-2025-005',
-                'transaction_date': '2025-01-11',
-                'date': '2025-01-11',
-                'reference': 'PAYROLL-2025-001',
-                'description': 'Bi-weekly payroll',
-                'entry_type': 'payroll',
-                'transaction_type': 'expense',
-                'merchant': 'Payroll',
-                'amount': 45000.00,
-                'status': 'posted',
-                'lines': [
-                    {'account_code': '60100', 'account_name': 'Salaries – Full-Time Employees', 'debit': 45000.00, 'credit': 0, 'description': 'Salary expense'},
-                    {'account_code': '10100', 'account_name': 'Cash – Bank of America', 'debit': 0, 'credit': 45000.00, 'description': 'Cash paid'}
-                ]
-            }
-        ]
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        if request.method == 'POST':
+            # Create new journal entry
+            data = request.get_json() or {}
+            entry_date = data.get('date') or data.get('entry_date')
+            reference = data.get('reference', '')
+            description = data.get('description', '')
+            transaction_type = data.get('transaction_type', 'manual')
+            status = data.get('status', 'draft')
+            created_by = data.get('created_by', 'admin')
+            lines = data.get('lines', [])
+
+            if not entry_date or not description:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Date and description are required'}), 400
+
+            if not lines or len(lines) < 2:
+                conn.close()
+                return jsonify({'success': False, 'error': 'At least two lines required for double-entry'}), 400
+
+            # Validate debits = credits
+            total_debits = sum(float(line.get('debit', 0) or 0) for line in lines)
+            total_credits = sum(float(line.get('credit', 0) or 0) for line in lines)
+            if abs(total_debits - total_credits) > 0.01:
+                conn.close()
+                return jsonify({'success': False, 'error': f'Debits ({total_debits}) must equal credits ({total_credits})'}), 400
+
+            # Insert journal entry
+            cursor.execute("""
+                INSERT INTO journal_entries (entry_date, reference, description, transaction_type, status, created_by, source)
+                VALUES (%s, %s, %s, %s, %s, %s, 'manual')
+                RETURNING id
+            """, (entry_date, reference, description, transaction_type, status, created_by))
+            entry_id = cursor.fetchone()[0]
+
+            # Insert journal entry lines
+            for line in lines:
+                account_number = line.get('account_code') or line.get('account_number')
+                debit = float(line.get('debit', 0) or 0)
+                credit = float(line.get('credit', 0) or 0)
+                line_description = line.get('description', '')
+
+                cursor.execute("""
+                    INSERT INTO journal_entry_lines (journal_entry_id, account_number, debit, credit, description)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (entry_id, account_number, debit, credit, line_description))
+
+            # If status is posted, set posted_at
+            if status == 'posted':
+                cursor.execute("UPDATE journal_entries SET posted_at = CURRENT_TIMESTAMP WHERE id = %s", (entry_id,))
+
+            conn.commit()
+            conn.close()
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'id': entry_id,
+                    'journal_entry_id': f'JE-{entry_id:06d}',
+                    'message': 'Journal entry created successfully'
+                }
+            })
+
+        # GET - Fetch journal entries from database
+        status_filter = request.args.get('status', 'all')
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 50, type=int)
+        offset = (page - 1) * limit
+
+        where_clause = ""
+        if status_filter and status_filter != 'all':
+            where_clause = f"WHERE je.status = '{status_filter}'"
+
+        # Get total count
+        cursor.execute(f"SELECT COUNT(*) FROM journal_entries je {where_clause}")
+        total_count = cursor.fetchone()[0]
+
+        # Get journal entries with their lines
+        cursor.execute(f"""
+            SELECT
+                je.id,
+                je.entry_date,
+                je.reference,
+                je.description,
+                je.transaction_type,
+                je.status,
+                je.created_by,
+                je.created_at,
+                je.posted_at,
+                je.source,
+                je.source_id
+            FROM journal_entries je
+            {where_clause}
+            ORDER BY je.entry_date DESC, je.id DESC
+            LIMIT %s OFFSET %s
+        """, (limit, offset))
+
+        entries_rows = cursor.fetchall()
+        journal_entries = []
+
+        for row in entries_rows:
+            entry_id = row[0]
+
+            # Get lines for this entry
+            cursor.execute("""
+                SELECT
+                    jel.id,
+                    jel.account_number,
+                    coa.account_name,
+                    jel.debit,
+                    jel.credit,
+                    jel.description
+                FROM journal_entry_lines jel
+                LEFT JOIN chart_of_accounts coa ON jel.account_number = coa.account_number
+                WHERE jel.journal_entry_id = %s
+                ORDER BY jel.id
+            """, (entry_id,))
+
+            lines_rows = cursor.fetchall()
+            lines = []
+            total_amount = 0.0
+
+            for line_row in lines_rows:
+                debit = float(line_row[3]) if line_row[3] else 0.0
+                credit = float(line_row[4]) if line_row[4] else 0.0
+                total_amount += debit  # Sum debits for entry amount
+                lines.append({
+                    'id': line_row[0],
+                    'account_code': line_row[1],
+                    'account_number': line_row[1],
+                    'account_name': line_row[2] or 'Unknown Account',
+                    'debit': debit,
+                    'credit': credit,
+                    'description': line_row[5] or ''
+                })
+
+            entry_date = str(row[1]) if row[1] else None
+            journal_entries.append({
+                'id': entry_id,
+                'journal_entry_id': f'JE-{entry_id:06d}',
+                'entry_date': entry_date,
+                'transaction_date': entry_date,
+                'date': entry_date,
+                'reference': row[2] or '',
+                'description': row[3] or '',
+                'transaction_type': row[4] or 'manual',
+                'entry_type': row[4] or 'manual',
+                'status': row[5] or 'draft',
+                'created_by': row[6] or 'system',
+                'created_at': str(row[7]) if row[7] else None,
+                'posted_at': str(row[8]) if row[8] else None,
+                'source': row[9] or 'manual',
+                'source_id': row[10],
+                'amount': round(total_amount, 2),
+                'lines': lines
+            })
+
+        conn.close()
 
         return jsonify({
             'success': True,
             'data': {
                 'journal_entries': journal_entries,
-                'total_entries': len(journal_entries)
+                'total_entries': total_count,
+                'page': page,
+                'limit': limit,
+                'total_pages': (total_count + limit - 1) // limit
             }
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/journal-entries/<int:entry_id>', methods=['GET', 'PUT', 'DELETE'])
+def admin_journal_entry_detail(entry_id):
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        if request.method == 'DELETE':
+            # Only allow deletion of draft entries
+            cursor.execute("SELECT status FROM journal_entries WHERE id = %s", (entry_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Journal entry not found'}), 404
+            if row[0] == 'posted':
+                conn.close()
+                return jsonify({'success': False, 'error': 'Cannot delete posted entries. Create a reversing entry instead.'}), 400
+
+            cursor.execute("DELETE FROM journal_entry_lines WHERE journal_entry_id = %s", (entry_id,))
+            cursor.execute("DELETE FROM journal_entries WHERE id = %s", (entry_id,))
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Journal entry deleted successfully'})
+
+        elif request.method == 'PUT':
+            data = request.get_json() or {}
+
+            # Check if entry exists and its status
+            cursor.execute("SELECT status FROM journal_entries WHERE id = %s", (entry_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Journal entry not found'}), 404
+
+            current_status = row[0]
+            new_status = data.get('status', current_status)
+
+            # If posting the entry
+            if new_status == 'posted' and current_status != 'posted':
+                cursor.execute("""
+                    UPDATE journal_entries SET status = 'posted', posted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (entry_id,))
+            elif current_status == 'posted':
+                conn.close()
+                return jsonify({'success': False, 'error': 'Cannot modify posted entries'}), 400
+            else:
+                # Update draft entry
+                cursor.execute("""
+                    UPDATE journal_entries SET
+                        entry_date = COALESCE(%s, entry_date),
+                        reference = COALESCE(%s, reference),
+                        description = COALESCE(%s, description),
+                        transaction_type = COALESCE(%s, transaction_type),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (
+                    data.get('date') or data.get('entry_date'),
+                    data.get('reference'),
+                    data.get('description'),
+                    data.get('transaction_type'),
+                    entry_id
+                ))
+
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Journal entry updated successfully'})
+
+        else:
+            # GET single entry
+            cursor.execute("""
+                SELECT id, entry_date, reference, description, transaction_type, status, created_by, created_at, posted_at, source
+                FROM journal_entries WHERE id = %s
+            """, (entry_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Journal entry not found'}), 404
+
+            cursor.execute("""
+                SELECT jel.id, jel.account_number, coa.account_name, jel.debit, jel.credit, jel.description
+                FROM journal_entry_lines jel
+                LEFT JOIN chart_of_accounts coa ON jel.account_number = coa.account_number
+                WHERE jel.journal_entry_id = %s ORDER BY jel.id
+            """, (entry_id,))
+
+            lines = []
+            for line_row in cursor.fetchall():
+                lines.append({
+                    'id': line_row[0],
+                    'account_code': line_row[1],
+                    'account_name': line_row[2],
+                    'debit': float(line_row[3]) if line_row[3] else 0,
+                    'credit': float(line_row[4]) if line_row[4] else 0,
+                    'description': line_row[5]
+                })
+
+            conn.close()
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'id': row[0],
+                    'journal_entry_id': f'JE-{row[0]:06d}',
+                    'entry_date': str(row[1]) if row[1] else None,
+                    'date': str(row[1]) if row[1] else None,
+                    'reference': row[2],
+                    'description': row[3],
+                    'transaction_type': row[4],
+                    'status': row[5],
+                    'created_by': row[6],
+                    'created_at': str(row[7]) if row[7] else None,
+                    'posted_at': str(row[8]) if row[8] else None,
+                    'source': row[9],
+                    'lines': lines
+                }
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/receipts/llm-mappings', methods=['GET'])
@@ -14988,6 +15773,13 @@ def admin_process_mapped_investments():
                         'status': 'completed',
                         'alpaca_order_id': alpaca_order_id
                     })
+
+                    # Create journal entry for the investment
+                    create_investment_entry(
+                        amount=round_up_amount,
+                        reference=f'INV-{txn_id}',
+                        user_id=user_id
+                    )
                 else:
                     # Trade failed
                     results['failed'] += 1
@@ -20340,6 +21132,23 @@ def stripe_create_checkout_session():
                 """, (user_id, plan_id, billing_cycle, amount, period_end))
 
             conn.commit()
+
+            # Create journal entry for subscription payment
+            # Determine account type from plan name
+            plan_name = plan[1].lower() if plan[1] else 'individual'
+            if 'business' in plan_name:
+                account_type = 'business'
+            elif 'family' in plan_name:
+                account_type = 'family'
+            else:
+                account_type = 'individual'
+
+            create_subscription_payment_entry(
+                amount=float(amount),
+                account_type=account_type,
+                reference=f'SUB-{session_id[:8]}',
+                user_id=user_id
+            )
 
         conn.close()
 
