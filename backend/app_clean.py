@@ -8437,10 +8437,15 @@ def business_portfolio():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
-        business_id = token.replace('business_token_', '')
-        
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -8453,9 +8458,14 @@ def business_portfolio():
 
         cursor.execute("SELECT SUM(fee) FROM transactions WHERE user_id = %s", (business_id,))
         total_fees = cursor.fetchone()[0] or 0
-        
+
+        # Get employee count from user profile
+        cursor.execute("SELECT employee_count FROM users WHERE id = %s", (business_id,))
+        emp_row = cursor.fetchone()
+        employee_count = emp_row[0] if emp_row and emp_row[0] else '1-10'
+
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'portfolio': {
@@ -8463,12 +8473,137 @@ def business_portfolio():
                 'total_roundups': round(total_roundups, 2),
                 'total_fees': round(total_fees, 2),
                 'current_value': round(total_roundups - total_fees, 2),
-                'business_size': 25,  # Sample business size
-                'departments': 5,     # Sample departments
-                'employees': 25       # Sample employee count
+                'business_size': 25,
+                'departments': 5,
+                'employees': employee_count
             }
         })
-        
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/roundups/total', methods=['GET'])
+def business_roundups_total():
+    """Get total business roundups"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COALESCE(SUM(round_up), 0) FROM transactions WHERE user_id = %s", (business_id,))
+        total = cursor.fetchone()[0] or 0
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'total': round(float(total), 2)
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/fees/total', methods=['GET'])
+def business_fees_total():
+    """Get total business fees"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COALESCE(SUM(fee), 0) FROM transactions WHERE user_id = %s", (business_id,))
+        total = cursor.fetchone()[0] or 0
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'total': round(float(total), 2)
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/ai/recommendations', methods=['GET'])
+def business_ai_recommendations():
+    """Get AI recommendations for business"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        return jsonify({
+            'success': True,
+            'recommendations': [
+                {
+                    'id': 1,
+                    'type': 'investment',
+                    'title': 'Optimize Round-Up Strategy',
+                    'description': 'Consider increasing your round-up amount to accelerate business savings.',
+                    'priority': 'medium'
+                },
+                {
+                    'id': 2,
+                    'type': 'savings',
+                    'title': 'Tax-Advantaged Investments',
+                    'description': 'Explore business retirement plans for additional tax benefits.',
+                    'priority': 'high'
+                }
+            ]
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/subscriptions/plans', methods=['GET'])
+def business_subscription_plans():
+    """Get available business subscription plans"""
+    try:
+        return jsonify({
+            'success': True,
+            'plans': [
+                {
+                    'id': 'business_starter',
+                    'name': 'Business Starter',
+                    'price': 29.99,
+                    'billing_cycle': 'monthly',
+                    'features': ['Up to 10 employees', 'Basic analytics', 'Email support']
+                },
+                {
+                    'id': 'business_pro',
+                    'name': 'Business Pro',
+                    'price': 79.99,
+                    'billing_cycle': 'monthly',
+                    'features': ['Up to 50 employees', 'Advanced analytics', 'Priority support', 'Custom reports']
+                },
+                {
+                    'id': 'business_enterprise',
+                    'name': 'Enterprise',
+                    'price': 199.99,
+                    'billing_cycle': 'monthly',
+                    'features': ['Unlimited employees', 'Full analytics suite', 'Dedicated support', 'API access']
+                }
+            ]
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -9356,24 +9491,44 @@ def business_account_settings():
         if request.method == 'GET':
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT name, email, company_name, phone, address FROM users WHERE id = %s", (business_id,))
-            user = cursor.fetchone()
+            cursor.execute("""
+                SELECT name, email, company_name, phone, address, city, state, zip_code,
+                       business_type, tax_id, industry, employee_count, website
+                FROM users WHERE id = %s
+            """, (business_id,))
+            row = cursor.fetchone()
             conn.close()
-            
-            if user:
+
+            if row:
+                # Handle both dict and tuple cursor results
+                if hasattr(row, 'keys'):
+                    user = row
+                else:
+                    cols = ['name', 'email', 'company_name', 'phone', 'address', 'city', 'state', 'zip_code',
+                            'business_type', 'tax_id', 'industry', 'employee_count', 'website']
+                    user = dict(zip(cols, row))
+
                 return jsonify({
                     'success': True,
                     'account': {
-                        'name': user['name'],
-                        'email': user['email'],
-                        'company_name': user.get('company_name', ''),
-                        'phone': user.get('phone', ''),
-                        'address': user.get('address', '')
+                        'name': user.get('name') or '',
+                        'email': user.get('email') or '',
+                        'company_name': user.get('company_name') or '',
+                        'phone': user.get('phone') or '',
+                        'address': user.get('address') or '',
+                        'city': user.get('city') or '',
+                        'state': user.get('state') or '',
+                        'zip_code': user.get('zip_code') or '',
+                        'business_type': user.get('business_type') or '',
+                        'tax_id': user.get('tax_id') or '',
+                        'industry': user.get('industry') or '',
+                        'employee_count': user.get('employee_count') or '',
+                        'website': user.get('website') or ''
                     }
                 })
             else:
                 return jsonify({'success': False, 'error': 'Business account not found'}), 404
-        
+
         elif request.method == 'PUT':
             data = request.get_json() or {}
             name = data.get('name', '').strip()
@@ -9381,22 +9536,160 @@ def business_account_settings():
             company_name = data.get('company_name', '').strip()
             phone = data.get('phone', '').strip()
             address = data.get('address', '').strip()
-            
+
             if not name or not email:
                 return jsonify({'success': False, 'error': 'Name and email are required'}), 400
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                UPDATE users 
-                SET name = ?, email = ?, company_name = ?, phone = ?, address = ?
-                WHERE id = ?
+                UPDATE users
+                SET name = %s, email = %s, company_name = %s, phone = %s, address = %s
+                WHERE id = %s
             """, (name, email, company_name, phone, address, business_id))
             conn.commit()
             conn.close()
-            
+
             return jsonify({'success': True, 'message': 'Account settings updated successfully'})
     
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/settings/roundup', methods=['GET', 'PUT'])
+def business_roundup_settings():
+    """Handle business roundup settings"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
+        if request.method == 'GET':
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT round_up_amount FROM users WHERE id = %s", (business_id,))
+            row = cursor.fetchone()
+            conn.close()
+
+            round_up = 1.00
+            if row:
+                round_up = float(row[0]) if row[0] else 1.00
+
+            return jsonify({
+                'success': True,
+                'roundup': {
+                    'amount': round_up,
+                    'enabled': True
+                }
+            })
+
+        elif request.method == 'PUT':
+            data = request.get_json() or {}
+            amount = float(data.get('amount', 1.00))
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET round_up_amount = %s WHERE id = %s", (amount, business_id))
+            conn.commit()
+            conn.close()
+
+            return jsonify({'success': True, 'message': 'Roundup settings updated'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/bank-connections', methods=['GET', 'POST'])
+def business_bank_connections():
+    """Handle business bank connections"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
+        if request.method == 'GET':
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT mx_data FROM users WHERE id = %s", (business_id,))
+            row = cursor.fetchone()
+            conn.close()
+
+            connections = []
+            if row and row[0]:
+                try:
+                    import json
+                    mx_data = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                    if isinstance(mx_data, dict):
+                        connections = [{
+                            'id': mx_data.get('member_guid', 'conn_1'),
+                            'institution_name': mx_data.get('institution_name', 'Connected Bank'),
+                            'account_type': mx_data.get('account_type', 'checking'),
+                            'status': 'connected',
+                            'connected_at': mx_data.get('connected_at', datetime.now().isoformat())
+                        }]
+                    elif isinstance(mx_data, list):
+                        connections = mx_data
+                except:
+                    pass
+
+            return jsonify({
+                'success': True,
+                'connections': connections
+            })
+
+        elif request.method == 'POST':
+            data = request.get_json() or {}
+            import json
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET mx_data = %s WHERE id = %s", (json.dumps(data), business_id))
+            conn.commit()
+            conn.close()
+
+            return jsonify({'success': True, 'message': 'Bank connection saved'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/business/bank-connections/<connection_id>', methods=['DELETE'])
+def delete_business_bank_connection(connection_id):
+    """Delete a business bank connection"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET mx_data = NULL WHERE id = %s", (business_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Bank connection deleted'})
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -9407,7 +9700,7 @@ def business_security_settings():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         token = auth_header.split(' ')[1]
         if token.startswith('business_token_'):
             business_id = token.replace('business_token_', '')
@@ -9415,7 +9708,7 @@ def business_security_settings():
             business_id = token.replace('user_token_', '')
         else:
             return jsonify({'success': False, 'error': 'Invalid token format'}), 401
-        
+
         if request.method == 'GET':
             return jsonify({
                 'success': True,
