@@ -120,18 +120,24 @@ const GlassModal = ({
               <MapPin className="w-4 h-4 mr-2 text-blue-400" />
               Address Information
             </h4>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-400">City:</span>
-                <span className="text-white">{user.address?.city || user.city || 'Unknown'}</span>
+                <span className="text-gray-400">Street:</span>
+                <span className="text-white">{user.address?.street || user.street || 'Unknown'}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">State:</span>
-                <span className="text-white">{user.address?.state || user.state || 'Unknown'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">ZIP Code:</span>
-                <span className="text-white">{user.address?.zip || user.zip || 'Unknown'}</span>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">City:</span>
+                  <span className="text-white">{user.address?.city || user.city || 'Unknown'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">State:</span>
+                  <span className="text-white">{user.address?.state || user.state || 'Unknown'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">ZIP:</span>
+                  <span className="text-white">{user.address?.zip || user.zip || 'Unknown'}</span>
+                </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Phone:</span>

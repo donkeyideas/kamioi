@@ -2242,7 +2242,8 @@ def admin_get_users():
         existing_tables = set(row[0] for row in cursor.fetchall())
 
         # Build the query dynamically based on available tables
-        select_parts = ["u.id, u.name, u.email, u.role, u.created_at, u.google_uid, u.google_photo_url, u.last_login"]
+        # Include address fields directly from users table
+        select_parts = ["u.id, u.name, u.email, u.role, u.created_at, u.google_uid, u.google_photo_url, u.last_login, u.phone, u.address, u.city, u.state, u.zip_code"]
         join_parts = []
 
         if 'transactions' in existing_tables:
@@ -2305,19 +2306,27 @@ def admin_get_users():
 
         conn.close()
 
-        # Columns: id, name, email, role, created_at, google_uid, google_photo_url, last_login,
-        #          total_round_ups, transaction_count, portfolio_value, goal_count, notification_count
+        # Columns: id(0), name(1), email(2), role(3), created_at(4), google_uid(5), google_photo_url(6), last_login(7),
+        #          phone(8), address(9), city(10), state(11), zip_code(12),
+        #          total_round_ups(13), transaction_count(14), portfolio_value(15), goal_count(16), notification_count(17)
         user_list = []
         for user in users:
             # Determine provider based on Google UID (index 5)
             provider = 'google' if user[5] else 'email'
 
-            # Calculate metrics - handle both int and Decimal types
-            total_round_ups = float(user[8]) if user[8] else 0
-            transaction_count = int(user[9]) if user[9] else 0
-            portfolio_value = float(user[10]) if user[10] else 0
-            goal_count = int(user[11]) if user[11] else 0
-            notification_count = int(user[12]) if user[12] else 0
+            # Extract address fields from users table (indices 8-12)
+            user_phone = user[8] or 'Unknown'
+            user_street = user[9] or 'Unknown'
+            user_city = user[10] or 'Unknown'
+            user_state = user[11] or 'Unknown'
+            user_zip = user[12] or 'Unknown'
+
+            # Calculate metrics - handle both int and Decimal types (indices 13-17)
+            total_round_ups = float(user[13]) if user[13] else 0
+            transaction_count = int(user[14]) if user[14] else 0
+            portfolio_value = float(user[15]) if user[15] else 0
+            goal_count = int(user[16]) if user[16] else 0
+            notification_count = int(user[17]) if user[17] else 0
 
             # Calculate engagement score based on activity
             engagement_score = min(100, (transaction_count * 2) + (goal_count * 10) + (notification_count * 1))
@@ -2386,15 +2395,17 @@ def admin_get_users():
                 'ai_adoption': min(100, transaction_count * 5),
                 'source': provider,
                 'status': status,
-                # Address info (not available without user_profiles table)
-                'city': 'Unknown',
-                'state': 'Unknown',
-                'zip': 'Unknown',
-                'phone': 'Unknown',
+                # Address info from users table
+                'phone': user_phone,
+                'street': user_street,
+                'city': user_city,
+                'state': user_state,
+                'zip': user_zip,
                 'address': {
-                    'city': 'Unknown',
-                    'state': 'Unknown',
-                    'zip': 'Unknown'
+                    'street': user_street,
+                    'city': user_city,
+                    'state': user_state,
+                    'zip': user_zip
                 }
             })
 
