@@ -5387,7 +5387,7 @@ def user_register():
         address = data.get('address', '').strip()
         city = data.get('city', '').strip()
         state = data.get('state', '').strip()
-        zip_code = data.get('zipCode', data.get('zip_code', '')).strip()
+        zip_code = data.get('zip', data.get('zipCode', data.get('zip_code', ''))).strip()
         company_name = data.get('companyName', data.get('company_name', '')).strip()
 
         # Additional profile fields
@@ -5545,7 +5545,7 @@ def user_auth_register():
         address = data.get('address', '').strip()
         city = data.get('city', '').strip()
         state = data.get('state', '').strip()
-        zip_code = data.get('zipCode', data.get('zip_code', '')).strip()
+        zip_code = data.get('zip', data.get('zipCode', data.get('zip_code', ''))).strip()
         company_name = data.get('companyName', data.get('company_name', '')).strip()
 
         # Additional profile fields
@@ -5710,7 +5710,7 @@ def user_auth_complete_registration():
         address = data.get('address', '').strip()
         city = data.get('city', '').strip()
         state = data.get('state', '').strip()
-        zip_code = data.get('zipCode', data.get('zip_code', '')).strip()
+        zip_code = data.get('zip', data.get('zipCode', data.get('zip_code', ''))).strip()
         country = data.get('country', 'USA').strip()
         employer = data.get('employer', '').strip()
         occupation = data.get('occupation', '').strip()
