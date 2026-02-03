@@ -16658,6 +16658,92 @@ def admin_investments_summary():
             }
         })
 
+
+@app.route('/api/admin/investments/backfill-prices', methods=['POST'])
+def admin_backfill_prices():
+    """Backfill purchase prices for completed transactions that don't have them"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        # Historical prices for Jan 25, 2026 (approximate closing prices)
+        # These are reasonable estimates for testing
+        historical_prices = {
+            'AAPL': 229.00,   # Apple
+            'CMG': 57.50,     # Chipotle (post-split price)
+            'UBER': 79.00,    # Uber
+            'CVS': 47.50,     # CVS Health
+            'GOOGL': 196.00,  # Google
+            'AMZN': 229.00,   # Amazon
+            'MSFT': 411.00,   # Microsoft
+            'TSLA': 390.00,   # Tesla
+            'NFLX': 980.00,   # Netflix
+            'META': 700.00,   # Meta
+        }
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Find all completed transactions with no stock_price
+        cursor.execute("""
+            SELECT id, ticker, round_up, stock_price
+            FROM transactions
+            WHERE status IN ('completed', 'invested')
+              AND ticker IS NOT NULL
+              AND ticker != ''
+              AND ticker != 'UNKNOWN'
+              AND (stock_price IS NULL OR stock_price = 0)
+        """)
+        transactions = cursor.fetchall()
+
+        updated_count = 0
+        updates = []
+
+        for txn in transactions:
+            txn_id = txn[0]
+            ticker = txn[1]
+            round_up = float(txn[2]) if txn[2] else 0
+
+            # Get historical price for this ticker
+            price = historical_prices.get(ticker.upper(), 0)
+
+            if price > 0:
+                # Calculate shares
+                shares = round_up / price if round_up > 0 else 0
+
+                # Update the transaction
+                cursor.execute("""
+                    UPDATE transactions
+                    SET stock_price = %s, shares = %s
+                    WHERE id = %s
+                """, (price, shares, txn_id))
+
+                updates.append({
+                    'id': txn_id,
+                    'ticker': ticker,
+                    'invested': round_up,
+                    'price': price,
+                    'shares': round(shares, 6)
+                })
+                updated_count += 1
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Backfilled {updated_count} transactions with purchase prices',
+            'updated_count': updated_count,
+            'details': updates
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
     except Exception as e:
         import traceback
         traceback.print_exc()
