@@ -16565,11 +16565,13 @@ def admin_investments_summary():
         cursor = get_db_cursor(conn)
 
         # Get all investments aggregated by ticker from transactions
-        # Use round_up as the invested amount
+        # Include stock_price (purchase price) to calculate actual shares and gain/loss
         cursor.execute("""
             SELECT
                 t.ticker,
                 SUM(t.round_up) as total_invested,
+                SUM(CASE WHEN t.stock_price > 0 THEN t.round_up / t.stock_price ELSE 0 END) as total_shares,
+                AVG(CASE WHEN t.stock_price > 0 THEN t.stock_price END) as avg_purchase_price,
                 COUNT(DISTINCT t.user_id) as user_count,
                 COUNT(DISTINCT CASE
                     WHEN u.account_type = 'individual' THEN 'individual'
@@ -16596,29 +16598,39 @@ def admin_investments_summary():
         for row in cursor.fetchall():
             ticker = row[0]
             invested = float(row[1]) if row[1] else 0
-            user_count = row[2] or 0
-            dashboard_count = row[3] or 0
+            shares_from_db = float(row[2]) if row[2] else 0
+            avg_purchase_price = float(row[3]) if row[3] else 0
+            user_count = row[4] or 0
+            dashboard_count = row[5] or 0
 
-            # Get current stock price
+            # Get CURRENT stock price (live from Yahoo Finance)
             current_price = get_current_stock_price(ticker)
 
-            # Calculate shares: invested amount / current price (or average price if we have it)
-            # For simplicity, assume purchase was at current price (conservative estimate)
-            # In production, you'd track actual purchase prices per transaction
-            if current_price > 0:
+            # Calculate shares from purchase price stored in DB
+            # If no purchase price stored, estimate using current price
+            if shares_from_db > 0:
+                shares = shares_from_db
+            elif avg_purchase_price > 0:
+                shares = invested / avg_purchase_price
+            elif current_price > 0:
+                # Fallback: if no purchase price, use current (gain/loss will be ~0)
                 shares = invested / current_price
             else:
                 shares = 0
 
-            current_value = shares * current_price
+            # Current value = shares × current price
+            current_value = shares * current_price if current_price > 0 else 0
+
+            # Gain/Loss = Current Value - Amount Invested
             gain_loss = current_value - invested
             gain_loss_percent = ((current_value - invested) / invested * 100) if invested > 0 else 0
 
             investments.append({
                 'ticker': ticker,
                 'companyName': ticker,  # Frontend will map to proper names
-                'shares': round(shares, 4),
+                'shares': round(shares, 6),
                 'totalInvested': round(invested, 2),
+                'purchasePrice': round(avg_purchase_price, 2) if avg_purchase_price > 0 else None,
                 'currentPrice': current_price,
                 'currentValue': round(current_value, 2),
                 'gainLoss': round(gain_loss, 2),

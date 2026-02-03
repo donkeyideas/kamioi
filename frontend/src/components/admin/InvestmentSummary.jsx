@@ -336,18 +336,24 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
               </div>
             </div>
 
-            {/* Current Stock Price Banner */}
+            {/* Stock Price Banner - Current vs Purchase */}
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2 mb-4">
-              <div className="flex justify-between items-center">
-                <span className="text-blue-400 text-sm">Current Stock Price:</span>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-blue-400 text-sm">Current Price:</span>
                 <span className="text-blue-400 font-bold">${investment.currentPrice?.toFixed(2) || '0.00'}</span>
               </div>
+              {investment.purchasePrice && (
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-400">Avg Purchase Price:</span>
+                  <span className="text-gray-400">${investment.purchasePrice?.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className={getSubtextClass()}>Shares:</span>
-                <span className={getTextClass()}>{(investment.shares || 0).toFixed(4)}</span>
+                <span className={getTextClass()}>{(investment.shares || 0).toFixed(6)}</span>
               </div>
               <div className="flex justify-between">
                 <span className={getSubtextClass()}>Invested:</span>
