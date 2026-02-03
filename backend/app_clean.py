@@ -2234,43 +2234,67 @@ def admin_get_users():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Get all users with their calculated metrics in a single query
+        # First check which tables exist to build a safe query
         cursor.execute("""
-            SELECT
-                u.id, u.name, u.email, u.role, u.created_at, u.google_uid, u.google_photo_url, u.last_login,
-                COALESCE(t.total_round_ups, 0) as total_round_ups,
-                COALESCE(t.transaction_count, 0) as transaction_count,
-                COALESCE(p.portfolio_value, 0) as portfolio_value,
-                COALESCE(g.goal_count, 0) as goal_count,
-                COALESCE(n.notification_count, 0) as notification_count,
-                up.city, up.state, up.zip, up.phone
-            FROM users u
-            LEFT JOIN (
-                SELECT user_id,
-                       SUM(round_up) as total_round_ups,
-                       COUNT(*) as transaction_count
-                FROM transactions
-                GROUP BY user_id
-            ) t ON u.id = t.user_id
-            LEFT JOIN (
-                SELECT user_id,
-                       COALESCE(SUM(total_value), 0) as portfolio_value
-                FROM portfolios
-                GROUP BY user_id
-            ) p ON u.id = p.user_id
-            LEFT JOIN (
-                SELECT user_id, COUNT(*) as goal_count
-                FROM goals
-                GROUP BY user_id
-            ) g ON u.id = g.user_id
-            LEFT JOIN (
-                SELECT user_id, COUNT(*) as notification_count
-                FROM notifications
-                GROUP BY user_id
-            ) n ON u.id = n.user_id
-            LEFT JOIN user_profiles up ON u.id = up.user_id
-            ORDER BY u.created_at DESC
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name IN ('transactions', 'portfolios', 'goals', 'notifications', 'user_profiles')
         """)
+        existing_tables = set(row[0] for row in cursor.fetchall())
+
+        # Build the query dynamically based on available tables
+        select_parts = ["u.id, u.name, u.email, u.role, u.created_at, u.google_uid, u.google_photo_url, u.last_login"]
+        join_parts = []
+
+        if 'transactions' in existing_tables:
+            select_parts.append("COALESCE(t.total_round_ups, 0) as total_round_ups, COALESCE(t.transaction_count, 0) as transaction_count")
+            join_parts.append("""
+                LEFT JOIN (
+                    SELECT user_id, SUM(round_up) as total_round_ups, COUNT(*) as transaction_count
+                    FROM transactions GROUP BY user_id
+                ) t ON u.id = t.user_id
+            """)
+        else:
+            select_parts.append("0 as total_round_ups, 0 as transaction_count")
+
+        if 'portfolios' in existing_tables:
+            select_parts.append("COALESCE(p.portfolio_value, 0) as portfolio_value")
+            join_parts.append("""
+                LEFT JOIN (
+                    SELECT user_id, COALESCE(SUM(total_value), 0) as portfolio_value
+                    FROM portfolios GROUP BY user_id
+                ) p ON u.id = p.user_id
+            """)
+        else:
+            select_parts.append("0 as portfolio_value")
+
+        if 'goals' in existing_tables:
+            select_parts.append("COALESCE(g.goal_count, 0) as goal_count")
+            join_parts.append("""
+                LEFT JOIN (
+                    SELECT user_id, COUNT(*) as goal_count FROM goals GROUP BY user_id
+                ) g ON u.id = g.user_id
+            """)
+        else:
+            select_parts.append("0 as goal_count")
+
+        if 'notifications' in existing_tables:
+            select_parts.append("COALESCE(n.notification_count, 0) as notification_count")
+            join_parts.append("""
+                LEFT JOIN (
+                    SELECT user_id, COUNT(*) as notification_count FROM notifications GROUP BY user_id
+                ) n ON u.id = n.user_id
+            """)
+        else:
+            select_parts.append("0 as notification_count")
+
+        # Build and execute the query
+        query = f"""
+            SELECT {', '.join(select_parts)}
+            FROM users u
+            {' '.join(join_parts)}
+            ORDER BY u.created_at DESC
+        """
+        cursor.execute(query)
         users = cursor.fetchall()
 
         # Get total approved mappings for mapping accuracy calculation
@@ -2282,14 +2306,13 @@ def admin_get_users():
         conn.close()
 
         # Columns: id, name, email, role, created_at, google_uid, google_photo_url, last_login,
-        #          total_round_ups, transaction_count, portfolio_value, goal_count, notification_count,
-        #          city, state, zip, phone
+        #          total_round_ups, transaction_count, portfolio_value, goal_count, notification_count
         user_list = []
         for user in users:
             # Determine provider based on Google UID (index 5)
             provider = 'google' if user[5] else 'email'
 
-            # Calculate metrics
+            # Calculate metrics - handle both int and Decimal types
             total_round_ups = float(user[8]) if user[8] else 0
             transaction_count = int(user[9]) if user[9] else 0
             portfolio_value = float(user[10]) if user[10] else 0
@@ -2318,24 +2341,23 @@ def admin_get_users():
 
             # Determine status based on last login
             last_login = user[7]
+            status = 'Active'  # Default
             if last_login:
-                from datetime import datetime, timedelta
                 try:
+                    from datetime import datetime
                     if isinstance(last_login, str):
-                        last_login_date = datetime.fromisoformat(last_login.replace('Z', '+00:00'))
+                        last_login_date = datetime.fromisoformat(last_login.replace('Z', '+00:00').replace('T', ' ').split('+')[0])
                     else:
                         last_login_date = last_login
-                    days_since_login = (datetime.now(last_login_date.tzinfo) if last_login_date.tzinfo else datetime.now() - last_login_date).days if hasattr(last_login_date, 'tzinfo') else 0
+                    days_since_login = (datetime.now() - last_login_date).days
                     if days_since_login < 7:
                         status = 'Active'
                     elif days_since_login < 30:
                         status = 'Inactive'
                     else:
                         status = 'Dormant'
-                except:
+                except Exception as e:
                     status = 'Active'
-            else:
-                status = 'Active'
 
             user_list.append({
                 'id': user[0],
@@ -2364,15 +2386,15 @@ def admin_get_users():
                 'ai_adoption': min(100, transaction_count * 5),
                 'source': provider,
                 'status': status,
-                # Address info from user_profiles
-                'city': user[13] or 'Unknown',
-                'state': user[14] or 'Unknown',
-                'zip': user[15] or 'Unknown',
-                'phone': user[16] or 'Unknown',
+                # Address info (not available without user_profiles table)
+                'city': 'Unknown',
+                'state': 'Unknown',
+                'zip': 'Unknown',
+                'phone': 'Unknown',
                 'address': {
-                    'city': user[13] or 'Unknown',
-                    'state': user[14] or 'Unknown',
-                    'zip': user[15] or 'Unknown'
+                    'city': 'Unknown',
+                    'state': 'Unknown',
+                    'zip': 'Unknown'
                 }
             })
 
