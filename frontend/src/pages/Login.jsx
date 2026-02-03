@@ -682,7 +682,15 @@ const Login = ({ initialMode = 'login' }) => {
         await completeRegistration()
         return
       }
-      
+
+      // For family: Create account when moving from step 6 (goals) to step 7 (bank connection)
+      // This ensures userGuid is available when MX widget is shown
+      if (registrationType === 'family' && registrationStep === 6) {
+        console.log('👨‍👩‍👧 Family - Goals completed, creating account before bank connection')
+        await completeRegistration()
+        return
+      }
+
       // Check if we're on the bank connection step (step 4 for individual, step 7 for family, step 8 for business)
       const isBankConnectionStep = (registrationType === 'individual' && registrationStep === 4) ||
                                   (registrationType === 'family' && registrationStep === 7) ||
@@ -879,7 +887,19 @@ const Login = ({ initialMode = 'login' }) => {
           }, 100)
           return
         }
-        
+
+        // For family: When creating account from step 6 (goals), move to step 7 (bank connection)
+        if (registrationType === 'family' && registrationStep === 6) {
+          console.log('👨‍👩‍👧 Family - Account created from goals step, moving to bank connection step')
+          // Move to step 7 (bank connection)
+          setRegistrationStep(7)
+          // Trigger a state update to re-render and show the widget
+          setTimeout(() => {
+            setShowMXConnect(true)
+          }, 100)
+          return
+        }
+
         if (isBankConnectionStep) {
           console.log('🏦 Bank connection step - Account created, userGuid:', receivedUserGuid)
           // Account is created, stay on bank connection step and show widget
