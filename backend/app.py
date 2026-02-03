@@ -2417,71 +2417,106 @@ def family_transactions():
         if sync_requested:
             try:
                 conn = db_manager.get_connection()
-                cur = conn.cursor()
-                
-                # Check if user already has transactions
-                cur.execute('SELECT COUNT(*) FROM transactions WHERE user_id = ?', (user_id,))
-                existing_count = cur.fetchone()[0]
-                print(f"[DEBUG] User {user_id} has {existing_count} existing transactions")
-                
-                # Always create mock transactions when sync is requested (user can sync multiple times)
-                # But limit to 8 transactions total if they already have some
                 from datetime import datetime, timedelta
                 import random
-                
-                # Create 8 mock transactions that need mappings (pending/needs-recognition status)
-                mock_transactions = [
-                    (user_id, (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S'), 
-                     merchant, amount, category, description, 
-                     1.0, round_up, amount + round_up + 0.25, None, None, None, None, 
-                     status, 0.25)
-                    for i, (merchant, amount, category, description, round_up, status) in enumerate([
-                        ('Target', 45.67, 'Shopping', 'Household items purchase', 1.0, 'pending'),
-                        ('Starbucks', 6.85, 'Food & Dining', 'Coffee and pastries', 1.0, 'needs-recognition'),
-                        ('Amazon', 89.99, 'Shopping', 'Online purchase', 1.0, 'pending'),
-                        ('Whole Foods Market', 125.43, 'Groceries', 'Grocery shopping', 1.0, 'pending'),
-                        ('Shell Gas Station', 52.30, 'Gas & Fuel', 'Gas fill-up', 1.0, 'needs-recognition'),
-                        ('CVS Pharmacy', 28.99, 'Healthcare', 'Pharmacy items', 1.0, 'pending'),
-                        ('McDonald\'s', 12.50, 'Food & Dining', 'Fast food meal', 1.0, 'needs-recognition'),
-                        ('Walmart', 156.78, 'Shopping', 'Family shopping trip', 1.0, 'pending')
-                    ])
+
+                # Define mock transaction data
+                mock_data = [
+                    ('Target', 45.67, 'Shopping', 'Household items purchase', 1.0, 'pending'),
+                    ('Starbucks', 6.85, 'Food & Dining', 'Coffee and pastries', 1.0, 'needs-recognition'),
+                    ('Amazon', 89.99, 'Shopping', 'Online purchase', 1.0, 'pending'),
+                    ('Whole Foods Market', 125.43, 'Groceries', 'Grocery shopping', 1.0, 'pending'),
+                    ('Shell Gas Station', 52.30, 'Gas & Fuel', 'Gas fill-up', 1.0, 'needs-recognition'),
+                    ('CVS Pharmacy', 28.99, 'Healthcare', 'Pharmacy items', 1.0, 'pending'),
+                    ('McDonald\'s', 12.50, 'Food & Dining', 'Fast food meal', 1.0, 'needs-recognition'),
+                    ('Walmart', 156.78, 'Shopping', 'Family shopping trip', 1.0, 'pending')
                 ]
-                
-                try:
-                    cur.executemany('''
-                        INSERT INTO transactions 
-                        (user_id, date, merchant, amount, category, description, round_up, investable, total_debit, ticker, shares, price_per_share, stock_price, status, fee)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', mock_transactions)
-                    
-                    conn.commit()
-                    print(f"✅ Created {len(mock_transactions)} mock family transactions for user {user_id}")
-                except sqlite3.IntegrityError as e:
-                    # Some transactions might already exist - that's okay
-                    print(f"[INFO] Some transactions may already exist: {str(e)}")
-                    conn.rollback()
-                    # Try inserting one at a time to get past duplicates
+
+                if db_manager._use_postgresql:
+                    from sqlalchemy import text
+                    # Check existing count
+                    result = conn.execute(text('SELECT COUNT(*) FROM transactions WHERE user_id = :user_id'), {'user_id': user_id})
+                    existing_count = result.scalar()
+                    print(f"[DEBUG] User {user_id} has {existing_count} existing transactions")
+
+                    # Insert mock transactions one at a time for PostgreSQL
                     inserted_count = 0
-                    for txn in mock_transactions:
+                    for i, (merchant, amount, category, description, round_up, status) in enumerate(mock_data):
                         try:
-                            cur.execute('''
-                                INSERT INTO transactions 
+                            conn.execute(text('''
+                                INSERT INTO transactions
                                 (user_id, date, merchant, amount, category, description, round_up, investable, total_debit, ticker, shares, price_per_share, stock_price, status, fee)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            ''', txn)
+                                VALUES (:user_id, :date, :merchant, :amount, :category, :description, :round_up, :investable, :total_debit, :ticker, :shares, :price_per_share, :stock_price, :status, :fee)
+                            '''), {
+                                'user_id': user_id,
+                                'date': (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S'),
+                                'merchant': merchant,
+                                'amount': amount,
+                                'category': category,
+                                'description': description,
+                                'round_up': 1.0,
+                                'investable': round_up,
+                                'total_debit': amount + round_up + 0.25,
+                                'ticker': None,
+                                'shares': None,
+                                'price_per_share': None,
+                                'stock_price': None,
+                                'status': status,
+                                'fee': 0.25
+                            })
                             inserted_count += 1
-                        except sqlite3.IntegrityError:
-                            continue  # Skip duplicates
+                        except Exception as insert_err:
+                            print(f"[INFO] Could not insert transaction (may already exist): {insert_err}")
+                            continue
                     conn.commit()
-                    print(f"✅ Created {inserted_count} new mock family transactions for user {user_id} (some may have been duplicates)")
-                except Exception as insert_error:
-                    import traceback
-                    print(f"[ERROR] Failed to insert mock transactions: {str(insert_error)}")
-                    print(f"[ERROR] Traceback: {traceback.format_exc()}")
-                    conn.rollback()
-                    # Don't raise - allow endpoint to continue and return existing transactions
-                
-                conn.close()
+                    print(f"✅ Created {inserted_count} mock family transactions for user {user_id}")
+                    db_manager.release_connection(conn)
+                else:
+                    cur = conn.cursor()
+                    # Check if user already has transactions
+                    cur.execute('SELECT COUNT(*) FROM transactions WHERE user_id = ?', (user_id,))
+                    existing_count = cur.fetchone()[0]
+                    print(f"[DEBUG] User {user_id} has {existing_count} existing transactions")
+
+                    # Create mock transactions
+                    mock_transactions = [
+                        (user_id, (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S'),
+                         merchant, amount, category, description,
+                         1.0, round_up, amount + round_up + 0.25, None, None, None, None,
+                         status, 0.25)
+                        for i, (merchant, amount, category, description, round_up, status) in enumerate(mock_data)
+                    ]
+
+                    try:
+                        cur.executemany('''
+                            INSERT INTO transactions
+                            (user_id, date, merchant, amount, category, description, round_up, investable, total_debit, ticker, shares, price_per_share, stock_price, status, fee)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', mock_transactions)
+                        conn.commit()
+                        print(f"✅ Created {len(mock_transactions)} mock family transactions for user {user_id}")
+                    except sqlite3.IntegrityError as e:
+                        print(f"[INFO] Some transactions may already exist: {str(e)}")
+                        conn.rollback()
+                        inserted_count = 0
+                        for txn in mock_transactions:
+                            try:
+                                cur.execute('''
+                                    INSERT INTO transactions
+                                    (user_id, date, merchant, amount, category, description, round_up, investable, total_debit, ticker, shares, price_per_share, stock_price, status, fee)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', txn)
+                                inserted_count += 1
+                            except sqlite3.IntegrityError:
+                                continue
+                        conn.commit()
+                        print(f"✅ Created {inserted_count} new mock family transactions for user {user_id} (some may have been duplicates)")
+                    except Exception as insert_error:
+                        import traceback
+                        print(f"[ERROR] Failed to insert mock transactions: {str(insert_error)}")
+                        print(f"[ERROR] Traceback: {traceback.format_exc()}")
+                        conn.rollback()
+                    conn.close()
             except Exception as e:
                 import traceback
                 print(f"[ERROR] Failed to create mock transactions: {str(e)}")
@@ -2569,28 +2604,37 @@ def family_portfolio():
     user = get_auth_user()
     if not user:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
+
     try:
         user_id = user.get('id')
         conn = db_manager.get_connection()
-        cur = conn.cursor()
-        
-        # First try to get from portfolios table
-        cur.execute('''
-            SELECT ticker, shares, average_price, current_price, total_value, created_at
-            FROM portfolios
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        ''', (user_id,))
-        
-        portfolio_rows = cur.fetchall()
-        
+
+        portfolio_rows = []
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            result = conn.execute(text('''
+                SELECT ticker, shares, average_price, current_price, total_value, created_at
+                FROM portfolios
+                WHERE user_id = :user_id
+                ORDER BY created_at DESC
+            '''), {'user_id': user_id})
+            portfolio_rows = [row for row in result]
+        else:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT ticker, shares, average_price, current_price, total_value, created_at
+                FROM portfolios
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            ''', (user_id,))
+            portfolio_rows = cur.fetchall()
+
         if portfolio_rows:
             # Use portfolio table data
             holdings = []
             total_value = 0
             total_invested = 0
-            
+
             for row in portfolio_rows:
                 ticker, shares, average_price, current_price, total_value_row, created_at = row
                 purchase_price = average_price
@@ -2605,8 +2649,11 @@ def family_portfolio():
                 })
                 total_value += (total_value_row or (shares * current_price))
                 total_invested += purchase_price * shares
-            
-            conn.close()
+
+            if db_manager._use_postgresql:
+                db_manager.release_connection(conn)
+            else:
+                conn.close()
             return jsonify({
                 'success': True,
                 'data': {
@@ -2618,24 +2665,27 @@ def family_portfolio():
             })
         else:
             # Fallback to calculating from transactions
-            conn.close()
+            if db_manager._use_postgresql:
+                db_manager.release_connection(conn)
+            else:
+                conn.close()
             transactions = db_manager.get_user_transactions(user_id, limit=1000)
-            
+
             portfolio_value = 0
             holdings = []
             ticker_counts = {}
-            
+
             for txn in transactions:
                 if txn.get('status') == 'completed' and txn.get('ticker'):
                     ticker = txn.get('ticker')
                     shares = float(txn.get('shares', 0))
                     price = float(txn.get('stock_price', 0) or txn.get('price_per_share', 0))
-                    
+
                     if ticker not in ticker_counts:
                         ticker_counts[ticker] = {'shares': 0, 'total_cost': 0}
                     ticker_counts[ticker]['shares'] += shares
                     ticker_counts[ticker]['total_cost'] += shares * price
-            
+
             for ticker, data in ticker_counts.items():
                 current_price = data.get('total_cost', 0) / data['shares'] if data['shares'] > 0 else 0
                 value = data['shares'] * current_price
@@ -2647,7 +2697,7 @@ def family_portfolio():
                     'current_price': current_price,
                     'value': value
                 })
-            
+
             return jsonify({
                 'success': True,
                 'data': {
@@ -2657,6 +2707,9 @@ def family_portfolio():
                 }
             })
     except Exception as e:
+        import traceback
+        print(f"[ERROR] Failed to get family portfolio: {str(e)}")
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # Family Goals
@@ -17088,327 +17141,236 @@ def user_register():
     try:
         data = request.get_json()
         print(f"[REGISTER] Received registration data: {json.dumps(data, indent=2)}")
-        
+
         # Validate required fields
         required_fields = ['name', 'email', 'password', 'accountType']
         for field in required_fields:
             if not data.get(field):
                 print(f"[REGISTER] Missing required field: {field}")
                 return jsonify({'success': False, 'error': f'{field} is required'}), 400
-        
+
         # Hash the password before storing
         data['password'] = generate_password_hash(data['password'])
 
-        # Check if user already exists
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('SELECT id FROM users WHERE email = ?', (data['email'],))
-        existing_user = cursor.fetchone()
-        
-        if existing_user:
-            return jsonify({'success': False, 'error': 'User already exists'}), 409
-        
         # Generate unique account number
         account_number = generate_account_number(data['accountType'])
-        
+
         # Generate userGuid for MX (this would normally come from MX API)
         user_guid = f"USR-{account_number}"
-        
-        # Check and add missing columns to users table if needed
-        cursor.execute("PRAGMA table_info(users)")
-        columns_info = cursor.fetchall()
-        column_names = [col[1] for col in columns_info]
-        
-        # Add missing columns dynamically
-        missing_columns = {
-            'first_name': 'TEXT',
-            'last_name': 'TEXT',
-            'address': 'TEXT',
-            'annual_income': 'TEXT',
-            'employment_status': 'TEXT',
-            'employer': 'TEXT',
-            'occupation': 'TEXT',
-            'round_up_amount': 'REAL',
-            'risk_tolerance': 'TEXT',
-            'date_of_birth': 'TEXT',
-            'ssn_last4': 'TEXT',
-            'country': 'TEXT',
-            'timezone': 'TEXT',
-            'subscription_plan_id': 'INTEGER',
-            'billing_cycle': 'TEXT',
-            'promo_code': 'TEXT'
-        }
-        
-        for col_name, col_type in missing_columns.items():
-            if col_name not in column_names:
+
+        conn = db_manager.get_connection()
+
+        # Check if user already exists and create user - handle PostgreSQL vs SQLite
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            from datetime import datetime as dt
+
+            # Check if user exists
+            result = conn.execute(text('SELECT id FROM users WHERE email = :email'), {'email': data['email']})
+            existing_user = result.fetchone()
+
+            if existing_user:
+                db_manager.release_connection(conn)
+                return jsonify({'success': False, 'error': 'User already exists'}), 409
+
+            print(f"[REGISTER] PostgreSQL - Creating user with email: {data['email']}")
+
+            # Insert user with PostgreSQL syntax
+            result = conn.execute(text('''
+                INSERT INTO users (
+                    name, email, password, account_type, account_number, user_guid,
+                    phone, city, state, zip_code, address, first_name, last_name,
+                    annual_income, employment_status, employer, occupation,
+                    round_up_amount, risk_tolerance, date_of_birth, ssn_last4,
+                    country, timezone, subscription_plan_id, billing_cycle, promo_code, created_at
+                ) VALUES (
+                    :name, :email, :password, :account_type, :account_number, :user_guid,
+                    :phone, :city, :state, :zip_code, :address, :first_name, :last_name,
+                    :annual_income, :employment_status, :employer, :occupation,
+                    :round_up_amount, :risk_tolerance, :date_of_birth, :ssn_last4,
+                    :country, :timezone, :subscription_plan_id, :billing_cycle, :promo_code, NOW()
+                ) RETURNING id
+            '''), {
+                'name': data['name'],
+                'email': data['email'],
+                'password': data['password'],
+                'account_type': data['accountType'],
+                'account_number': account_number,
+                'user_guid': user_guid,
+                'phone': data.get('phone', ''),
+                'city': data.get('city', ''),
+                'state': data.get('state', ''),
+                'zip_code': data.get('zipCode', ''),
+                'address': data.get('address', ''),
+                'first_name': data.get('firstName', ''),
+                'last_name': data.get('lastName', ''),
+                'annual_income': data.get('annualIncome', ''),
+                'employment_status': data.get('employmentStatus', ''),
+                'employer': data.get('employer', ''),
+                'occupation': data.get('occupation', ''),
+                'round_up_amount': data.get('roundUpAmount', 1.0),
+                'risk_tolerance': data.get('riskTolerance', 'moderate'),
+                'date_of_birth': data.get('dateOfBirth', ''),
+                'ssn_last4': data.get('ssnLast4', ''),
+                'country': data.get('country', 'USA'),
+                'timezone': data.get('timezone', ''),
+                'subscription_plan_id': data.get('subscriptionPlanId'),
+                'billing_cycle': data.get('billingCycle', 'monthly'),
+                'promo_code': data.get('promoCode', '')
+            })
+
+            user_id = result.fetchone()[0]
+            conn.commit()
+            print(f"[REGISTER] PostgreSQL - User created with ID: {user_id}")
+
+            # Store subscription if plan was selected and not trial
+            if data.get('subscriptionPlanId') and not data.get('isTrial', False):
                 try:
-                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
-                    conn.commit()
-                except sqlite3.OperationalError:
-                    pass  # Column might already exist
-        
-        # Prepare all registration data
-        registration_values = (
-            data['name'],
-            data['email'],
-            data['password'],  # In production, hash this password
-            data['accountType'],
-            account_number,
-            user_guid,
-            data.get('phone', ''),
-            data.get('city', ''),
-            data.get('state', ''),
-            data.get('zipCode', ''),
-            data.get('address', ''),
-            data.get('firstName', ''),
-            data.get('lastName', ''),
-            data.get('annualIncome', ''),
-            data.get('employmentStatus', ''),
-            data.get('employer', ''),
-            data.get('occupation', ''),
-            data.get('roundUpAmount', 1.0),
-            data.get('riskTolerance', 'moderate'),
-            data.get('dateOfBirth', ''),
-            data.get('ssnLast4', ''),
-            data.get('country', 'USA'),
-            data.get('timezone', ''),
-            data.get('subscriptionPlanId'),
-            data.get('billingCycle', 'monthly'),
-            data.get('promoCode', '')
-        )
-        
-        print(f"[REGISTER] Inserting user with data:")
-        print(f"  Name: {registration_values[0]}")
-        print(f"  Email: {registration_values[1]}")
-        print(f"  Phone: {registration_values[6]}")
-        print(f"  Address: {registration_values[10]}")
-        print(f"  City: {registration_values[7]}")
-        print(f"  State: {registration_values[8]}")
-        print(f"  ZIP: {registration_values[9]}")
-        print(f"  First Name: {registration_values[11]}")
-        print(f"  Last Name: {registration_values[12]}")
-        print(f"  Annual Income: {registration_values[13]}")
-        print(f"  Employment: {registration_values[14]}")
-        print(f"  Employer: {registration_values[15]}")
-        print(f"  Occupation: {registration_values[16]}")
-        print(f"  Round Up: {registration_values[17]}")
-        print(f"  Risk Tolerance: {registration_values[18]}")
-        print(f"  Subscription Plan: {registration_values[23]}")
-        
-        # Create user with all registration data
-        # Build INSERT query dynamically based on existing columns
-        base_columns = ['name', 'email', 'password', 'account_type', 'account_number', 'user_guid', 
-                       'phone', 'city', 'state', 'zip_code', 'created_at']
-        base_values = [
-            data['name'],
-            data['email'],
-            data['password'],
-            data['accountType'],
-            account_number,
-            user_guid,
-            data.get('phone', ''),
-            data.get('city', ''),
-            data.get('state', ''),
-            data.get('zipCode', ''),
-            'datetime(\'now\')'
-        ]
-        
-        # Add optional columns that exist
-        optional_columns = {
-            'address': data.get('address', ''),
-            'first_name': data.get('firstName', ''),
-            'last_name': data.get('lastName', ''),
-            'annual_income': data.get('annualIncome', ''),
-            'employment_status': data.get('employmentStatus', ''),
-            'employer': data.get('employer', ''),
-            'occupation': data.get('occupation', ''),
-            'round_up_amount': data.get('roundUpAmount', 1.0),
-            'risk_tolerance': data.get('riskTolerance', 'moderate'),
-            'date_of_birth': data.get('dateOfBirth', ''),
-            'ssn_last4': data.get('ssnLast4', ''),
-            'country': data.get('country', 'USA'),
-            'timezone': data.get('timezone', ''),
-            'subscription_plan_id': data.get('subscriptionPlanId'),
-            'billing_cycle': data.get('billingCycle', 'monthly'),
-            'promo_code': data.get('promoCode', '')
-        }
-        
-        insert_columns = base_columns.copy()
-        insert_values = base_values.copy()
-        
-        for col_name, col_value in optional_columns.items():
-            if col_name in column_names:
-                insert_columns.append(col_name)
-                insert_values.append(col_value)
-        
-        # Replace datetime('now') with actual value for SQL
-        datetime_idx = insert_columns.index('created_at')
-        insert_columns[datetime_idx] = 'created_at'
-        insert_values[datetime_idx] = None  # Will use datetime('now') in SQL
-        
-        # Build and execute INSERT
-        columns_str = ', '.join(insert_columns)
-        placeholders = ', '.join(['datetime(\'now\')' if col == 'created_at' else '?' for col in insert_columns])
-        insert_query = f"INSERT INTO users ({columns_str}) VALUES ({placeholders})"
-        
-        # Remove None for created_at
-        final_values = [v if v is not None else None for v in insert_values]
-        final_values = [v for i, v in enumerate(final_values) if insert_columns[i] != 'created_at' or v is None]
-        
-        try:
-            # Fix the query - created_at should use datetime('now')
-            placeholders_list = []
-            values_list = []
-            for i, col in enumerate(insert_columns):
-                if col == 'created_at':
-                    placeholders_list.append("datetime('now')")
-                else:
-                    placeholders_list.append('?')
-                    values_list.append(insert_values[i])
-            
-            insert_query = f"INSERT INTO users ({columns_str}) VALUES ({', '.join(placeholders_list)})"
-            print(f"[REGISTER] Executing INSERT with {len(values_list)} values")
-            print(f"[REGISTER] Columns: {insert_columns}")
-            
-            cursor.execute(insert_query, tuple(values_list))
-            user_id = cursor.lastrowid
-            conn.commit()
-            print(f"[REGISTER] User created with ID: {user_id}, committed to database")
-        except sqlite3.OperationalError as e:
-            print(f"[REGISTER] Error inserting user data: {e}")
-            # Fallback: Insert only basic fields, then update others
-            print(f"[REGISTER] Attempting fallback insert with basic fields only")
-            cursor.execute('''
-                INSERT INTO users (name, email, password, account_type, account_number, user_guid, 
-                                   phone, city, state, zip_code, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            ''', (
-                data['name'],
-                data['email'],
-                data['password'],
-                data['accountType'],
-                account_number,
-                user_guid,
-                data.get('phone', ''),
-                data.get('city', ''),
-                data.get('state', ''),
-                data.get('zipCode', '')
-            ))
-            user_id = cursor.lastrowid
-            print(f"[REGISTER] Basic user created with ID: {user_id}, will update additional fields")
-            
-            # Now update with additional fields that exist
-            update_fields = []
-            update_values = []
-            
-            if 'address' in column_names and data.get('address'):
-                update_fields.append('address = ?')
-                update_values.append(data.get('address'))
-            if 'first_name' in column_names and data.get('firstName'):
-                update_fields.append('first_name = ?')
-                update_values.append(data.get('firstName'))
-            if 'last_name' in column_names and data.get('lastName'):
-                update_fields.append('last_name = ?')
-                update_values.append(data.get('lastName'))
-            if 'annual_income' in column_names and data.get('annualIncome'):
-                update_fields.append('annual_income = ?')
-                update_values.append(data.get('annualIncome'))
-            if 'employment_status' in column_names and data.get('employmentStatus'):
-                update_fields.append('employment_status = ?')
-                update_values.append(data.get('employmentStatus'))
-            if 'employer' in column_names and data.get('employer'):
-                update_fields.append('employer = ?')
-                update_values.append(data.get('employer'))
-            if 'occupation' in column_names and data.get('occupation'):
-                update_fields.append('occupation = ?')
-                update_values.append(data.get('occupation'))
-            if 'round_up_amount' in column_names:
-                update_fields.append('round_up_amount = ?')
-                update_values.append(data.get('roundUpAmount', 1.0))
-            if 'risk_tolerance' in column_names:
-                update_fields.append('risk_tolerance = ?')
-                update_values.append(data.get('riskTolerance', 'moderate'))
-            
-            if update_fields:
-                update_values.append(user_id)
-                update_query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = ?"
-                cursor.execute(update_query, tuple(update_values))
-                conn.commit()
-                print(f"[REGISTER] Updated {len(update_fields)} additional fields and committed")
-        
-        # Ensure commit happens
-        if conn.in_transaction:
-            conn.commit()
-        
-        # Store subscription if plan was selected and not trial
-        if data.get('subscriptionPlanId') and not data.get('isTrial', False):
-            try:
-                from datetime import datetime, timedelta
-                now = datetime.now()
-                
-                # Get plan details
-                cursor.execute("SELECT price_monthly, price_yearly FROM subscription_plans WHERE id = ?", 
-                             (data['subscriptionPlanId'],))
-                plan = cursor.fetchone()
-                
-                if plan:
-                    billing_cycle = data.get('billingCycle', 'monthly')
-                    amount = plan[0] if billing_cycle == 'monthly' else (plan[1] / 12 if plan[1] else plan[0])
-                    
-                    # Calculate billing periods
-                    if billing_cycle == 'monthly':
-                        period_end = now + timedelta(days=30)
-                        next_billing = period_end
-                    else:
-                        period_end = now + timedelta(days=365)
-                        next_billing = period_end
-                    
-                    # Create subscription
-                    cursor.execute("""
-                        INSERT INTO user_subscriptions (
-                            user_id, plan_id, status, billing_cycle, amount,
-                            current_period_start, current_period_end, next_billing_date,
-                            auto_renewal, created_at, updated_at
-                        ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, 1, ?, ?)
-                    """, (user_id, data['subscriptionPlanId'], billing_cycle, amount,
-                          now.isoformat(), period_end.isoformat(), next_billing.isoformat(),
-                          now.isoformat(), now.isoformat()))
-                    
-                    subscription_id = cursor.lastrowid
-                    
-                    # Update user's subscription status (if columns exist)
+                    from datetime import timedelta
+                    now = dt.now()
+
+                    # Get plan details
+                    plan_result = conn.execute(text(
+                        "SELECT price_monthly, price_yearly FROM subscription_plans WHERE id = :plan_id"
+                    ), {'plan_id': data['subscriptionPlanId']})
+                    plan = plan_result.fetchone()
+
+                    if plan:
+                        billing_cycle = data.get('billingCycle', 'monthly')
+                        amount = plan[0] if billing_cycle == 'monthly' else (plan[1] / 12 if plan[1] else plan[0])
+
+                        if billing_cycle == 'monthly':
+                            period_end = now + timedelta(days=30)
+                        else:
+                            period_end = now + timedelta(days=365)
+
+                        conn.execute(text("""
+                            INSERT INTO user_subscriptions (
+                                user_id, plan_id, status, billing_cycle, amount,
+                                current_period_start, current_period_end, next_billing_date,
+                                auto_renewal, created_at, updated_at
+                            ) VALUES (:user_id, :plan_id, 'active', :billing_cycle, :amount,
+                                      :period_start, :period_end, :next_billing, true, :created_at, :updated_at)
+                        """), {
+                            'user_id': user_id,
+                            'plan_id': data['subscriptionPlanId'],
+                            'billing_cycle': billing_cycle,
+                            'amount': amount,
+                            'period_start': now.isoformat(),
+                            'period_end': period_end.isoformat(),
+                            'next_billing': period_end.isoformat(),
+                            'created_at': now.isoformat(),
+                            'updated_at': now.isoformat()
+                        })
+                        conn.commit()
+                except Exception as sub_error:
+                    print(f"[WARNING] Failed to create subscription during registration: {str(sub_error)}")
+
+            db_manager.release_connection(conn)
+
+        else:
+            # SQLite path
+            cursor = conn.cursor()
+
+            cursor.execute('SELECT id FROM users WHERE email = ?', (data['email'],))
+            existing_user = cursor.fetchone()
+
+            if existing_user:
+                conn.close()
+                return jsonify({'success': False, 'error': 'User already exists'}), 409
+
+            # Check and add missing columns to users table if needed
+            cursor.execute("PRAGMA table_info(users)")
+            columns_info = cursor.fetchall()
+            column_names = [col[1] for col in columns_info]
+
+            # Add missing columns dynamically
+            missing_columns = {
+                'first_name': 'TEXT', 'last_name': 'TEXT', 'address': 'TEXT',
+                'annual_income': 'TEXT', 'employment_status': 'TEXT', 'employer': 'TEXT',
+                'occupation': 'TEXT', 'round_up_amount': 'REAL', 'risk_tolerance': 'TEXT',
+                'date_of_birth': 'TEXT', 'ssn_last4': 'TEXT', 'country': 'TEXT',
+                'timezone': 'TEXT', 'subscription_plan_id': 'INTEGER',
+                'billing_cycle': 'TEXT', 'promo_code': 'TEXT'
+            }
+
+            for col_name, col_type in missing_columns.items():
+                if col_name not in column_names:
                     try:
-                        # Check if columns exist
-                        cursor.execute("PRAGMA table_info(users)")
-                        columns_info = cursor.fetchall()
-                        column_names = [col[1] for col in columns_info]
-                        
-                        update_sub_fields = []
-                        update_sub_values = []
-                        
-                        if 'subscription_status' in column_names:
-                            update_sub_fields.append('subscription_status = ?')
-                            update_sub_values.append('active')
-                        if 'subscription_id' in column_names:
-                            update_sub_fields.append('subscription_id = ?')
-                            update_sub_values.append(subscription_id)
-                        
-                        if update_sub_fields:
-                            update_sub_values.append(user_id)
-                            cursor.execute(f"""
-                                UPDATE users SET {', '.join(update_sub_fields)}
-                                WHERE id = ?
-                            """, tuple(update_sub_values))
-                    except Exception as update_error:
-                        print(f"[WARNING] Failed to update subscription status: {update_error}")
-            except Exception as sub_error:
-                print(f"[WARNING] Failed to create subscription during registration: {str(sub_error)}")
-                # Don't fail registration if subscription creation fails
-        
-        conn.commit()
-        conn.close()
-        
+                        cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+                        conn.commit()
+                        column_names.append(col_name)
+                    except sqlite3.OperationalError:
+                        pass
+
+            print(f"[REGISTER] SQLite - Creating user with email: {data['email']}")
+
+            # Build dynamic insert for SQLite
+            base_columns = ['name', 'email', 'password', 'account_type', 'account_number', 'user_guid',
+                           'phone', 'city', 'state', 'zip_code']
+            base_values = [data['name'], data['email'], data['password'], data['accountType'],
+                          account_number, user_guid, data.get('phone', ''), data.get('city', ''),
+                          data.get('state', ''), data.get('zipCode', '')]
+
+            optional_columns = {
+                'address': data.get('address', ''), 'first_name': data.get('firstName', ''),
+                'last_name': data.get('lastName', ''), 'annual_income': data.get('annualIncome', ''),
+                'employment_status': data.get('employmentStatus', ''), 'employer': data.get('employer', ''),
+                'occupation': data.get('occupation', ''), 'round_up_amount': data.get('roundUpAmount', 1.0),
+                'risk_tolerance': data.get('riskTolerance', 'moderate'),
+                'date_of_birth': data.get('dateOfBirth', ''), 'ssn_last4': data.get('ssnLast4', ''),
+                'country': data.get('country', 'USA'), 'timezone': data.get('timezone', ''),
+                'subscription_plan_id': data.get('subscriptionPlanId'),
+                'billing_cycle': data.get('billingCycle', 'monthly'), 'promo_code': data.get('promoCode', '')
+            }
+
+            insert_columns = base_columns.copy()
+            insert_values = base_values.copy()
+
+            for col_name, col_value in optional_columns.items():
+                if col_name in column_names:
+                    insert_columns.append(col_name)
+                    insert_values.append(col_value)
+
+            insert_columns.append('created_at')
+            columns_str = ', '.join(insert_columns)
+            placeholders = ', '.join(['?' for _ in insert_values] + ["datetime('now')"])
+
+            cursor.execute(f"INSERT INTO users ({columns_str}) VALUES ({placeholders})", tuple(insert_values))
+            user_id = cursor.lastrowid
+            conn.commit()
+            print(f"[REGISTER] SQLite - User created with ID: {user_id}")
+
+            # Store subscription if plan was selected and not trial
+            if data.get('subscriptionPlanId') and not data.get('isTrial', False):
+                try:
+                    from datetime import datetime as dt, timedelta
+                    now = dt.now()
+
+                    cursor.execute("SELECT price_monthly, price_yearly FROM subscription_plans WHERE id = ?",
+                                 (data['subscriptionPlanId'],))
+                    plan = cursor.fetchone()
+
+                    if plan:
+                        billing_cycle = data.get('billingCycle', 'monthly')
+                        amount = plan[0] if billing_cycle == 'monthly' else (plan[1] / 12 if plan[1] else plan[0])
+                        period_end = now + timedelta(days=30 if billing_cycle == 'monthly' else 365)
+
+                        cursor.execute("""
+                            INSERT INTO user_subscriptions (
+                                user_id, plan_id, status, billing_cycle, amount,
+                                current_period_start, current_period_end, next_billing_date,
+                                auto_renewal, created_at, updated_at
+                            ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, 1, ?, ?)
+                        """, (user_id, data['subscriptionPlanId'], billing_cycle, amount,
+                              now.isoformat(), period_end.isoformat(), period_end.isoformat(),
+                              now.isoformat(), now.isoformat()))
+                        conn.commit()
+                except Exception as sub_error:
+                    print(f"[WARNING] Failed to create subscription during registration: {str(sub_error)}")
+
+            conn.close()
+
         return jsonify({
             'success': True,
             'message': 'User created successfully',
@@ -17416,8 +17378,11 @@ def user_register():
             'userId': user_id,
             'accountNumber': account_number
         })
-        
+
     except Exception as e:
+        import traceback
+        print(f"[REGISTER] Error: {str(e)}")
+        print(f"[REGISTER] Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/user/auth/complete-registration', methods=['POST'])
@@ -17427,261 +17392,235 @@ def complete_registration():
         print(f"[DEBUG] Complete registration - Received request")
         data = request.get_json()
         print(f"[DEBUG] Complete registration - Data: {data}")
-        
+
         if not data.get('userGuid'):
             print(f"[ERROR] Complete registration - Missing required field: userGuid")
             return jsonify({'success': False, 'error': 'userGuid is required'}), 400
-        
+
         # mxData is optional (user might skip bank connection)
         if not data.get('mxData'):
             data['mxData'] = {'accounts': []}
             print(f"[INFO] Complete registration - No MX data provided, using empty accounts")
-        
+
         print(f"[DEBUG] Complete registration - Looking for user: {data['userGuid']}")
         conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        
-        # Find user by userGuid
-        cursor.execute('SELECT id FROM users WHERE user_guid = ?', (data['userGuid'],))
-        user = cursor.fetchone()
-        
-        if not user:
-            print(f"[ERROR] Complete registration - User not found: {data['userGuid']}")
-            conn.close()
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-        
-        print(f"[SUCCESS] Complete registration - User found: {user[0]}")
-        
-        # Store MX data (in production, you'd process this data properly)
+
+        # Store MX data
         mx_data_json = json.dumps(data['mxData'])
-        print(f"[DEBUG] Complete registration - MX data JSON: {mx_data_json}")
-        
-        # Update user with MX data and ALL additional registration data
-        user_id = user[0]
-        
-        # Build comprehensive update query with all possible fields
-        update_fields = []
-        update_values = []
-        
-        # MX data (always update)
-        update_fields.append('mx_data = ?')
-        update_values.append(mx_data_json)
-        update_fields.append('registration_completed = 1')
-        
-        # Personal information
-        if data.get('firstName'):
-            update_fields.append('first_name = ?')
-            update_values.append(data['firstName'])
-        if data.get('lastName'):
-            update_fields.append('last_name = ?')
-            update_values.append(data['lastName'])
-        if data.get('phone'):
-            update_fields.append('phone = ?')
-            update_values.append(data['phone'])
-        if data.get('dateOfBirth'):
-            update_fields.append('date_of_birth = ?')
-            update_values.append(data['dateOfBirth'])
-        if data.get('ssnLast4'):
-            update_fields.append('ssn_last4 = ?')
-            update_values.append(data['ssnLast4'])
-        
-        # Address information
-        if data.get('address'):
-            update_fields.append('address = ?')
-            update_values.append(data['address'])
-        if data.get('city'):
-            update_fields.append('city = ?')
-            update_values.append(data['city'])
-        if data.get('state'):
-            update_fields.append('state = ?')
-            update_values.append(data['state'])
-        if data.get('zipCode'):
-            update_fields.append('zip_code = ?')
-            update_values.append(data['zipCode'])
-        if data.get('country'):
-            update_fields.append('country = ?')
-            update_values.append(data['country'])
-        if data.get('timezone'):
-            update_fields.append('timezone = ?')
-            update_values.append(data['timezone'])
-        
-        # Financial information
-        if data.get('annualIncome'):
-            update_fields.append('annual_income = ?')
-            update_values.append(data['annualIncome'])
-        if data.get('employmentStatus'):
-            update_fields.append('employment_status = ?')
-            update_values.append(data['employmentStatus'])
-        if data.get('employer'):
-            update_fields.append('employer = ?')
-            update_values.append(data['employer'])
-        if data.get('occupation'):
-            update_fields.append('occupation = ?')
-            update_values.append(data['occupation'])
-        if data.get('roundUpAmount'):
-            update_fields.append('round_up_amount = ?')
-            update_values.append(data['roundUpAmount'])
-        if data.get('riskTolerance'):
-            update_fields.append('risk_tolerance = ?')
-            update_values.append(data['riskTolerance'])
-        
-        # Subscription information
-        if data.get('subscriptionPlanId'):
-            update_fields.append('subscription_plan_id = ?')
-            update_values.append(data['subscriptionPlanId'])
-        if data.get('billingCycle'):
-            update_fields.append('billing_cycle = ?')
-            update_values.append(data['billingCycle'])
-        if data.get('promoCode'):
-            update_fields.append('promo_code = ?')
-            update_values.append(data['promoCode'])
-        
-        # Build update query
-        if not update_fields:
-            update_query = 'UPDATE users SET mx_data = ?, registration_completed = 1 WHERE user_guid = ?'
-            update_values = [mx_data_json, data['userGuid']]
+        print(f"[DEBUG] Complete registration - MX data JSON length: {len(mx_data_json)}")
+
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            from datetime import datetime, timedelta
+
+            # Find user by userGuid
+            result = conn.execute(text('SELECT id FROM users WHERE user_guid = :user_guid'), {'user_guid': data['userGuid']})
+            user = result.fetchone()
+
+            if not user:
+                print(f"[ERROR] Complete registration - User not found: {data['userGuid']}")
+                db_manager.release_connection(conn)
+                return jsonify({'success': False, 'error': 'User not found'}), 404
+
+            user_id = user[0]
+            print(f"[SUCCESS] Complete registration - User found: {user_id}")
+
+            # Build update with all fields using PostgreSQL syntax
+            conn.execute(text('''
+                UPDATE users SET
+                    mx_data = :mx_data,
+                    registration_completed = 1,
+                    first_name = COALESCE(:first_name, first_name),
+                    last_name = COALESCE(:last_name, last_name),
+                    phone = COALESCE(:phone, phone),
+                    date_of_birth = COALESCE(:date_of_birth, date_of_birth),
+                    ssn_last4 = COALESCE(:ssn_last4, ssn_last4),
+                    address = COALESCE(:address, address),
+                    city = COALESCE(:city, city),
+                    state = COALESCE(:state, state),
+                    zip_code = COALESCE(:zip_code, zip_code),
+                    country = COALESCE(:country, country),
+                    timezone = COALESCE(:timezone, timezone),
+                    annual_income = COALESCE(:annual_income, annual_income),
+                    employment_status = COALESCE(:employment_status, employment_status),
+                    employer = COALESCE(:employer, employer),
+                    occupation = COALESCE(:occupation, occupation),
+                    round_up_amount = COALESCE(:round_up_amount, round_up_amount),
+                    risk_tolerance = COALESCE(:risk_tolerance, risk_tolerance),
+                    subscription_plan_id = COALESCE(:subscription_plan_id, subscription_plan_id),
+                    billing_cycle = COALESCE(:billing_cycle, billing_cycle),
+                    promo_code = COALESCE(:promo_code, promo_code)
+                WHERE user_guid = :user_guid
+            '''), {
+                'mx_data': mx_data_json,
+                'first_name': data.get('firstName') or None,
+                'last_name': data.get('lastName') or None,
+                'phone': data.get('phone') or None,
+                'date_of_birth': data.get('dateOfBirth') or None,
+                'ssn_last4': data.get('ssnLast4') or None,
+                'address': data.get('address') or None,
+                'city': data.get('city') or None,
+                'state': data.get('state') or None,
+                'zip_code': data.get('zipCode') or None,
+                'country': data.get('country') or None,
+                'timezone': data.get('timezone') or None,
+                'annual_income': data.get('annualIncome') or None,
+                'employment_status': data.get('employmentStatus') or None,
+                'employer': data.get('employer') or None,
+                'occupation': data.get('occupation') or None,
+                'round_up_amount': data.get('roundUpAmount') or None,
+                'risk_tolerance': data.get('riskTolerance') or None,
+                'subscription_plan_id': data.get('subscriptionPlanId') or None,
+                'billing_cycle': data.get('billingCycle') or None,
+                'promo_code': data.get('promoCode') or None,
+                'user_guid': data['userGuid']
+            })
+            conn.commit()
+            print(f"[COMPLETE-REG] PostgreSQL - Successfully updated user {user_id}")
+
+            # Create subscription if plan was selected
+            if data.get('subscriptionPlanId') and not data.get('isTrial', False):
+                try:
+                    # Check if subscription already exists
+                    existing_result = conn.execute(text(
+                        "SELECT id FROM user_subscriptions WHERE user_id = :user_id AND status = 'active'"
+                    ), {'user_id': user_id})
+                    existing_sub = existing_result.fetchone()
+
+                    if not existing_sub:
+                        now = datetime.now()
+                        plan_result = conn.execute(text(
+                            "SELECT price_monthly, price_yearly FROM subscription_plans WHERE id = :plan_id"
+                        ), {'plan_id': data['subscriptionPlanId']})
+                        plan = plan_result.fetchone()
+
+                        if plan:
+                            billing_cycle = data.get('billingCycle', 'monthly')
+                            amount = plan[0] if billing_cycle == 'monthly' else (plan[1] / 12 if plan[1] else plan[0])
+                            period_end = now + timedelta(days=30 if billing_cycle == 'monthly' else 365)
+
+                            conn.execute(text("""
+                                INSERT INTO user_subscriptions (
+                                    user_id, plan_id, status, billing_cycle, amount,
+                                    current_period_start, current_period_end, next_billing_date,
+                                    auto_renewal, created_at, updated_at
+                                ) VALUES (:user_id, :plan_id, 'active', :billing_cycle, :amount,
+                                          :period_start, :period_end, :next_billing, true, :created_at, :updated_at)
+                            """), {
+                                'user_id': user_id, 'plan_id': data['subscriptionPlanId'],
+                                'billing_cycle': billing_cycle, 'amount': amount,
+                                'period_start': now.isoformat(), 'period_end': period_end.isoformat(),
+                                'next_billing': period_end.isoformat(),
+                                'created_at': now.isoformat(), 'updated_at': now.isoformat()
+                            })
+                            conn.commit()
+                            print(f"[SUCCESS] Created subscription for user {user_id}")
+                except Exception as sub_error:
+                    print(f"[WARNING] Failed to create subscription: {str(sub_error)}")
+
+            # Get user data for response
+            user_result = conn.execute(text('''
+                SELECT id, name, email, account_type, account_number, user_guid, created_at
+                FROM users WHERE id = :user_id
+            '''), {'user_id': user_id})
+            user_data = user_result.fetchone()
+
+            db_manager.release_connection(conn)
+
         else:
+            # SQLite path
+            cursor = conn.cursor()
+
+            # Find user by userGuid
+            cursor.execute('SELECT id FROM users WHERE user_guid = ?', (data['userGuid'],))
+            user = cursor.fetchone()
+
+            if not user:
+                print(f"[ERROR] Complete registration - User not found: {data['userGuid']}")
+                conn.close()
+                return jsonify({'success': False, 'error': 'User not found'}), 404
+
+            user_id = user[0]
+            print(f"[SUCCESS] Complete registration - User found: {user_id}")
+
+            # Build comprehensive update query
+            update_fields = ['mx_data = ?', 'registration_completed = 1']
+            update_values = [mx_data_json]
+
+            field_mappings = [
+                ('firstName', 'first_name'), ('lastName', 'last_name'), ('phone', 'phone'),
+                ('dateOfBirth', 'date_of_birth'), ('ssnLast4', 'ssn_last4'), ('address', 'address'),
+                ('city', 'city'), ('state', 'state'), ('zipCode', 'zip_code'), ('country', 'country'),
+                ('timezone', 'timezone'), ('annualIncome', 'annual_income'),
+                ('employmentStatus', 'employment_status'), ('employer', 'employer'),
+                ('occupation', 'occupation'), ('roundUpAmount', 'round_up_amount'),
+                ('riskTolerance', 'risk_tolerance'), ('subscriptionPlanId', 'subscription_plan_id'),
+                ('billingCycle', 'billing_cycle'), ('promoCode', 'promo_code')
+            ]
+
+            for data_key, db_col in field_mappings:
+                if data.get(data_key):
+                    update_fields.append(f'{db_col} = ?')
+                    update_values.append(data[data_key])
+
             update_query = 'UPDATE users SET ' + ', '.join(update_fields) + ' WHERE user_guid = ?'
             update_values.append(data['userGuid'])
-        
-        try:
-            print(f"[COMPLETE-REG] Executing update query: {update_query}")
-            print(f"[COMPLETE-REG] With {len(update_values)} values")
-            cursor.execute(update_query, tuple(update_values))
-            rows_updated = cursor.rowcount
-            conn.commit()
-            print(f"[COMPLETE-REG] Successfully updated {rows_updated} rows, committed to database")
-            
-            # Verify the update
-            cursor.execute("SELECT mx_data, address, first_name, last_name, phone, city, state FROM users WHERE id = ?", (user_id,))
-            verify_row = cursor.fetchone()
-            if verify_row:
-                print(f"[COMPLETE-REG] Verification - mx_data length: {len(verify_row[0]) if verify_row[0] else 0}")
-                print(f"[COMPLETE-REG] Verification - address: {verify_row[1]}")
-                print(f"[COMPLETE-REG] Verification - first_name: {verify_row[2]}")
-                print(f"[COMPLETE-REG] Verification - last_name: {verify_row[3]}")
-                print(f"[COMPLETE-REG] Verification - phone: {verify_row[4]}")
-                print(f"[COMPLETE-REG] Verification - city: {verify_row[5]}")
-                print(f"[COMPLETE-REG] Verification - state: {verify_row[6]}")
-        except sqlite3.OperationalError as e:
-            print(f"[COMPLETE-REG] OperationalError: {e}")
-            if 'no such column' in str(e).lower():
-                # Add missing columns
-                print(f"[INFO] Adding missing columns to users table")
-                try:
-                    cursor.execute('ALTER TABLE users ADD COLUMN mx_data TEXT')
-                    conn.commit()
-                except:
-                    pass
-                try:
-                    cursor.execute('ALTER TABLE users ADD COLUMN registration_completed INTEGER DEFAULT 0')
-                    conn.commit()
-                except:
-                    pass
-                # Retry the update
-                try:
+
+            try:
+                cursor.execute(update_query, tuple(update_values))
+                conn.commit()
+                print(f"[COMPLETE-REG] SQLite - Successfully updated user {user_id}")
+            except sqlite3.OperationalError as e:
+                if 'no such column' in str(e).lower():
+                    for col in ['mx_data', 'registration_completed']:
+                        try:
+                            cursor.execute(f'ALTER TABLE users ADD COLUMN {col} TEXT')
+                            conn.commit()
+                        except:
+                            pass
                     cursor.execute(update_query, tuple(update_values))
                     conn.commit()
-                    print(f"[COMPLETE-REG] Update succeeded after adding columns")
-                except Exception as retry_error:
-                    print(f"[COMPLETE-REG] Retry failed: {retry_error}")
+                else:
                     raise
-            else:
-                raise
-        
-        # Ensure commit happens
-        if conn.in_transaction:
-            conn.commit()
-        conn.commit()  # Double commit to ensure it's saved
-        
-        # Create subscription if plan was selected and not trial (and wasn't created during registration)
-        if data.get('subscriptionPlanId') and not data.get('isTrial', False):
-            try:
-                # Check if subscription already exists
-                cursor.execute("SELECT id FROM user_subscriptions WHERE user_id = ? AND status = 'active'", (user_id,))
-                existing_sub = cursor.fetchone()
-                
-                if not existing_sub:
-                    from datetime import datetime, timedelta
-                    now = datetime.now()
-                    
-                    # Get plan details
-                    cursor.execute("SELECT price_monthly, price_yearly FROM subscription_plans WHERE id = ?", 
-                                 (data['subscriptionPlanId'],))
-                    plan = cursor.fetchone()
-                    
-                    if plan:
-                        billing_cycle = data.get('billingCycle', 'monthly')
-                        amount = plan[0] if billing_cycle == 'monthly' else (plan[1] / 12 if plan[1] else plan[0])
-                        
-                        # Calculate billing periods
-                        if billing_cycle == 'monthly':
-                            period_end = now + timedelta(days=30)
-                            next_billing = period_end
-                        else:
-                            period_end = now + timedelta(days=365)
-                            next_billing = period_end
-                        
-                        # Create subscription
-                        cursor.execute("""
-                            INSERT INTO user_subscriptions (
-                                user_id, plan_id, status, billing_cycle, amount,
-                                current_period_start, current_period_end, next_billing_date,
-                                auto_renewal, created_at, updated_at
-                            ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, 1, ?, ?)
-                        """, (user_id, data['subscriptionPlanId'], billing_cycle, amount,
-                              now.isoformat(), period_end.isoformat(), next_billing.isoformat(),
-                              now.isoformat(), now.isoformat()))
-                        
-                        subscription_id = cursor.lastrowid
-                        
-                        # Update user's subscription status (if columns exist)
-                        try:
-                            # Check if columns exist
-                            cursor.execute("PRAGMA table_info(users)")
-                            columns_info = cursor.fetchall()
-                            column_names = [col[1] for col in columns_info]
-                            
-                            update_sub_fields = []
-                            update_sub_values = []
-                            
-                            if 'subscription_status' in column_names:
-                                update_sub_fields.append('subscription_status = ?')
-                                update_sub_values.append('active')
-                            if 'subscription_id' in column_names:
-                                update_sub_fields.append('subscription_id = ?')
-                                update_sub_values.append(subscription_id)
-                            
-                            if update_sub_fields:
-                                update_sub_values.append(user_id)
-                                cursor.execute(f"""
-                                    UPDATE users SET {', '.join(update_sub_fields)}
-                                    WHERE id = ?
-                                """, tuple(update_sub_values))
-                        except Exception as update_error:
-                            print(f"[WARNING] Failed to update subscription status: {update_error}")
-                        
-                        conn.commit()
-                        print(f"[SUCCESS] Created subscription {subscription_id} for user {user_id}")
-            except Exception as sub_error:
-                print(f"[WARNING] Failed to create subscription during completion: {str(sub_error)}")
-                # Don't fail completion if subscription creation fails
-        
-        print(f"[SUCCESS] Complete registration - Successfully updated user")
-        
-        # Generate token in the expected format (token_<user_id>)
-        user_id = user[0]
+
+            # Create subscription if plan was selected
+            if data.get('subscriptionPlanId') and not data.get('isTrial', False):
+                try:
+                    cursor.execute("SELECT id FROM user_subscriptions WHERE user_id = ? AND status = 'active'", (user_id,))
+                    if not cursor.fetchone():
+                        from datetime import datetime, timedelta
+                        now = datetime.now()
+                        cursor.execute("SELECT price_monthly, price_yearly FROM subscription_plans WHERE id = ?",
+                                     (data['subscriptionPlanId'],))
+                        plan = cursor.fetchone()
+                        if plan:
+                            billing_cycle = data.get('billingCycle', 'monthly')
+                            amount = plan[0] if billing_cycle == 'monthly' else (plan[1] / 12 if plan[1] else plan[0])
+                            period_end = now + timedelta(days=30 if billing_cycle == 'monthly' else 365)
+                            cursor.execute("""
+                                INSERT INTO user_subscriptions (
+                                    user_id, plan_id, status, billing_cycle, amount,
+                                    current_period_start, current_period_end, next_billing_date,
+                                    auto_renewal, created_at, updated_at
+                                ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, 1, ?, ?)
+                            """, (user_id, data['subscriptionPlanId'], billing_cycle, amount,
+                                  now.isoformat(), period_end.isoformat(), period_end.isoformat(),
+                                  now.isoformat(), now.isoformat()))
+                            conn.commit()
+                except Exception as sub_error:
+                    print(f"[WARNING] Failed to create subscription: {str(sub_error)}")
+
+            # Get user data for response
+            cursor.execute('''
+                SELECT id, name, email, account_type, account_number, user_guid, created_at
+                FROM users WHERE id = ?
+            ''', (user_id,))
+            user_data = cursor.fetchone()
+            conn.close()
+
         token = f"token_{user_id}"
-        
-        # Get complete user data for response
-        cursor.execute('''
-            SELECT id, name, email, account_type, account_number, user_guid, created_at
-            FROM users WHERE id = ?
-        ''', (user_id,))
-        user_data = cursor.fetchone()
-        
-        conn.close()
-        
+        print(f"[SUCCESS] Complete registration - Successfully completed for user {user_id}")
+
         return jsonify({
             'success': True,
             'message': 'Registration completed successfully',
@@ -17693,10 +17632,10 @@ def complete_registration():
                 'account_type': user_data[3],
                 'account_number': user_data[4],
                 'user_guid': user_data[5],
-                'created_at': user_data[6]
+                'created_at': str(user_data[6]) if user_data[6] else None
             }
         })
-        
+
     except Exception as e:
         print(f"[ERROR] Complete registration - Error: {str(e)}")
         import traceback
@@ -17706,28 +17645,37 @@ def complete_registration():
 def generate_account_number(account_type):
     """Generate unique account number with prefix"""
     import random
-    
+
     # Define prefixes
     prefixes = {
         'individual': 'I',
-        'family': 'F', 
+        'family': 'F',
         'business': 'B'
     }
-    
+
     prefix = prefixes.get(account_type, 'I')
-    
+
     # Generate 7-digit number
     while True:
         number = random.randint(1000000, 9999999)
         account_number = f"{prefix}{number}"
-        
+
         # Check if unique
         conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM users WHERE account_number = ?', (account_number,))
-        existing = cursor.fetchone()
-        conn.close()
-        
+        existing = None
+
+        if db_manager._use_postgresql:
+            from sqlalchemy import text
+            result = conn.execute(text('SELECT id FROM users WHERE account_number = :account_number'),
+                                {'account_number': account_number})
+            existing = result.fetchone()
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM users WHERE account_number = ?', (account_number,))
+            existing = cursor.fetchone()
+            conn.close()
+
         if not existing:
             return account_number
 
