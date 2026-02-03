@@ -16521,6 +16521,137 @@ def admin_investment_status():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def get_current_stock_price(ticker):
+    """Get current stock price - uses Yahoo Finance API with fallback to stored prices"""
+    import urllib.request
+    import json
+
+    # Fallback prices (updated periodically) - used if API fails
+    fallback_prices = {
+        'AAPL': 229.87, 'GOOGL': 196.00, 'AMZN': 229.15, 'MSFT': 411.68,
+        'TSLA': 391.89, 'META': 700.28, 'NVDA': 124.58, 'NFLX': 982.20,
+        'DIS': 109.31, 'SBUX': 109.00, 'WMT': 97.52, 'TGT': 124.52,
+        'COST': 1039.02, 'HD': 396.01, 'LOW': 247.34, 'NKE': 71.65,
+        'MCD': 294.50, 'KO': 62.80, 'PEP': 142.54, 'JPM': 268.13,
+        'V': 351.97, 'MA': 541.89, 'PYPL': 85.34, 'SQ': 80.50,
+        'UBER': 79.62, 'LYFT': 14.26, 'ABNB': 129.33, 'CMG': 57.60,
+        'CVS': 47.55, 'WBA': 9.54, 'BURL': 273.19, 'DKS': 195.76,
+        'ADBE': 422.18, 'CHTR': 366.50, 'BJ': 97.51
+    }
+
+    try:
+        # Try Yahoo Finance API (free, no key required)
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1d'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode())
+            price = data['chart']['result'][0]['meta']['regularMarketPrice']
+            return round(float(price), 2)
+    except Exception as e:
+        print(f"Stock price API failed for {ticker}: {e}")
+        # Return fallback price or 0
+        return fallback_prices.get(ticker.upper(), 0)
+
+
+@app.route('/api/admin/investments/summary', methods=['GET'])
+def admin_investments_summary():
+    """Get investment summary with real stock prices - aggregated by ticker"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Get all investments aggregated by ticker from transactions
+        # Use round_up as the invested amount
+        cursor.execute("""
+            SELECT
+                t.ticker,
+                SUM(t.round_up) as total_invested,
+                COUNT(DISTINCT t.user_id) as user_count,
+                COUNT(DISTINCT CASE
+                    WHEN u.account_type = 'individual' THEN 'individual'
+                    WHEN u.account_type = 'family' THEN 'family'
+                    WHEN u.account_type = 'business' THEN 'business'
+                    WHEN u.account_type = 'admin' THEN 'admin'
+                    ELSE 'other'
+                END) as dashboard_count
+            FROM transactions t
+            LEFT JOIN users u ON t.user_id = u.id
+            WHERE t.ticker IS NOT NULL
+              AND t.ticker != ''
+              AND t.ticker != 'UNKNOWN'
+              AND t.round_up > 0
+              AND (t.status = 'mapped' OR t.status = 'completed' OR t.status = 'invested')
+            GROUP BY t.ticker
+            ORDER BY total_invested DESC
+        """)
+
+        investments = []
+        total_invested = 0
+        total_current_value = 0
+
+        for row in cursor.fetchall():
+            ticker = row[0]
+            invested = float(row[1]) if row[1] else 0
+            user_count = row[2] or 0
+            dashboard_count = row[3] or 0
+
+            # Get current stock price
+            current_price = get_current_stock_price(ticker)
+
+            # Calculate shares: invested amount / current price (or average price if we have it)
+            # For simplicity, assume purchase was at current price (conservative estimate)
+            # In production, you'd track actual purchase prices per transaction
+            if current_price > 0:
+                shares = invested / current_price
+            else:
+                shares = 0
+
+            current_value = shares * current_price
+            gain_loss = current_value - invested
+            gain_loss_percent = ((current_value - invested) / invested * 100) if invested > 0 else 0
+
+            investments.append({
+                'ticker': ticker,
+                'companyName': ticker,  # Frontend will map to proper names
+                'shares': round(shares, 4),
+                'totalInvested': round(invested, 2),
+                'currentPrice': current_price,
+                'currentValue': round(current_value, 2),
+                'gainLoss': round(gain_loss, 2),
+                'gainLossPercent': round(gain_loss_percent, 2),
+                'userCount': user_count,
+                'dashboardCount': dashboard_count
+            })
+
+            total_invested += invested
+            total_current_value += current_value
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'investments': investments,
+                'stats': {
+                    'totalInvested': round(total_invested, 2),
+                    'currentValue': round(total_current_value, 2),
+                    'totalGainLoss': round(total_current_value - total_invested, 2),
+                    'uniqueStocks': len(investments)
+                }
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/admin/investments/portfolio-summary', methods=['GET'])
 def admin_portfolio_summary():
     """Get portfolio summary across all users"""

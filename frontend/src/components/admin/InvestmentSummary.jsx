@@ -4,10 +4,8 @@ import { useTheme } from '../../context/ThemeContext'
 import CompanyLogo from '../common/CompanyLogo'
 
 const InvestmentSummary = ({ user, transactions = [] }) => {
-  console.log('InvestmentSummary - Component loaded successfully')
-  console.log('InvestmentSummary - Received transactions prop:', transactions?.length || 0)
   const { isLightMode, isDarkMode, isCloudMode } = useTheme()
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [stats, setStats] = useState({
     totalInvested: 0,
@@ -40,219 +38,75 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
     { value: '1y', label: 'Last Year' }
   ]
 
-  // Dispatch page load completion event when transactions are available
-  useEffect(() => {
-    // Dispatch when transactions are loaded or component mounts
-    const timer = setTimeout(() => {
-      console.log('📊 InvestmentSummary - Dispatching admin-page-load-complete for investments')
+  // Company name mapping
+  const getCompanyName = (ticker) => {
+    const companyMap = {
+      'AAPL': 'Apple', 'GOOGL': 'Google', 'AMZN': 'Amazon', 'MSFT': 'Microsoft',
+      'TSLA': 'Tesla', 'META': 'Meta', 'NVDA': 'NVIDIA', 'NFLX': 'Netflix',
+      'DIS': 'Disney', 'SBUX': 'Starbucks', 'WMT': 'Walmart', 'TGT': 'Target',
+      'COST': 'Costco', 'HD': 'Home Depot', 'LOW': 'Lowes', 'NKE': 'Nike',
+      'MCD': 'McDonalds', 'KO': 'Coca-Cola', 'PEP': 'Pepsi', 'JPM': 'JPMorgan',
+      'V': 'Visa', 'MA': 'Mastercard', 'PYPL': 'PayPal', 'SQ': 'Square',
+      'UBER': 'Uber', 'LYFT': 'Lyft', 'ABNB': 'Airbnb', 'CMG': 'Chipotle',
+      'CVS': 'CVS Health', 'WBA': 'Walgreens', 'BURL': 'Burlington', 'DKS': 'Dicks Sporting Goods',
+      'ADBE': 'Adobe', 'CHTR': 'Spectrum', 'BJ': 'BJs Wholesale'
+    }
+    return companyMap[ticker] || ticker
+  }
+
+  // Fetch investment data from API with real stock prices
+  const fetchInvestmentData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('admin_token_3') || localStorage.getItem('authToken')
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+
+      const response = await fetch(`${apiBaseUrl}/api/admin/investments/summary`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+
+      const result = await response.json()
+      if (result.success) {
+        // Add company names to investments
+        const investmentsWithNames = result.data.investments.map(inv => ({
+          ...inv,
+          companyName: getCompanyName(inv.ticker)
+        }))
+
+        setStats(result.data.stats)
+        setInvestments(investmentsWithNames)
+        setFilteredInvestments(investmentsWithNames)
+      } else {
+        throw new Error(result.error || 'Failed to fetch investment data')
+      }
+    } catch (err) {
+      console.error('InvestmentSummary - Fetch error:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+      // Dispatch page load completion event
       window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
         detail: { pageId: 'investments' }
       }))
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [transactions])
-
-  // Process transactions when they change
-  useEffect(() => {
-    console.log('InvestmentSummary - Processing transactions:', transactions?.length || 0)
-    console.log('InvestmentSummary - Transactions data:', transactions)
-    
-    if (transactions && transactions.length > 0) {
-      console.log('InvestmentSummary - Sample transaction:', transactions[0])
-      console.log('InvestmentSummary - Sample transaction keys:', Object.keys(transactions[0]))
-      console.log('InvestmentSummary - Sample transaction values:', {
-        status: transactions[0].status,
-        ticker: transactions[0].ticker,
-        roundUp: transactions[0].roundUp || transactions[0].round_up,
-        round_up: transactions[0].round_up,
-        allKeys: Object.keys(transactions[0]),
-        fullTransaction: transactions[0]
-      })
-      calculateStatsAndInvestments(transactions)
-    } else {
-      console.log('InvestmentSummary - No transactions provided or empty array')
-      console.log('InvestmentSummary - This might be because:')
-      console.log('InvestmentSummary - 1. User navigated to Investment Summary before Transactions page loaded data')
-      console.log('InvestmentSummary - 2. Data flow is broken between AdminTransactions and AdminDashboard')
-      console.log('InvestmentSummary - 3. AdminDashboard allTransactions state is empty')
-      
-      // Reset stats when no transactions
-      setStats({
-        totalInvested: 0,
-        currentValue: 0,
-        totalGainLoss: 0,
-        uniqueStocks: 0
-      })
-      setFilteredInvestments([])
-    }
-  }, [transactions])
-
-  const calculateStatsAndInvestments = (transactions) => {
-    if (!transactions || !Array.isArray(transactions)) {
-      console.log('InvestmentSummary - No valid transactions provided')
-      setStats({
-        totalInvested: 0,
-        currentValue: 0,
-        totalGainLoss: 0,
-        uniqueStocks: 0
-      })
-      setFilteredInvestments([])
-      return
-    }
-    
-    console.log('InvestmentSummary - Processing transactions:', transactions.length)
-    
-    // Debug: Log all transaction statuses and tickers
-    console.log('InvestmentSummary - Transaction statuses:', transactions.map(tx => ({ status: tx.status, ticker: tx.ticker, merchant: tx.merchant })))
-    
-    // Filter for investment transactions - those with tickers that are mapped OR completed
-    const investments = transactions.filter(tx => {
-      const isInvestment = tx.status === 'mapped' || tx.status === 'completed'
-      const hasTicker = tx.ticker && tx.ticker !== 'UNKNOWN' && tx.ticker !== null
-      const hasRoundUp = (tx.roundUp > 0) || (tx.round_up > 0)
-
-      console.log(`🔍 InvestmentSummary - Filtering transaction:`, {
-        merchant: tx.merchant,
-        status: tx.status,
-        ticker: tx.ticker,
-        roundUp: tx.roundUp,
-        round_up: tx.round_up,
-        isInvestment,
-        hasTicker,
-        hasRoundUp,
-        passes: isInvestment && hasTicker && hasRoundUp
-      })
-
-      return isInvestment && hasTicker && hasRoundUp
-    })
-
-    console.log('InvestmentSummary - Investment transactions found:', investments.length)
-    console.log('InvestmentSummary - Investment details:', investments.map(inv => ({ ticker: inv.ticker, status: inv.status, roundUp: inv.roundUp || inv.round_up })))
-
-    // Company name mapping for proper display
-    const getCompanyName = (ticker) => {
-      const companyMap = {
-        'SBUX': 'Starbucks',
-        'AMZN': 'Amazon',
-        'NFLX': 'Netflix',
-        'BURL': 'Burlington',
-        'DKS': 'Dick\'s Sporting Goods',
-        'WMT': 'Walmart',
-        'ADBE': 'Adobe',
-        'GOOGL': 'Google',
-        'CHTR': 'Spectrum',
-        'AAPL': 'Apple',
-        'COST': 'Costco',
-        'TGT': 'Target',
-        'BJ': 'BJ\'s Wholesale'
-      }
-      return companyMap[ticker] || ticker
-    }
-
-    // Group by ticker - SYSTEM-WIDE AGGREGATION
-    const investmentGroups = {}
-    investments.forEach(inv => {
-      const key = inv.ticker
-      if (!investmentGroups[key]) {
-        investmentGroups[key] = {
-          ticker: inv.ticker,
-          companyName: getCompanyName(inv.ticker), // Use proper company name
-          shares: 0,
-          totalInvested: 0,
-          currentPrice: inv.stockPrice || 0,
-          // System-wide aggregation - no single dashboard
-          dashboardType: 'system-wide',
-          dashboardName: 'All Users',
-          transactions: [],
-          userCount: new Set(), // Track unique users
-          dashboardCount: new Set() // Track unique dashboards
-        }
-      }
-      
-      // Aggregate across all users and dashboards
-      investmentGroups[key].shares += inv.shares || 0
-      investmentGroups[key].totalInvested += inv.roundUp || inv.round_up || 0
-      investmentGroups[key].transactions.push(inv)
-      
-      // Track unique users and dashboards
-      if (inv.userId) investmentGroups[key].userCount.add(inv.userId)
-      if (inv.dashboard) investmentGroups[key].dashboardCount.add(inv.dashboard)
-    })
-
-    // Convert to array and calculate current values
-    const investmentArray = Object.values(investmentGroups).map(inv => ({
-      ...inv,
-      currentValue: inv.shares * inv.currentPrice,
-      gainLoss: (inv.shares * inv.currentPrice) - inv.totalInvested,
-      gainLossPercent: inv.totalInvested > 0 ? 
-        (((inv.shares * inv.currentPrice) - inv.totalInvested) / inv.totalInvested) * 100 : 0
-    }))
-
-    console.log('InvestmentSummary - Investment groups created:', investmentArray.length)
-    setInvestments(investmentArray)
-    setFilteredInvestments(investmentArray)
-
-    // Calculate overall stats
-    const totalInvested = investmentArray.reduce((sum, inv) => sum + inv.totalInvested, 0)
-    const currentValue = investmentArray.reduce((sum, inv) => sum + inv.currentValue, 0)
-    const totalGainLoss = currentValue - totalInvested
-
-    setStats({
-      totalInvested,
-      currentValue,
-      totalGainLoss,
-      uniqueStocks: investmentArray.length
-    })
-  }
-
-  const getDashboardName = (dashboard) => {
-    switch (dashboard) {
-      case 'user': return 'User Dashboard'
-      case 'family': return 'Family Dashboard'
-      case 'business': return 'Business Dashboard'
-      case 'admin': return 'Admin Dashboard'
-      default: return 'Admin Dashboard'
     }
   }
 
-  // Filter investments based on selected options
+  // Fetch data on mount
   useEffect(() => {
-    let filtered = [...investments]
+    fetchInvestmentData()
+  }, [])
 
-    // Filter by dashboard if specific dashboard is selected
-    if (selectedDashboard !== 'all') {
-      filtered = filtered.filter(inv => {
-        // Check if any transaction in this investment group belongs to the selected dashboard
-        return inv.transactions.some(tx => tx.dashboard === selectedDashboard)
-      })
-    }
-
-    // Filter by timeframe
-    if (selectedTimeframe !== 'all') {
-      const now = new Date()
-      const cutoffDate = new Date()
-      
-      switch (selectedTimeframe) {
-        case '1m':
-          cutoffDate.setMonth(now.getMonth() - 1)
-          break
-        case '3m':
-          cutoffDate.setMonth(now.getMonth() - 3)
-          break
-        case '6m':
-          cutoffDate.setMonth(now.getMonth() - 6)
-          break
-        case '1y':
-          cutoffDate.setFullYear(now.getFullYear() - 1)
-          break
-      }
-      
-      filtered = filtered.filter(inv => 
-        inv.transactions.some(tx => new Date(tx.date) >= cutoffDate)
-      )
-    }
-
-    setFilteredInvestments(filtered)
+  // Filter investments when filter options change
+  useEffect(() => {
+    // For now, filtering is done on the full dataset
+    // In future, can add API params for dashboard/timeframe filtering
+    setFilteredInvestments(investments)
   }, [selectedDashboard, selectedTimeframe, investments])
 
   const handleInvestmentClick = (investment) => {
@@ -261,17 +115,19 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
   }
 
   const exportData = () => {
+    if (!filteredInvestments.length) return
+
     const csvData = filteredInvestments.map(inv => ({
       Ticker: inv.ticker,
       Company: inv.companyName,
-      Shares: inv.shares,
-      'Total Invested': inv.totalInvested,
-      'Current Price': inv.currentPrice,
-      'Current Value': inv.currentValue,
-      'Gain/Loss': inv.gainLoss,
-      'Gain/Loss %': inv.gainLossPercent,
-      'Users': inv.userCount.size,
-      'Dashboards': inv.dashboardCount.size
+      Shares: inv.shares?.toFixed(4) || '0',
+      'Total Invested': `$${inv.totalInvested?.toFixed(2) || '0'}`,
+      'Current Price': `$${inv.currentPrice?.toFixed(2) || '0'}`,
+      'Current Value': `$${inv.currentValue?.toFixed(2) || '0'}`,
+      'Gain/Loss': `$${inv.gainLoss?.toFixed(2) || '0'}`,
+      'Gain/Loss %': `${inv.gainLossPercent?.toFixed(2) || '0'}%`,
+      'Users': inv.userCount || 0,
+      'Dashboards': inv.dashboardCount || 0
     }))
 
     const csv = [
@@ -338,14 +194,11 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
         </div>
         <div className="flex space-x-3">
           <button
-            onClick={() => {
-              if (transactions && transactions.length > 0) {
-                calculateStatsAndInvestments(transactions)
-              }
-            }}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+            onClick={fetchInvestmentData}
+            disabled={loading}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
           <button
@@ -478,28 +331,36 @@ const InvestmentSummary = ({ user, transactions = [] }) => {
               </div>
               <div className="text-right">
                 <p className={`text-sm ${getSubtextClass()}`}>
-                  {investment.userCount.size} users • {investment.dashboardCount.size} dashboards
+                  {investment.userCount || 0} users • {investment.dashboardCount || 0} dashboards
                 </p>
+              </div>
+            </div>
+
+            {/* Current Stock Price Banner */}
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2 mb-4">
+              <div className="flex justify-between items-center">
+                <span className="text-blue-400 text-sm">Current Stock Price:</span>
+                <span className="text-blue-400 font-bold">${investment.currentPrice?.toFixed(2) || '0.00'}</span>
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className={getSubtextClass()}>Shares:</span>
-                <span className={getTextClass()}>{investment.shares.toFixed(4)}</span>
+                <span className={getTextClass()}>{(investment.shares || 0).toFixed(4)}</span>
               </div>
               <div className="flex justify-between">
                 <span className={getSubtextClass()}>Invested:</span>
-                <span className={getTextClass()}>${investment.totalInvested.toFixed(2)}</span>
+                <span className={getTextClass()}>${(investment.totalInvested || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className={getSubtextClass()}>Current Value:</span>
-                <span className={getTextClass()}>${investment.currentValue.toFixed(2)}</span>
+                <span className={getTextClass()}>${(investment.currentValue || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className={getSubtextClass()}>Gain/Loss:</span>
-                <span className={investment.gainLoss >= 0 ? 'text-green-500' : 'text-red-500'}>
-                  ${investment.gainLoss.toFixed(2)} ({investment.gainLossPercent.toFixed(1)}%)
+                <span className={(investment.gainLoss || 0) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                  ${(investment.gainLoss || 0).toFixed(2)} ({(investment.gainLossPercent || 0).toFixed(1)}%)
                 </span>
               </div>
             </div>
