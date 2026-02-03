@@ -1968,6 +1968,58 @@ def admin_login():
         print(f"Admin login error: {error_trace}")
         return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
 
+# Admin password reset - use with caution, remove in production
+@app.route('/api/admin/reset-password', methods=['POST'])
+def admin_reset_password():
+    """Reset admin password - for recovery purposes"""
+    try:
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
+        new_password = data.get('new_password', 'admin123')
+        secret_key = data.get('secret_key', '')
+
+        # Simple security check - require a secret key
+        if secret_key != 'kamioi_admin_reset_2026':
+            return jsonify({'success': False, 'error': 'Invalid secret key'}), 403
+
+        if not email:
+            email = 'info@kamioi.com'
+
+        import hashlib
+        password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if admin exists
+        cursor.execute("SELECT id FROM admins WHERE email = %s", (email,))
+        admin = cursor.fetchone()
+
+        if admin:
+            # Update existing admin password
+            cursor.execute("UPDATE admins SET password = %s WHERE email = %s", (password_hash, email))
+            message = f'Password updated for admin: {email}'
+        else:
+            # Create new admin
+            cursor.execute(
+                "INSERT INTO admins (email, name, role, password) VALUES (%s, %s, %s, %s)",
+                (email, 'Main Admin', 'superadmin', password_hash)
+            )
+            message = f'Admin created: {email}'
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': message,
+            'email': email,
+            'password': new_password
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/admin/auth/me')
 def admin_auth_me():
     try:
