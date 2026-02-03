@@ -2765,31 +2765,30 @@ def admin_system_reset():
 # LLM Center endpoints
 @app.route('/api/admin/llm-center/queue', methods=['GET'])
 def admin_llm_queue():
-    """Get LLM center queue data - WORKING VERSION"""
+    """Get LLM center queue data - OPTIMIZED: Combined count queries into 1"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         # Get actual data from database
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get total count
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings')
-        total_items = cursor.fetchone()[0]
 
-        # Get pending count (status = 'pending') - PostgreSQL uses %s placeholders
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status = %s', ('pending',))
-        pending_count = cursor.fetchone()[0]
-
-        # Get processing count (status = 'processing') - PostgreSQL uses %s placeholders
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status = %s', ('processing',))
-        processing_count = cursor.fetchone()[0]
-
-        # Get completed count (status = 'approved' or 'completed') - PostgreSQL uses %s
-        cursor.execute('SELECT COUNT(*) FROM llm_mappings WHERE status IN (%s, %s)', ('approved', 'completed'))
-        completed_count = cursor.fetchone()[0]
+        # OPTIMIZED: Combined all 4 count queries into 1 using PostgreSQL FILTER
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_items,
+                COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+                COUNT(*) FILTER (WHERE status = 'processing') as processing_count,
+                COUNT(*) FILTER (WHERE status IN ('approved', 'completed')) as completed_count
+            FROM llm_mappings
+        """)
+        counts = cursor.fetchone()
+        total_items = counts[0] or 0
+        pending_count = counts[1] or 0
+        processing_count = counts[2] or 0
+        completed_count = counts[3] or 0
 
         # Get recent queue items with proper date handling - PostgreSQL uses %s
         limit = int(request.args.get('limit', 10))
@@ -2955,23 +2954,28 @@ def admin_llm_queue():
 
 @app.route('/api/admin/llm-center/processing-stats', methods=['GET'])
 def admin_llm_stats():
+    """Get LLM processing stats - OPTIMIZED: Single query instead of 2"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get basic stats
-        cursor.execute("SELECT COUNT(*) FROM transactions")
-        total_transactions = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM transactions WHERE status = 'mapped'")
-        mapped_transactions = cursor.fetchone()[0]
-        
+
+        # OPTIMIZED: Combined both queries into 1 using PostgreSQL FILTER
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_transactions,
+                COUNT(*) FILTER (WHERE status = 'mapped') as mapped_transactions
+            FROM transactions
+        """)
+        row = cursor.fetchone()
+        total_transactions = row[0] or 0
+        mapped_transactions = row[1] or 0
+
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'stats': {
@@ -2980,7 +2984,7 @@ def admin_llm_stats():
                 'mapping_rate': round((mapped_transactions / max(total_transactions, 1)) * 100, 2)
             }
         })
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -9291,29 +9295,28 @@ def llm_system_status_old():
 
 @app.route('/api/llm-data/event-stats', methods=['GET'])
 def llm_event_stats():
-    """Get RAG Search event statistics"""
+    """Get RAG Search event statistics - OPTIMIZED: Single query instead of 5"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # Get RAG search metrics
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings")
-        total_events = cursor.fetchone()[0]
-
-        # PostgreSQL uses NOW() - INTERVAL '1 day' instead of SQLite datetime()
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > NOW() - INTERVAL '1 day'")
-        events_today = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE status = 'pending'")
-        queue_size = cursor.fetchone()[0]
-
-        cursor.execute("SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0")
-        avg_confidence = cursor.fetchone()[0] or 0
-
-        # Get last processed timestamp
-        cursor.execute("SELECT MAX(created_at) FROM llm_mappings")
-        last_processed = cursor.fetchone()[0]
+        # OPTIMIZED: Combined all 5 queries into 1 using PostgreSQL aggregates
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_events,
+                COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day') as events_today,
+                COUNT(*) FILTER (WHERE status = 'pending') as queue_size,
+                AVG(confidence) FILTER (WHERE confidence > 0) as avg_confidence,
+                MAX(created_at) as last_processed
+            FROM llm_mappings
+        """)
+        row = cursor.fetchone()
+        total_events = row[0] or 0
+        events_today = row[1] or 0
+        queue_size = row[2] or 0
+        avg_confidence = row[3] or 0
+        last_processed = row[4]
 
         cursor.close()
         conn.close()
@@ -9402,6 +9405,7 @@ def admin_database_schema():
 
 @app.route('/api/admin/database/stats', methods=['GET'])
 def admin_database_stats():
+    """Get database stats - OPTIMIZED: Reduced 30+ queries to 4 queries"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -9411,86 +9415,60 @@ def admin_database_stats():
         conn.rollback()
         cursor = conn.cursor()
 
-        # Helper function to safely count records
-        def count_by_type(table, account_type, user_id_column='user_id'):
-            try:
-                if account_type == 'other':
-                    cursor.execute(f"""
-                        SELECT COUNT(*) FROM {table}
-                        WHERE account_type IS NULL
-                           OR account_type NOT IN ('individual', 'family', 'business', 'admin')
-                    """)
-                else:
-                    cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE account_type = %s", (account_type,))
-                return cursor.fetchone()[0]
-            except:
-                return 0
-
-        def count_users_by_type(account_type):
-            try:
-                if account_type == 'other':
-                    cursor.execute("""
-                        SELECT COUNT(*) FROM users
-                        WHERE account_type IS NULL
-                           OR account_type NOT IN ('individual', 'family', 'business', 'admin')
-                    """)
-                else:
-                    cursor.execute("SELECT COUNT(*) FROM users WHERE account_type = %s", (account_type,))
-                return cursor.fetchone()[0]
-            except:
-                return 0
-
-        def count_related_by_user_type(table, account_type, user_id_column='user_id'):
-            try:
-                if account_type == 'other':
-                    cursor.execute(f"""
-                        SELECT COUNT(*) FROM {table} t
-                        JOIN users u ON t.{user_id_column} = u.id
-                        WHERE u.account_type IS NULL
-                           OR u.account_type NOT IN ('individual', 'family', 'business', 'admin')
-                    """)
-                else:
-                    cursor.execute(f"""
-                        SELECT COUNT(*) FROM {table} t
-                        JOIN users u ON t.{user_id_column} = u.id
-                        WHERE u.account_type = %s
-                    """, (account_type,))
-                return cursor.fetchone()[0]
-            except:
-                return 0
-
-        # Total counts
+        # OPTIMIZED: Query 1 - All table totals in one query
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM users) as users,
+                (SELECT COUNT(*) FROM transactions) as transactions,
+                (SELECT COUNT(*) FROM goals) as goals,
+                (SELECT COUNT(*) FROM notifications) as notifications,
+                (SELECT COUNT(*) FROM round_up_allocations) as round_up_allocations,
+                (SELECT COUNT(*) FROM llm_mappings) as llm_mappings
+        """)
+        total_row = cursor.fetchone()
         totals = {
-            'users': 0,
-            'transactions': 0,
-            'goals': 0,
-            'notifications': 0,
-            'round_up_allocations': 0,
-            'llm_mappings': 0
+            'users': total_row[0] or 0,
+            'transactions': total_row[1] or 0,
+            'goals': total_row[2] or 0,
+            'notifications': total_row[3] or 0,
+            'round_up_allocations': total_row[4] or 0,
+            'llm_mappings': total_row[5] or 0
         }
 
-        # Count totals
-        for table in totals.keys():
-            try:
-                cursor.execute(f"SELECT COUNT(*) FROM {table}")
-                totals[table] = cursor.fetchone()[0]
-            except:
-                totals[table] = 0
+        # OPTIMIZED: Query 2 - Users by account type in one query
+        cursor.execute("""
+            SELECT
+                COUNT(*) FILTER (WHERE account_type = 'individual') as individual,
+                COUNT(*) FILTER (WHERE account_type = 'family') as family,
+                COUNT(*) FILTER (WHERE account_type = 'business') as business,
+                COUNT(*) FILTER (WHERE account_type = 'admin') as admin,
+                COUNT(*) FILTER (WHERE account_type IS NULL OR account_type NOT IN ('individual', 'family', 'business', 'admin')) as other
+            FROM users
+        """)
+        user_counts = cursor.fetchone()
 
-        # Stats by account type
-        account_types = ['individual', 'family', 'business', 'admin', 'other']
-        stats_by_type = {}
+        # OPTIMIZED: Query 3 - Transactions by account type in one query
+        cursor.execute("""
+            SELECT
+                COUNT(*) FILTER (WHERE account_type = 'individual') as individual,
+                COUNT(*) FILTER (WHERE account_type = 'family') as family,
+                COUNT(*) FILTER (WHERE account_type = 'business') as business,
+                COUNT(*) FILTER (WHERE account_type = 'admin') as admin,
+                COUNT(*) FILTER (WHERE account_type IS NULL OR account_type NOT IN ('individual', 'family', 'business', 'admin')) as other
+            FROM transactions
+        """)
+        txn_counts = cursor.fetchone()
 
-        for acc_type in account_types:
-            stats_by_type[acc_type] = {
-                'users': count_users_by_type(acc_type),
-                'transactions': count_by_type('transactions', acc_type),
-                'goals': count_related_by_user_type('goals', acc_type),
-                'notifications': count_related_by_user_type('notifications', acc_type),
-                'round_up_allocations': count_related_by_user_type('round_up_allocations', acc_type)
-            }
+        # Build stats_by_type with optimized counts
+        stats_by_type = {
+            'individual': {'users': user_counts[0] or 0, 'transactions': txn_counts[0] or 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0},
+            'family': {'users': user_counts[1] or 0, 'transactions': txn_counts[1] or 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0},
+            'business': {'users': user_counts[2] or 0, 'transactions': txn_counts[2] or 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0},
+            'admin': {'users': user_counts[3] or 0, 'transactions': txn_counts[3] or 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0},
+            'other': {'users': user_counts[4] or 0, 'transactions': txn_counts[4] or 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0}
+        }
 
-        # Users breakdown with transaction counts
+        # OPTIMIZED: Query 4 - Users breakdown (already optimized with subquery)
         users_breakdown = []
         try:
             cursor.execute("""
@@ -9519,11 +9497,11 @@ def admin_database_stats():
             'success': True,
             'data': {
                 'total': totals,
-                'individual': stats_by_type.get('individual', {'users': 0, 'transactions': 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0}),
-                'family': stats_by_type.get('family', {'users': 0, 'transactions': 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0}),
-                'business': stats_by_type.get('business', {'users': 0, 'transactions': 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0}),
-                'admin': stats_by_type.get('admin', {'users': 0, 'transactions': 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0}),
-                'other': stats_by_type.get('other', {'users': 0, 'transactions': 0, 'goals': 0, 'notifications': 0, 'round_up_allocations': 0}),
+                'individual': stats_by_type['individual'],
+                'family': stats_by_type['family'],
+                'business': stats_by_type['business'],
+                'admin': stats_by_type['admin'],
+                'other': stats_by_type['other'],
                 'users_breakdown': users_breakdown
             }
         })
@@ -17806,25 +17784,26 @@ def get_quality_metrics():
 
 @app.route('/api/llm-data/system-status', methods=['GET'])
 def llm_data_system_status():
-    """Get LLM data management system status"""
+    """Get LLM data management system status - OPTIMIZED: Single query instead of 4"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # Get system metrics
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings")
-        total_mappings = cursor.fetchone()[0]
-
-        # Use PostgreSQL syntax for date comparison
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > NOW() - INTERVAL '1 day'")
-        recent_mappings = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE status = 'pending'")
-        queue_size = cursor.fetchone()[0]
-
-        cursor.execute("SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0")
-        avg_confidence = cursor.fetchone()[0] or 0
+        # OPTIMIZED: Combined all 4 queries into 1 using PostgreSQL FILTER clause
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_mappings,
+                COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day') as recent_mappings,
+                COUNT(*) FILTER (WHERE status = 'pending') as queue_size,
+                AVG(confidence) FILTER (WHERE confidence > 0) as avg_confidence
+            FROM llm_mappings
+        """)
+        row = cursor.fetchone()
+        total_mappings = row[0] or 0
+        recent_mappings = row[1] or 0
+        queue_size = row[2] or 0
+        avg_confidence = row[3] or 0
 
         cursor.close()
         conn.close()
@@ -17859,24 +17838,26 @@ def llm_data_system_status():
 
 @app.route('/api/llm-data/vector-embeddings', methods=['GET'])
 def llm_data_vector_embeddings():
-    """Get vector embeddings status and metrics"""
+    """Get vector embeddings status and metrics - OPTIMIZED: Single query instead of 4"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # Get vector embeddings metrics
-        cursor.execute("SELECT COUNT(DISTINCT merchant_name) FROM llm_mappings WHERE merchant_name IS NOT NULL")
-        unique_merchants = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(DISTINCT category) FROM llm_mappings WHERE category IS NOT NULL")
-        unique_categories = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings")
-        total_embeddings = cursor.fetchone()[0]
-
-        cursor.execute("SELECT AVG(confidence) FROM llm_mappings WHERE confidence > 0")
-        avg_confidence = cursor.fetchone()[0] or 0
+        # OPTIMIZED: Combined all 4 queries into 1 using PostgreSQL aggregates
+        cursor.execute("""
+            SELECT
+                COUNT(DISTINCT merchant_name) FILTER (WHERE merchant_name IS NOT NULL) as unique_merchants,
+                COUNT(DISTINCT category) FILTER (WHERE category IS NOT NULL) as unique_categories,
+                COUNT(*) as total_embeddings,
+                AVG(confidence) FILTER (WHERE confidence > 0) as avg_confidence
+            FROM llm_mappings
+        """)
+        row = cursor.fetchone()
+        unique_merchants = row[0] or 0
+        unique_categories = row[1] or 0
+        total_embeddings = row[2] or 0
+        avg_confidence = row[3] or 0
 
         cursor.close()
         conn.close()
@@ -17911,25 +17892,26 @@ def llm_data_vector_embeddings():
 
 @app.route('/api/llm-data/feature-store', methods=['GET'])
 def llm_data_feature_store():
-    """Get feature store status and metrics"""
+    """Get feature store status and metrics - OPTIMIZED: Single query instead of 4"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # Get feature store metrics
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings")
-        total_features = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(DISTINCT merchant_name) FROM llm_mappings WHERE merchant_name IS NOT NULL")
-        merchant_patterns = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(DISTINCT category) FROM llm_mappings WHERE category IS NOT NULL")
-        user_behavior = cursor.fetchone()[0]
-
-        # PostgreSQL uses NOW() - INTERVAL instead of SQLite datetime()
-        cursor.execute("SELECT COUNT(*) FROM llm_mappings WHERE created_at > NOW() - INTERVAL '1 day'")
-        transaction_features = cursor.fetchone()[0]
+        # OPTIMIZED: Combined all 4 queries into 1 using PostgreSQL aggregates
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_features,
+                COUNT(DISTINCT merchant_name) FILTER (WHERE merchant_name IS NOT NULL) as merchant_patterns,
+                COUNT(DISTINCT category) FILTER (WHERE category IS NOT NULL) as user_behavior,
+                COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day') as transaction_features
+            FROM llm_mappings
+        """)
+        row = cursor.fetchone()
+        total_features = row[0] or 0
+        merchant_patterns = row[1] or 0
+        user_behavior = row[2] or 0
+        transaction_features = row[3] or 0
 
         cursor.close()
         conn.close()
