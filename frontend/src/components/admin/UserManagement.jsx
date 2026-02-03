@@ -315,15 +315,15 @@ const UserManagement = () => {
   // Users are already filtered by the backend based on searchTerm, statusFilter, segmentFilter
   const filteredUsers = users
 
-  // Generate formatted User ID: I/F/B + 7 digits
+  // Generate formatted User ID: I/F/B + 7 digits (e.g., I1000043 for user ID 43)
   const getFormattedUserId = (user) => {
-    if (!user) return 'Unknown'
-    const role = (user.role || user.account_type || 'individual').toLowerCase()
+    if (!user || !user.id) return 'Unknown'
+    const role = String(user.role || user.account_type || 'individual').toLowerCase()
     let prefix = 'I' // Default to Individual
     if (role.includes('family')) prefix = 'F'
     else if (role.includes('business')) prefix = 'B'
     // Generate 7-digit number: base 1000000 + user.id
-    const numericId = (1000000 + (user.id || 0)).toString().padStart(7, '0')
+    const numericId = String(1000000 + Number(user.id)).padStart(7, '0')
     return `${prefix}${numericId}`
   }
 
@@ -526,17 +526,20 @@ const UserManagement = () => {
                           <p className={`font-medium ${getTextClass()}`}>{user.name}</p>
                           <p className={`text-sm ${getSubtextClass()}`}>{user.email}</p>
                           <p className={`text-xs ${getSubtextClass()}`}>ID: {getFormattedUserId(user)}</p>
+                          {(user.city || user.state) && (
+                            <p className={`text-xs ${getSubtextClass()}`}>{[user.city, user.state].filter(Boolean).join(', ')}</p>
+                          )}
                         </div>
                       </div>
                     </td>
                     <td className="py-4">
                       <div>
-                        <p className={`font-medium ${getTextClass()}`}>${(user.totalPortfolioValue || 0).toFixed(2)}</p>
-                        <p className={`text-sm ${getSubtextClass()}`}>${(user.totalRoundUps || 0).toFixed(2)} round-ups</p>
+                        <p className={`font-medium ${getTextClass()}`}>${(user.totalPortfolioValue || user.total_balance || 0).toFixed(2)}</p>
+                        <p className={`text-sm ${getSubtextClass()}`}>${(user.totalRoundUps || user.round_ups || 0).toFixed(2)} round-ups</p>
                         <div className="flex items-center space-x-1 mt-1">
                           <TrendingUp className="w-3 h-3 text-green-400" />
                           <span className="text-xs text-green-400">
-                            +0.0%
+                            {user.growth_rate ? `${user.growth_rate > 0 ? '+' : ''}${user.growth_rate.toFixed(1)}%` : '+0.0%'}
                           </span>
                         </div>
                       </div>

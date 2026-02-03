@@ -16,15 +16,15 @@ const GlassModal = ({
 }) => {
   if (!isOpen) return null
 
-  // Generate formatted User ID: I/F/B + 7 digits
+  // Generate formatted User ID: I/F/B + 7 digits (e.g., I1000043 for user ID 43)
   const getFormattedUserId = (user) => {
-    if (!user) return 'Unknown'
-    const role = (user.role || user.account_type || 'individual').toLowerCase()
+    if (!user || !user.id) return 'Unknown'
+    const role = String(user.role || user.account_type || 'individual').toLowerCase()
     let prefix = 'I' // Default to Individual
     if (role.includes('family')) prefix = 'F'
     else if (role.includes('business')) prefix = 'B'
     // Generate 7-digit number: base 1000000 + user.id
-    const numericId = (1000000 + (user.id || 0)).toString().padStart(7, '0')
+    const numericId = String(1000000 + Number(user.id)).padStart(7, '0')
     return `${prefix}${numericId}`
   }
 
@@ -59,6 +59,9 @@ const GlassModal = ({
               <p className="text-xl font-semibold text-white">{user.name || 'Unknown'}</p>
               <p className="text-gray-400">{user.email || 'No email'}</p>
               <p className="text-gray-500 text-sm">ID: {getFormattedUserId(user)}</p>
+              {(user.city || user.state) && (
+                <p className="text-gray-500 text-sm">{[user.city, user.state].filter(x => x && x !== 'Unknown').join(', ')}</p>
+              )}
             </div>
           </div>
 
