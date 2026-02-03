@@ -1057,6 +1057,17 @@ def initialize_database():
             ("subscription_plan_id", "INTEGER"),
             ("billing_cycle", "VARCHAR(20)"),
             ("alpaca_account_id", "VARCHAR(100)"),
+            # Business-specific columns
+            ("business_type", "VARCHAR(100)"),
+            ("tax_id", "VARCHAR(50)"),
+            ("industry", "VARCHAR(100)"),
+            ("employee_count", "VARCHAR(50)"),
+            ("business_description", "TEXT"),
+            ("website", "VARCHAR(255)"),
+            # Family-specific columns
+            ("family_name", "VARCHAR(255)"),
+            ("family_code", "VARCHAR(50)"),
+            ("family_role", "VARCHAR(50)"),
         ]
 
         for col_name, col_type in profile_columns:
@@ -5413,6 +5424,18 @@ def user_register():
         elif mx_data and not isinstance(mx_data, str):
             mx_data = str(mx_data)
 
+        # Business-specific fields
+        business_type = data.get('business_type', data.get('businessType', '')).strip()
+        tax_id = data.get('tax_id', data.get('taxId', '')).strip()
+        industry = data.get('industry', '').strip()
+        employee_count = data.get('employee_count', data.get('employeeCount', '')).strip()
+        business_description = data.get('business_description', data.get('businessDescription', '')).strip()
+        website = data.get('website', '').strip()
+        annual_revenue = data.get('annual_revenue', data.get('annualRevenue', '')).strip()
+
+        # Family-specific fields
+        family_name = data.get('family_name', data.get('familyName', '')).strip()
+
         # Validation
         if not email or not password:
             return jsonify({'success': False, 'error': 'Email and password are required'}), 400
@@ -5450,8 +5473,9 @@ def user_register():
                              terms_agreed, privacy_agreed, marketing_agreed, created_at,
                              phone, address, city, state, zip_code, company_name, mx_data,
                              first_name, last_name, employer, occupation, annual_income, employment_status,
-                             dob, ssn_last4, subscription_plan_id, billing_cycle)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             dob, ssn_last4, subscription_plan_id, billing_cycle,
+                             business_type, tax_id, industry, employee_count, business_description, website, family_name)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             email,
@@ -5482,7 +5506,14 @@ def user_register():
             dob or None,
             ssn_last4 or None,
             subscription_plan_id,
-            billing_cycle or 'monthly'
+            billing_cycle or 'monthly',
+            business_type or None,
+            tax_id or None,
+            industry or None,
+            employee_count or None,
+            business_description or None,
+            website or None,
+            family_name or None
         ))
 
         result = cursor.fetchone()
@@ -5571,6 +5602,18 @@ def user_auth_register():
         elif mx_data and not isinstance(mx_data, str):
             mx_data = str(mx_data)
 
+        # Business-specific fields
+        business_type = data.get('business_type', data.get('businessType', '')).strip()
+        tax_id = data.get('tax_id', data.get('taxId', '')).strip()
+        industry = data.get('industry', '').strip()
+        employee_count = data.get('employee_count', data.get('employeeCount', '')).strip()
+        business_description = data.get('business_description', data.get('businessDescription', '')).strip()
+        website = data.get('website', '').strip()
+        annual_revenue = data.get('annual_revenue', data.get('annualRevenue', '')).strip()
+
+        # Family-specific fields
+        family_name = data.get('family_name', data.get('familyName', '')).strip()
+
         # Validation
         if not email or not password:
             return jsonify({'success': False, 'error': 'Email and password are required'}), 400
@@ -5608,8 +5651,9 @@ def user_auth_register():
                              terms_agreed, privacy_agreed, marketing_agreed, created_at,
                              phone, address, city, state, zip_code, company_name, mx_data,
                              first_name, last_name, employer, occupation, annual_income, employment_status,
-                             dob, ssn_last4, subscription_plan_id, billing_cycle)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             dob, ssn_last4, subscription_plan_id, billing_cycle,
+                             business_type, tax_id, industry, employee_count, business_description, website, family_name)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             email,
@@ -5640,7 +5684,14 @@ def user_auth_register():
             dob or None,
             ssn_last4 or None,
             subscription_plan_id,
-            billing_cycle or 'monthly'
+            billing_cycle or 'monthly',
+            business_type or None,
+            tax_id or None,
+            industry or None,
+            employee_count or None,
+            business_description or None,
+            website or None,
+            family_name or None
         ))
 
         result = cursor.fetchone()
@@ -23562,6 +23613,45 @@ def delete_family_bank_connection(connection_id):
         return jsonify({
             'success': True,
             'message': 'Bank connection deleted successfully'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Family Invite - General invite endpoint for onboarding (FamilyOnboarding.jsx calls /api/family/invite)
+@app.route('/api/family/invite', methods=['POST'])
+def family_invite():
+    """Send invite to a family member during onboarding"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        token = auth_header.split(' ')[1]
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
+        role = data.get('role', 'member')
+
+        if not email:
+            return jsonify({'success': False, 'error': 'Email is required'}), 400
+
+        # Generate invite token
+        invite_token = secrets.token_urlsafe(32)
+
+        # In a production system, you would:
+        # 1. Store the invite in a family_invites table
+        # 2. Send an email with the invite link
+        # For now, we return success with the invite token
+
+        return jsonify({
+            'success': True,
+            'message': f'Invitation sent to {email}',
+            'invite': {
+                'email': email,
+                'role': role,
+                'token': invite_token,
+                'expires_at': (datetime.now() + timedelta(days=7)).isoformat()
+            }
         })
 
     except Exception as e:

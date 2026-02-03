@@ -1,10 +1,15 @@
 import React, { useState } from 'react'
-import { Building2, User, Mail, Phone, MapPin, CreditCard, Shield, CheckCircle, ArrowRight, Info, Star, Award, Users, DollarSign, TrendingUp, FileText, Calendar, Globe, Upload } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Building2, User, Mail, Phone, MapPin, CreditCard, Shield, CheckCircle, ArrowRight, Info, Star, Award, Users, DollarSign, TrendingUp, FileText, Calendar, Globe, Upload, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const BusinessRegistration = () => {
+  const navigate = useNavigate()
   const [currentStep, setCurrentStep] = useState(1)
-   const { isLightMode } = useTheme()
+  const { isLightMode } = useTheme()
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     // Business Information
     businessName: '',
@@ -16,29 +21,31 @@ const BusinessRegistration = () => {
     state: '',
     zipCode: '',
     country: 'US',
-    
+
     // Contact Information
     contactName: '',
     contactEmail: '',
     contactPhone: '',
     contactTitle: '',
-    
+    password: '',
+    confirmPassword: '',
+
     // Business Details
     employeeCount: '',
     annualRevenue: '',
     businessDescription: '',
     website: '',
-    
+
     // Investment Preferences
     investmentGoal: '',
     riskTolerance: 'moderate',
     roundUpAmount: 1.00,
     autoInvest: true,
-    
+
     // Terms and Conditions
     agreeToTerms: false,
     agreeToMarketing: false,
-    
+
     // Bank Connection
     bankConnected: false,
     bankAccountType: '',
@@ -140,10 +147,76 @@ const BusinessRegistration = () => {
     }
   }
 
-  const handleSubmit = () => {
-    // Handle form submission
-    console.log('Business registration submitted:', formData)
-    alert('Business account registration submitted! We\'ll review your application and get back to you within 24 hours.')
+  const handleSubmit = async () => {
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+
+      // Step 1: Register business user
+      const response = await fetch(`${apiBaseUrl}/api/user/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.contactName,
+          email: formData.contactEmail,
+          password: formData.password,
+          accountType: 'business',
+          // Business-specific fields
+          company_name: formData.businessName,
+          business_type: formData.businessType,
+          tax_id: formData.taxId,
+          industry: formData.industry,
+          phone: formData.contactPhone,
+          address: formData.businessAddress,
+          city: formData.city,
+          state: formData.state,
+          zipCode: formData.zipCode,
+          employee_count: formData.employeeCount,
+          annual_revenue: formData.annualRevenue,
+          business_description: formData.businessDescription,
+          website: formData.website,
+          risk_tolerance: formData.riskTolerance,
+          round_up_amount: formData.roundUpAmount,
+          investment_goals: formData.investmentGoal,
+          terms_agreed: formData.agreeToTerms,
+          marketing_agreed: formData.agreeToMarketing
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Store auth token
+        localStorage.setItem('authToken', result.token)
+        localStorage.setItem('userGuid', result.userGuid)
+        localStorage.setItem('kamioi_user_token', result.token)
+
+        console.log('Business registration successful:', result)
+
+        // Navigate to business dashboard
+        navigate('/business-dashboard')
+      } else {
+        setError(result.error || 'Registration failed. Please try again.')
+      }
+    } catch (err) {
+      console.error('Registration error:', err)
+      setError('An error occurred during registration. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const renderStep1 = () => (
@@ -433,6 +506,43 @@ const BusinessRegistration = () => {
             onChange={(e) => handleInputChange('contactPhone', e.target.value)}
             className={`w-full px-3 py-2 rounded-lg ${isLightMode ? 'bg-white border-gray-300 text-gray-800' : 'bg-white/10 border-white/20 text-white'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
             placeholder="(555) 123-4567"
+            required
+          />
+        </div>
+
+        <div>
+          <label className={`block text-sm font-medium ${getTextColor()} mb-2`}>
+            Password *
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={formData.password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              className={`w-full px-3 py-2 rounded-lg ${isLightMode ? 'bg-white border-gray-300 text-gray-800' : 'bg-white/10 border-white/20 text-white'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              placeholder="Min 8 characters"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className={`block text-sm font-medium ${getTextColor()} mb-2`}>
+            Confirm Password *
+          </label>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={formData.confirmPassword}
+            onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+            className={`w-full px-3 py-2 rounded-lg ${isLightMode ? 'bg-white border-gray-300 text-gray-800' : 'bg-white/10 border-white/20 text-white'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
+            placeholder="Re-enter password"
             required
           />
         </div>
@@ -964,13 +1074,20 @@ const BusinessRegistration = () => {
             {currentStep === 4 && renderStep4()}
             {currentStep === 5 && renderStep5()}
 
+            {/* Error Display */}
+            {error && (
+              <div className="mt-4 p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
+                {error}
+              </div>
+            )}
+
             {/* Navigation Buttons */}
             <div className="flex justify-between mt-8 pt-6 border-t border-white/10">
               <button
                 onClick={prevStep}
-                disabled={currentStep === 1}
+                disabled={currentStep === 1 || isLoading}
                 className={`px-6 py-2 rounded-lg transition-all ${
-                  currentStep === 1
+                  currentStep === 1 || isLoading
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     : 'bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 hover:text-white'
                 }`}
@@ -989,15 +1106,24 @@ const BusinessRegistration = () => {
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={!formData.agreeToTerms}
+                  disabled={!formData.agreeToTerms || isLoading}
                   className={`px-6 py-2 rounded-lg transition-all flex items-center space-x-2 ${
-                    formData.agreeToTerms
+                    formData.agreeToTerms && !isLoading
                       ? 'bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Complete Registration</span>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Registering...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Complete Registration</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
