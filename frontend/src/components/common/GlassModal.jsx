@@ -126,7 +126,7 @@ const GlassModal = ({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-400">Street:</span>
-                <span className="text-white">{user.address?.street || user.street || 'Unknown'}</span>
+                <span className="text-white">{user.address?.street || user.street || user.address || 'Unknown'}</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex justify-between">
@@ -139,7 +139,7 @@ const GlassModal = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">ZIP:</span>
-                  <span className="text-white">{user.address?.zip || user.zip || 'Unknown'}</span>
+                  <span className="text-white">{user.address?.zip || user.zip || user.zip_code || user.zipCode || 'Unknown'}</span>
                 </div>
               </div>
               <div className="flex justify-between">
