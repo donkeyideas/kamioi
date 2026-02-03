@@ -9295,34 +9295,38 @@ def llm_system_status_old():
 
 @app.route('/api/llm-data/event-stats', methods=['GET'])
 def llm_event_stats():
-    """Get RAG Search event statistics - OPTIMIZED v2: Simpler aggregates"""
+    """Get RAG Search event statistics - OPTIMIZED v3: Fast estimated counts"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # OPTIMIZED v2: Use SUM(CASE WHEN) and AVG with CASE for better performance
+        # OPTIMIZED v3: Use pg_class for instant estimated total (no table scan)
+        cursor.execute("SELECT reltuples::bigint FROM pg_class WHERE relname = 'llm_mappings'")
+        row = cursor.fetchone()
+        total_events = int(row[0]) if row and row[0] and row[0] > 0 else 0
+
+        # Fast filtered query for recent metrics only (uses created_at index)
         cursor.execute("""
             SELECT
-                COUNT(*) as total_events,
-                SUM(CASE WHEN created_at > NOW() - INTERVAL '1 day' THEN 1 ELSE 0 END) as events_today,
+                COUNT(*) as events_today,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as queue_size,
                 AVG(CASE WHEN confidence > 0 THEN confidence END) as avg_confidence,
                 MAX(created_at) as last_processed
             FROM llm_mappings
+            WHERE created_at > NOW() - INTERVAL '1 day'
         """)
         row = cursor.fetchone()
-        total_events = row[0] or 0
-        events_today = row[1] or 0
-        queue_size = row[2] or 0
-        avg_confidence = row[3] or 0
-        last_processed = row[4]
+        events_today = row[0] or 0
+        queue_size = row[1] or 0
+        avg_confidence = row[2] or 0
+        last_processed = row[3]
 
         cursor.close()
         conn.close()
 
         # Calculate success rate (high confidence = success)
-        success_rate = round(avg_confidence * 100, 1) if avg_confidence > 0 else 0
+        success_rate = round(avg_confidence * 100, 1) if avg_confidence else 0
 
         return jsonify({
             'success': True,
@@ -17784,26 +17788,30 @@ def get_quality_metrics():
 
 @app.route('/api/llm-data/system-status', methods=['GET'])
 def llm_data_system_status():
-    """Get LLM data management system status - OPTIMIZED v2: Simpler aggregates"""
+    """Get LLM data management system status - OPTIMIZED v3: Fast estimated counts"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # OPTIMIZED v2: Use SUM(CASE WHEN) for better performance
+        # OPTIMIZED v3: Use pg_class for instant estimated total (no table scan)
+        cursor.execute("SELECT reltuples::bigint FROM pg_class WHERE relname = 'llm_mappings'")
+        row = cursor.fetchone()
+        total_mappings = int(row[0]) if row and row[0] and row[0] > 0 else 0
+
+        # Fast filtered query for recent metrics only (uses created_at index)
         cursor.execute("""
             SELECT
-                COUNT(*) as total_mappings,
-                SUM(CASE WHEN created_at > NOW() - INTERVAL '1 day' THEN 1 ELSE 0 END) as recent_mappings,
+                COUNT(*) as recent_count,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as queue_size,
                 AVG(CASE WHEN confidence > 0 THEN confidence END) as avg_confidence
             FROM llm_mappings
+            WHERE created_at > NOW() - INTERVAL '7 days'
         """)
         row = cursor.fetchone()
-        total_mappings = row[0] or 0
-        recent_mappings = row[1] or 0
-        queue_size = row[2] or 0
-        avg_confidence = row[3] or 0
+        recent_mappings = (row[0] or 0) // 7  # Daily average from last 7 days
+        queue_size = row[1] or 0
+        avg_confidence = row[2] or 0
 
         cursor.close()
         conn.close()
@@ -17818,7 +17826,7 @@ def llm_data_system_status():
             'queue_size': queue_size,
             'uptime': '99.9%',
             'total_mappings': total_mappings,
-            'avg_confidence': round(avg_confidence * 100, 1),
+            'avg_confidence': round(avg_confidence * 100, 1) if avg_confidence else 0,
             'processing_rate': f'{recent_mappings}/day',
             'last_update': datetime.utcnow().isoformat() + 'Z'
         }
@@ -17838,20 +17846,25 @@ def llm_data_system_status():
 
 @app.route('/api/llm-data/vector-embeddings', methods=['GET'])
 def llm_data_vector_embeddings():
-    """Get vector embeddings status and metrics - OPTIMIZED v2: Simpler aggregates"""
+    """Get vector embeddings status and metrics - OPTIMIZED v3: Fast estimated counts"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # OPTIMIZED v2: COUNT(DISTINCT) already ignores NULLs, removed FILTER for performance
+        # OPTIMIZED v3: Use pg_class for instant estimated total (no table scan)
+        cursor.execute("SELECT reltuples::bigint FROM pg_class WHERE relname = 'llm_mappings'")
+        row = cursor.fetchone()
+        total_embeddings = int(row[0]) if row and row[0] and row[0] > 0 else 0
+
+        # Fast query for distinct counts on recent data only (uses indexes)
         cursor.execute("""
             SELECT
                 COUNT(DISTINCT merchant_name) as unique_merchants,
                 COUNT(DISTINCT category) as unique_categories,
-                COUNT(*) as total_embeddings,
                 AVG(CASE WHEN confidence > 0 THEN confidence END) as avg_confidence
             FROM llm_mappings
+            WHERE created_at > NOW() - INTERVAL '30 days'
         """)
         row = cursor.fetchone()
         unique_merchants = row[0] or 0
@@ -17892,20 +17905,25 @@ def llm_data_vector_embeddings():
 
 @app.route('/api/llm-data/feature-store', methods=['GET'])
 def llm_data_feature_store():
-    """Get feature store status and metrics - OPTIMIZED v2: Simpler aggregates"""
+    """Get feature store status and metrics - OPTIMIZED v3: Fast estimated counts"""
     try:
         conn = get_db_connection()
         conn.rollback()
         cursor = conn.cursor()
 
-        # OPTIMIZED v2: Use CASE WHEN for filtered counts (more compatible)
+        # OPTIMIZED v3: Use pg_class for instant estimated total (no table scan)
+        cursor.execute("SELECT reltuples::bigint FROM pg_class WHERE relname = 'llm_mappings'")
+        row = cursor.fetchone()
+        total_features = int(row[0]) if row and row[0] and row[0] > 0 else 0
+
+        # Fast query on recent data only (uses created_at index)
         cursor.execute("""
             SELECT
-                COUNT(*) as total_features,
                 COUNT(DISTINCT merchant_name) as merchant_patterns,
                 COUNT(DISTINCT category) as user_behavior,
-                SUM(CASE WHEN created_at > NOW() - INTERVAL '1 day' THEN 1 ELSE 0 END) as transaction_features
+                COUNT(*) as transaction_features
             FROM llm_mappings
+            WHERE created_at > NOW() - INTERVAL '7 days'
         """)
         row = cursor.fetchone()
         total_features = row[0] or 0
