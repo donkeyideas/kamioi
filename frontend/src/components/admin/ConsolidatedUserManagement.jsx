@@ -38,6 +38,17 @@ const ConsolidatedUserManagement = () => {
     aiMappings: 0
   })
 
+  // Generate formatted User ID: I/F/B + 7 digits (e.g., I1000043 for user ID 43)
+  const getFormattedUserId = (user) => {
+    if (!user || !user.id) return 'Unknown'
+    const role = String(user.role || user.account_type || 'individual').toLowerCase()
+    let prefix = 'I' // Default to Individual
+    if (role.includes('family')) prefix = 'F'
+    else if (role.includes('business')) prefix = 'B'
+    // Generate 7-digit number: base 1000000 + user.id
+    const numericId = String(1000000 + Number(user.id)).padStart(7, '0')
+    return `${prefix}${numericId}`
+  }
 
   // Register fetch function for prefetching
   useEffect(() => {
@@ -410,7 +421,7 @@ const ConsolidatedUserManagement = () => {
         ['PERSONAL INFORMATION', ''],
         ['Full Name', user.name || 'N/A'],
         ['Email Address', user.email || 'N/A'],
-        ['Account Number', user.account_number || `ID: ${user.id}`],
+        ['Account Number', user.account_number || `ID: ${getFormattedUserId(user)}`],
         ['Account Type', user.account_type || 'N/A'],
         ['Status', user.status || 'Unknown'],
         ['Provider', user.provider || 'N/A'],
@@ -421,9 +432,9 @@ const ConsolidatedUserManagement = () => {
         ['ADDRESS INFORMATION', ''],
         ['City', user.city || 'Unknown'],
         ['State', user.state || 'Unknown'],
-        ['ZIP Code', user.zip_code || 'Unknown'],
+        ['ZIP Code', user.zip || user.zip_code || 'Unknown'],
         ['Phone Number', user.phone || 'Unknown'],
-        ['Full Address', `${user.city || 'Unknown'}, ${user.state || 'Unknown'} ${user.zip_code || 'Unknown'}`],
+        ['Full Address', `${user.city || 'Unknown'}, ${user.state || 'Unknown'} ${user.zip || user.zip_code || 'Unknown'}`],
         ['', ''],
         ['FINANCIAL METRICS', ''],
         ['Total Balance', `$${user.total_balance || 0}`],
@@ -526,14 +537,14 @@ const ConsolidatedUserManagement = () => {
       
       users.forEach(user => {
         const accountAge = user.created_at ? Math.floor((new Date() - new Date(user.created_at)) / (1000 * 60 * 60 * 24)) : 'N/A'
-        const fullAddress = `${user.city || 'Unknown'}, ${user.state || 'Unknown'} ${user.zip_code || 'Unknown'}`
+        const fullAddress = `${user.city || 'Unknown'}, ${user.state || 'Unknown'} ${user.zip || user.zip_code || 'Unknown'}`
         
         usersData.push([
           user.id,
           user.name || 'N/A',
           user.email || 'N/A',
           user.account_type || 'N/A',
-          user.account_number || `ID: ${user.id}`,
+          user.account_number || `ID: ${getFormattedUserId(user)}`,
           user.status || 'Unknown',
           user.provider || 'N/A',
           user.provider === 'google' ? 'Yes' : 'No',
@@ -541,7 +552,7 @@ const ConsolidatedUserManagement = () => {
           user.updated_at || 'N/A',
           user.city || 'Unknown',
           user.state || 'Unknown',
-          user.zip_code || 'Unknown',
+          user.zip || user.zip_code || 'Unknown',
           user.phone || 'Unknown',
           fullAddress,
           `$${user.total_balance || 0}`,
@@ -1019,10 +1030,10 @@ const ConsolidatedUserManagement = () => {
                             {user.email}
                           </div>
                           <div className="text-xs text-white">
-                            {user.account_number || `ID: ${user.id}`}
+                            ID: {getFormattedUserId(user)}
                           </div>
                           <div className="text-xs text-white">
-                            {user.city}, {user.state} {user.zip_code}
+                            {user.city}, {user.state} {user.zip || user.zip_code}
                           </div>
                         </div>
                       </div>
@@ -1221,8 +1232,8 @@ const ConsolidatedUserManagement = () => {
                   <div>
                     <h3 className="text-xl font-semibold text-white">{selectedUser.name}</h3>
                     <p className="text-gray-400">{selectedUser.email}</p>
-                    <p className="text-sm text-white">{selectedUser.account_number || `ID: ${selectedUser.id}`}</p>
-                    <p className="text-sm text-white">{selectedUser.city}, {selectedUser.state} {selectedUser.zip_code}</p>
+                    <p className="text-sm text-white">ID: {getFormattedUserId(selectedUser)}</p>
+                    <p className="text-sm text-white">{selectedUser.city}, {selectedUser.state} {selectedUser.zip || selectedUser.zip_code}</p>
                   </div>
                 </div>
 
@@ -1272,6 +1283,10 @@ const ConsolidatedUserManagement = () => {
                   <h4 className="text-lg font-semibold text-white mb-3">Address Information</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
+                      <span className="text-gray-400">Street:</span>
+                      <span className="text-white">{selectedUser.street || selectedUser.address || 'Unknown'}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-400">City:</span>
                       <span className="text-white">{selectedUser.city || 'Unknown'}</span>
                     </div>
@@ -1281,7 +1296,7 @@ const ConsolidatedUserManagement = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">ZIP Code:</span>
-                      <span className="text-white">{selectedUser.zip_code || 'Unknown'}</span>
+                      <span className="text-white">{selectedUser.zip || selectedUser.zip_code || 'Unknown'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Phone:</span>
