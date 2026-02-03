@@ -259,16 +259,6 @@ const UserManagement = () => {
     setIsModalOpen(true)
   }
 
-  const handleEditUser = (user) => {
-    console.log('✏️ Editing user:', user.name)
-    addNotification({
-      type: 'info',
-      title: 'Edit User',
-      message: `Editing user: ${user.name}. This would open an edit modal in a real application.`,
-      timestamp: new Date()
-    })
-  }
-
   const handleSuspendUser = (user) => {
     console.log('⏸️ Suspending user:', user.name)
     if (window.confirm(`Are you sure you want to suspend ${user.name}?`)) {
@@ -523,7 +513,7 @@ const UserManagement = () => {
                         <div>
                           <p className={`font-medium ${getTextClass()}`}>{user.name}</p>
                           <p className={`text-sm ${getSubtextClass()}`}>{user.email}</p>
-                          <p className={`text-xs ${getSubtextClass()}`}>{user.id} � {user.address?.city || 'Unknown'}</p>
+                          <p className={`text-xs ${getSubtextClass()}`}>ID: {user.id}</p>
                         </div>
                       </div>
                     </td>
@@ -558,32 +548,25 @@ const UserManagement = () => {
                     </td>
                     <td className="py-4">
                       <div className="flex items-center justify-end space-x-2">
-                        <button 
+                        <button
                           onClick={() => handleViewUser(user)}
-                          className="p-2 hover:bg-white/10 rounded-lg transition-colors" 
+                          className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4 text-blue-400" />
                         </button>
-                        <button 
-                          onClick={() => handleEditUser(user)}
-                          className="p-2 hover:bg-white/10 rounded-lg transition-colors" 
-                          title="Edit User"
-                        >
-                          <UserCheck className="w-4 h-4 text-green-400" />
-                        </button>
                         {user.status === 'Active' ? (
-                          <button 
+                          <button
                             onClick={() => handleSuspendUser(user)}
-                            className="p-2 hover:bg-white/10 rounded-lg transition-colors" 
+                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                             title="Suspend"
                           >
                             <UserX className="w-4 h-4 text-red-400" />
                           </button>
                         ) : (
-                          <button 
+                          <button
                             onClick={() => handleActivateUser(user)}
-                            className="p-2 hover:bg-white/10 rounded-lg transition-colors" 
+                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                             title="Activate"
                           >
                             <UserCheck className="w-4 h-4 text-green-400" />
