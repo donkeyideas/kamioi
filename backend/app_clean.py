@@ -10749,7 +10749,7 @@ def admin_subscription_users():
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
 
-        # Fetch all user subscriptions with user and plan info
+        # Fetch all user subscriptions with user and plan info - only for valid users
         cursor.execute("""
             SELECT us.id, us.user_id, us.plan_id, us.status, us.billing_cycle, us.amount,
                    us.current_period_start, us.current_period_end, us.cancel_at_period_end,
@@ -10757,7 +10757,7 @@ def admin_subscription_users():
                    u.name as user_name, u.email as user_email,
                    sp.name as plan_name, sp.account_type, sp.tier
             FROM user_subscriptions us
-            LEFT JOIN users u ON us.user_id = u.id
+            INNER JOIN users u ON us.user_id = u.id
             LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
             ORDER BY us.created_at DESC
         """)
@@ -10810,14 +10810,14 @@ def admin_subscription_renewal_queue():
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
 
-        # Get subscriptions coming up for renewal (within next 30 days)
+        # Get subscriptions coming up for renewal (within next 30 days) - only for valid users
         cursor.execute("""
             SELECT us.id, us.user_id, us.plan_id, us.status, us.amount,
                    us.current_period_end, us.cancel_at_period_end,
                    u.name as user_name, u.email as user_email,
                    sp.name as plan_name, sp.account_type
             FROM user_subscriptions us
-            LEFT JOIN users u ON us.user_id = u.id
+            INNER JOIN users u ON us.user_id = u.id
             LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
             WHERE us.status = 'active'
               AND us.current_period_end IS NOT NULL
@@ -10861,14 +10861,15 @@ def admin_subscription_analytics_overview():
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
 
-        # Get current month subscription stats
+        # Get current month subscription stats - ONLY count subscriptions with valid users
         cursor.execute("""
             SELECT
                 COUNT(*) as total_subscriptions,
-                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_subscriptions,
-                COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_subscriptions,
-                COALESCE(SUM(CASE WHEN status = 'active' THEN amount ELSE 0 END), 0) as mrr
-            FROM user_subscriptions
+                COUNT(CASE WHEN us.status = 'active' THEN 1 END) as active_subscriptions,
+                COUNT(CASE WHEN us.status = 'cancelled' THEN 1 END) as cancelled_subscriptions,
+                COALESCE(SUM(CASE WHEN us.status = 'active' THEN us.amount ELSE 0 END), 0) as mrr
+            FROM user_subscriptions us
+            INNER JOIN users u ON us.user_id = u.id
         """)
         current = cursor.fetchone()
 
@@ -10887,10 +10888,11 @@ def admin_subscription_analytics_overview():
         cursor.execute("""
             SELECT
                 COUNT(*) as total_subscriptions,
-                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_subscriptions,
-                COALESCE(SUM(CASE WHEN status = 'active' THEN amount ELSE 0 END), 0) as mrr
-            FROM user_subscriptions
-            WHERE created_at < NOW() - INTERVAL '30 days'
+                COUNT(CASE WHEN us.status = 'active' THEN 1 END) as active_subscriptions,
+                COALESCE(SUM(CASE WHEN us.status = 'active' THEN us.amount ELSE 0 END), 0) as mrr
+            FROM user_subscriptions us
+            INNER JOIN users u ON us.user_id = u.id
+            WHERE us.created_at < NOW() - INTERVAL '30 days'
         """)
         prev = cursor.fetchone()
         prev_total = prev[0] or 0
@@ -11056,6 +11058,123 @@ def admin_subscription_promo_delete(promo_id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/subscriptions/cleanup-orphans', methods=['POST'])
+def admin_subscription_cleanup_orphans():
+    """Remove orphaned subscription records (subscriptions without valid users)"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Count orphaned records first
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_subscriptions us
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = us.user_id)
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({
+                'success': True,
+                'message': 'No orphaned subscriptions found',
+                'deleted': 0
+            })
+
+        # Delete orphaned subscription records
+        cursor.execute("""
+            DELETE FROM user_subscriptions
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = user_subscriptions.user_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Cleaned up {deleted} orphaned subscription records',
+            'deleted': deleted
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/subscriptions/diagnostics', methods=['GET'])
+def admin_subscription_diagnostics():
+    """Get subscription data health diagnostics"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        # Total subscriptions
+        cursor.execute("SELECT COUNT(*) FROM user_subscriptions")
+        total_subs = cursor.fetchone()[0]
+
+        # Orphaned subscriptions (no valid user)
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_subscriptions us
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = us.user_id)
+        """)
+        orphaned_subs = cursor.fetchone()[0]
+
+        # Valid subscriptions
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_subscriptions us
+            INNER JOIN users u ON us.user_id = u.id
+        """)
+        valid_subs = cursor.fetchone()[0]
+
+        # Subscriptions without valid plans
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_subscriptions us
+            WHERE us.plan_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM subscription_plans sp WHERE sp.id = us.plan_id)
+        """)
+        invalid_plan_subs = cursor.fetchone()[0]
+
+        # Total users
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+
+        # Users with subscriptions
+        cursor.execute("""
+            SELECT COUNT(DISTINCT us.user_id) FROM user_subscriptions us
+            INNER JOIN users u ON us.user_id = u.id
+        """)
+        users_with_subs = cursor.fetchone()[0]
+
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'total_subscription_records': total_subs,
+                'valid_subscriptions': valid_subs,
+                'orphaned_subscriptions': orphaned_subs,
+                'invalid_plan_subscriptions': invalid_plan_subs,
+                'total_users': total_users,
+                'users_with_subscriptions': users_with_subs,
+                'data_health': 'clean' if orphaned_subs == 0 and invalid_plan_subs == 0 else 'needs_cleanup',
+                'issues': []
+                    + ([f'{orphaned_subs} subscriptions have no valid user'] if orphaned_subs > 0 else [])
+                    + ([f'{invalid_plan_subs} subscriptions have invalid plan_id'] if invalid_plan_subs > 0 else [])
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/admin/subscriptions/create-renewal-entry', methods=['POST'])
 @app.route('/api/admin/subscriptions/handle-failed-payment', methods=['POST'])
