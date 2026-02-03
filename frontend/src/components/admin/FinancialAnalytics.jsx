@@ -208,7 +208,7 @@ const FinancialAnalytics = ({ user }) => {
       }
     },
     staleTime: 300000, // 5 minutes
-    cacheTime: 600000, // 10 minutes
+    gcTime: 600000, // 10 minutes
     refetchOnWindowFocus: false,
     retry: 2
   })
@@ -425,7 +425,7 @@ const FinancialAnalytics = ({ user }) => {
       }
     },
     staleTime: 300000, // 5 minutes
-    cacheTime: 600000, // 10 minutes
+    gcTime: 600000, // 10 minutes
     refetchOnWindowFocus: false,
     retry: 2,
     enabled: false // Disabled by default - use financialQueryData instead
@@ -1712,7 +1712,7 @@ const FinancialAnalytics = ({ user }) => {
       }
     },
     staleTime: 300000, // 🚀 FIX: 5 minutes - data is fresh for 5 minutes
-    cacheTime: 600000, // 10 minutes - keep in cache for 10 minutes
+    gcTime: 600000, // 10 minutes - keep in cache for 10 minutes
     refetchOnWindowFocus: false, // 🚀 FIX: Don't refetch on window focus
     refetchOnMount: false, // 🚀 FIX: Don't refetch on mount if data is fresh
     retry: 2,

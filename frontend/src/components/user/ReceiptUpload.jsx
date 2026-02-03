@@ -67,6 +67,7 @@ const StockLogo = ({ symbol, companyName }) => {
 }
 
 const ReceiptUpload = ({ onTransactionProcessed }) => {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
   const [, setIsUploading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState(null)
   const [processingStatus, setProcessingStatus] = useState(null)
@@ -195,7 +196,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
 
               // Step 3: Calculate round-up allocation (show progress)
               setProcessingStatus('analyzing')
-              const allocationResponse = await fetch(`http://127.0.0.1:5111/api/receipts/${receiptId}/allocate`, {
+              const allocationResponse = await fetch(`${apiBaseUrl}/api/receipts/${receiptId}/allocate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -298,7 +299,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
         const token = localStorage.getItem('kamioi_business_token') || localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
         
         // First, update the receipt with the manual data
-        await fetch(`http://127.0.0.1:5111/api/receipts/${uploadedFile.receiptId}/process`, {
+        await fetch(`${apiBaseUrl}/api/receipts/${uploadedFile.receiptId}/process`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -310,7 +311,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
         })
 
         // Then calculate allocation
-        const allocationResponse = await fetch(`http://127.0.0.1:5111/api/receipts/${uploadedFile.receiptId}/allocate`, {
+        const allocationResponse = await fetch(`${apiBaseUrl}/api/receipts/${uploadedFile.receiptId}/allocate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -456,7 +457,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
   const confirmTransaction = async () => {
     try {
       const token = localStorage.getItem('kamioi_business_token') || localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
-      const response = await fetch('http://127.0.0.1:5111/api/transactions/create', {
+      const response = await fetch('${apiBaseUrl}/api/transactions/create', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -833,7 +834,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
                         try {
                           const token = localStorage.getItem('kamioi_business_token') || localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
                           const response = await fetch(
-                            `http://127.0.0.1:5111/api/receipts/search-ticker?q=${encodeURIComponent(retailerValue)}`,
+                            `${apiBaseUrl}/api/receipts/search-ticker?q=${encodeURIComponent(retailerValue)}`,
                             {
                               headers: {
                                 'Content-Type': 'application/json',
@@ -962,7 +963,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
                                 try {
                                   const token = localStorage.getItem('kamioi_business_token') || localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
                                   const response = await fetch(
-                                    `http://127.0.0.1:5111/api/receipts/search-ticker?q=${encodeURIComponent(itemName)}`,
+                                    `${apiBaseUrl}/api/receipts/search-ticker?q=${encodeURIComponent(itemName)}`,
                                     {
                                       headers: {
                                         'Content-Type': 'application/json',
@@ -1094,7 +1095,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
                               try {
                                 const token = localStorage.getItem('kamioi_business_token') || localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
                                 const response = await fetch(
-                                  `http://127.0.0.1:5111/api/receipts/search-ticker?q=${encodeURIComponent(brandValue)}`,
+                                  `${apiBaseUrl}/api/receipts/search-ticker?q=${encodeURIComponent(brandValue)}`,
                                   {
                                     headers: {
                                       'Content-Type': 'application/json',
@@ -1245,7 +1246,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
                         const token = localStorage.getItem('kamioi_business_token') || localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
                         
                         // Update receipt with edited data
-                        await fetch(`http://127.0.0.1:5111/api/receipts/${uploadedFile.receiptId}/process`, {
+                        await fetch(`${apiBaseUrl}/api/receipts/${uploadedFile.receiptId}/process`, {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
@@ -1257,7 +1258,7 @@ const ReceiptUpload = ({ onTransactionProcessed }) => {
                         })
 
                         // Recalculate allocation
-                        const allocationResponse = await fetch(`http://127.0.0.1:5111/api/receipts/${uploadedFile.receiptId}/allocate`, {
+                        const allocationResponse = await fetch(`${apiBaseUrl}/api/receipts/${uploadedFile.receiptId}/allocate`, {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',

@@ -83,7 +83,7 @@ const AdminAnalytics = ({ user }) => {
       }
     },
     staleTime: 300000, // 5 minutes cache
-    cacheTime: 600000, // 10 minutes cache
+    gcTime: 600000, // 10 minutes cache
     refetchOnWindowFocus: false,
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff

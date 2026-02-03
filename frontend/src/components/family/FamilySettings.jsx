@@ -118,7 +118,7 @@ const FamilySettings = ({ user }) => {
     try {
       const token = getAuthToken()
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-      const response = await fetch(`${apiBaseUrl}/api/business/bank-connections/${connectionId}`, {
+      const response = await fetch(`${apiBaseUrl}/api/family/bank-connections/${connectionId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -181,7 +181,7 @@ const FamilySettings = ({ user }) => {
       }
 
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-      const saveResponse = await fetch(`${apiBaseUrl}/api/business/bank-connections`, {
+      const saveResponse = await fetch(`${apiBaseUrl}/api/family/bank-connections`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

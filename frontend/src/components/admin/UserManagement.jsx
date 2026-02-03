@@ -168,7 +168,7 @@ const UserManagement = () => {
       }
     },
     staleTime: 60000, // 1 minute cache
-    cacheTime: 300000, // 5 minutes cache
+    gcTime: 300000, // 5 minutes cache
     refetchOnWindowFocus: false,
     retry: 2, // 🚀 FIX: Retry up to 2 times on failure
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff

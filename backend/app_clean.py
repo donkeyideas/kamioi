@@ -11067,6 +11067,8 @@ def admin_subscription_cleanup_orphans():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
         conn = get_db_connection()
         cursor = get_db_cursor(conn)
 
@@ -11082,7 +11084,27 @@ def admin_subscription_cleanup_orphans():
             return jsonify({
                 'success': True,
                 'message': 'No orphaned subscriptions found',
-                'deleted': 0
+                'deleted': 0,
+                'dry_run': dry_run
+            })
+
+        if dry_run:
+            # Get details of what would be deleted
+            cursor.execute("""
+                SELECT us.id, us.user_id, us.plan_id, us.status, us.created_at
+                FROM user_subscriptions us
+                WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = us.user_id)
+                LIMIT 100
+            """)
+            orphans = cursor.fetchall()
+            conn.close()
+
+            return jsonify({
+                'success': True,
+                'message': f'DRY RUN: Would delete {orphan_count} orphaned subscription records',
+                'would_delete': orphan_count,
+                'dry_run': True,
+                'sample_records': [{'id': r[0], 'user_id': r[1], 'plan_id': r[2], 'status': r[3]} for r in orphans[:10]]
             })
 
         # Delete orphaned subscription records
@@ -11097,7 +11119,8 @@ def admin_subscription_cleanup_orphans():
         return jsonify({
             'success': True,
             'message': f'Cleaned up {deleted} orphaned subscription records',
-            'deleted': deleted
+            'deleted': deleted,
+            'dry_run': False
         })
     except Exception as e:
         import traceback
@@ -21790,6 +21813,767 @@ def remove_duplicate_mappings():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# ============================================================================
+# DATABASE HEALTH & CLEANUP ENDPOINTS
+# Full platform audit for orphaned records and data integrity
+# ============================================================================
+
+@app.route('/api/admin/database/full-audit', methods=['GET'])
+def admin_database_full_audit():
+    """Master diagnostic endpoint - checks ALL tables for orphaned records"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        audit_results = {
+            'tables': {},
+            'total_orphans': 0,
+            'critical_issues': [],
+            'warnings': [],
+            'health_status': 'healthy'
+        }
+
+        # 1. User Subscriptions - orphaned (user_id → users)
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_subscriptions us
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = us.user_id)
+        """)
+        sub_orphans = cursor.fetchone()[0]
+        audit_results['tables']['user_subscriptions'] = {
+            'orphaned_user_id': sub_orphans,
+            'total_orphans': sub_orphans
+        }
+        if sub_orphans > 0:
+            audit_results['critical_issues'].append(f'{sub_orphans} subscriptions have no valid user')
+
+        # 2. Transactions - orphaned (user_id → users)
+        cursor.execute("""
+            SELECT COUNT(*) FROM transactions t
+            WHERE t.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id)
+        """)
+        txn_orphans = cursor.fetchone()[0]
+        audit_results['tables']['transactions'] = {
+            'orphaned_user_id': txn_orphans,
+            'total_orphans': txn_orphans
+        }
+        if txn_orphans > 0:
+            audit_results['critical_issues'].append(f'{txn_orphans} transactions have no valid user')
+
+        # 3. Goals - orphaned (user_id → users)
+        cursor.execute("""
+            SELECT COUNT(*) FROM goals g
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = g.user_id)
+        """)
+        goal_orphans = cursor.fetchone()[0]
+        audit_results['tables']['goals'] = {
+            'orphaned_user_id': goal_orphans,
+            'total_orphans': goal_orphans
+        }
+        if goal_orphans > 0:
+            audit_results['critical_issues'].append(f'{goal_orphans} goals have no valid user')
+
+        # 4. Notifications - orphaned (user_id → users)
+        cursor.execute("""
+            SELECT COUNT(*) FROM notifications n
+            WHERE n.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = n.user_id)
+        """)
+        notif_orphans = cursor.fetchone()[0]
+        audit_results['tables']['notifications'] = {
+            'orphaned_user_id': notif_orphans,
+            'total_orphans': notif_orphans
+        }
+        if notif_orphans > 0:
+            audit_results['warnings'].append(f'{notif_orphans} notifications have no valid user')
+
+        # 5. Round-up Allocations - orphaned (user_id, goal_id, transaction_id)
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM round_up_allocations ra WHERE ra.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ra.user_id)) as user_orphans,
+                (SELECT COUNT(*) FROM round_up_allocations ra WHERE ra.goal_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.id = ra.goal_id)) as goal_orphans
+        """)
+        row = cursor.fetchone()
+        alloc_user_orphans = row[0] if row else 0
+        alloc_goal_orphans = row[1] if row else 0
+        audit_results['tables']['round_up_allocations'] = {
+            'orphaned_user_id': alloc_user_orphans,
+            'orphaned_goal_id': alloc_goal_orphans,
+            'total_orphans': alloc_user_orphans + alloc_goal_orphans
+        }
+        if alloc_user_orphans + alloc_goal_orphans > 0:
+            audit_results['warnings'].append(f'{alloc_user_orphans + alloc_goal_orphans} round-up allocations have invalid references')
+
+        # 6. Admin Messages - orphaned (user_id → users)
+        cursor.execute("""
+            SELECT COUNT(*) FROM admin_messages am
+            WHERE am.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = am.user_id)
+        """)
+        msg_orphans = cursor.fetchone()[0]
+        audit_results['tables']['admin_messages'] = {
+            'orphaned_user_id': msg_orphans,
+            'total_orphans': msg_orphans
+        }
+        if msg_orphans > 0:
+            audit_results['warnings'].append(f'{msg_orphans} admin messages have no valid user')
+
+        # 7. Blog Posts - orphaned (author_id → admins)
+        cursor.execute("""
+            SELECT COUNT(*) FROM blog_posts bp
+            WHERE bp.author_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM admins a WHERE a.id = bp.author_id)
+        """)
+        blog_orphans = cursor.fetchone()[0]
+        audit_results['tables']['blog_posts'] = {
+            'orphaned_author_id': blog_orphans,
+            'total_orphans': blog_orphans
+        }
+        if blog_orphans > 0:
+            audit_results['warnings'].append(f'{blog_orphans} blog posts have no valid author')
+
+        # 8. Promo Code Usage - orphaned (user_id, subscription_id)
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM promo_code_usage pcu WHERE pcu.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = pcu.user_id)) as user_orphans,
+                (SELECT COUNT(*) FROM promo_code_usage pcu WHERE pcu.subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_subscriptions us WHERE us.id = pcu.subscription_id)) as sub_orphans
+        """)
+        row = cursor.fetchone()
+        promo_user_orphans = row[0] if row else 0
+        promo_sub_orphans = row[1] if row else 0
+        audit_results['tables']['promo_code_usage'] = {
+            'orphaned_user_id': promo_user_orphans,
+            'orphaned_subscription_id': promo_sub_orphans,
+            'total_orphans': promo_user_orphans + promo_sub_orphans
+        }
+        if promo_user_orphans + promo_sub_orphans > 0:
+            audit_results['warnings'].append(f'{promo_user_orphans + promo_sub_orphans} promo code usages have invalid references')
+
+        # 9. Subscription Changes - orphaned (user_id, plan_id)
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM subscription_changes sc WHERE sc.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = sc.user_id)) as user_orphans,
+                (SELECT COUNT(*) FROM subscription_changes sc WHERE sc.new_plan_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM subscription_plans sp WHERE sp.id = sc.new_plan_id)) as plan_orphans
+        """)
+        row = cursor.fetchone()
+        change_user_orphans = row[0] if row else 0
+        change_plan_orphans = row[1] if row else 0
+        audit_results['tables']['subscription_changes'] = {
+            'orphaned_user_id': change_user_orphans,
+            'orphaned_plan_id': change_plan_orphans,
+            'total_orphans': change_user_orphans + change_plan_orphans
+        }
+        if change_user_orphans + change_plan_orphans > 0:
+            audit_results['warnings'].append(f'{change_user_orphans + change_plan_orphans} subscription changes have invalid references')
+
+        # 10. Journal Entry Lines - orphaned (journal_entry_id, account_number)
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM journal_entry_lines jel WHERE NOT EXISTS (SELECT 1 FROM journal_entries je WHERE je.id = jel.journal_entry_id)) as entry_orphans,
+                (SELECT COUNT(*) FROM journal_entry_lines jel WHERE jel.account_number IS NOT NULL AND NOT EXISTS (SELECT 1 FROM chart_of_accounts coa WHERE coa.account_number = jel.account_number)) as account_orphans
+        """)
+        row = cursor.fetchone()
+        jel_entry_orphans = row[0] if row else 0
+        jel_account_orphans = row[1] if row else 0
+        audit_results['tables']['journal_entry_lines'] = {
+            'orphaned_journal_entry_id': jel_entry_orphans,
+            'orphaned_account_number': jel_account_orphans,
+            'total_orphans': jel_entry_orphans + jel_account_orphans
+        }
+        if jel_entry_orphans + jel_account_orphans > 0:
+            audit_results['warnings'].append(f'{jel_entry_orphans + jel_account_orphans} journal entry lines have invalid references')
+
+        # 11. Family Members - orphaned (family_id → family_accounts)
+        cursor.execute("""
+            SELECT COUNT(*) FROM family_members fm
+            WHERE NOT EXISTS (SELECT 1 FROM family_accounts fa WHERE fa.id = fm.family_id)
+        """)
+        family_member_orphans = cursor.fetchone()[0]
+        audit_results['tables']['family_members'] = {
+            'orphaned_family_id': family_member_orphans,
+            'total_orphans': family_member_orphans
+        }
+        if family_member_orphans > 0:
+            audit_results['warnings'].append(f'{family_member_orphans} family members have no valid family account')
+
+        # 12. Business Employees - orphaned (business_id → business_accounts)
+        cursor.execute("""
+            SELECT COUNT(*) FROM business_employees be
+            WHERE NOT EXISTS (SELECT 1 FROM business_accounts ba WHERE ba.id = be.business_id)
+        """)
+        employee_orphans = cursor.fetchone()[0]
+        audit_results['tables']['business_employees'] = {
+            'orphaned_business_id': employee_orphans,
+            'total_orphans': employee_orphans
+        }
+        if employee_orphans > 0:
+            audit_results['warnings'].append(f'{employee_orphans} business employees have no valid business account')
+
+        # 13. LLM Mappings - validate user references
+        cursor.execute("""
+            SELECT COUNT(*) FROM llm_mappings lm
+            WHERE lm.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = lm.user_id)
+        """)
+        llm_orphans = cursor.fetchone()[0]
+        audit_results['tables']['llm_mappings'] = {
+            'orphaned_user_id': llm_orphans,
+            'total_orphans': llm_orphans
+        }
+        if llm_orphans > 0:
+            audit_results['warnings'].append(f'{llm_orphans} LLM mappings have no valid user')
+
+        conn.close()
+
+        # Calculate totals
+        total_orphans = sum(t.get('total_orphans', 0) for t in audit_results['tables'].values())
+        audit_results['total_orphans'] = total_orphans
+
+        # Determine health status
+        if len(audit_results['critical_issues']) > 0:
+            audit_results['health_status'] = 'critical'
+        elif len(audit_results['warnings']) > 0:
+            audit_results['health_status'] = 'warning'
+        else:
+            audit_results['health_status'] = 'healthy'
+
+        return jsonify({
+            'success': True,
+            'data': audit_results,
+            'summary': {
+                'total_tables_audited': len(audit_results['tables']),
+                'total_orphans': total_orphans,
+                'critical_count': len(audit_results['critical_issues']),
+                'warning_count': len(audit_results['warnings']),
+                'health_status': audit_results['health_status']
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/transactions', methods=['POST'])
+def admin_cleanup_transactions():
+    """Remove orphaned transactions (transactions without valid users)"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM transactions t
+            WHERE t.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id)
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned transactions found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            cursor.execute("""
+                SELECT t.id, t.user_id, t.description, t.amount, t.created_at
+                FROM transactions t
+                WHERE t.user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id)
+                LIMIT 10
+            """)
+            samples = [{'id': r[0], 'user_id': r[1], 'description': r[2], 'amount': float(r[3]) if r[3] else 0} for r in cursor.fetchall()]
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned transactions', 'would_delete': orphan_count, 'dry_run': True, 'sample_records': samples})
+
+        cursor.execute("""
+            DELETE FROM transactions
+            WHERE user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = transactions.user_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned transactions', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/goals', methods=['POST'])
+def admin_cleanup_goals():
+    """Remove orphaned goals (goals without valid users)"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM goals g
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = g.user_id)
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned goals found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            cursor.execute("""
+                SELECT g.id, g.user_id, g.name, g.target_amount, g.current_amount
+                FROM goals g
+                WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = g.user_id)
+                LIMIT 10
+            """)
+            samples = [{'id': r[0], 'user_id': r[1], 'name': r[2], 'target_amount': float(r[3]) if r[3] else 0} for r in cursor.fetchall()]
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned goals', 'would_delete': orphan_count, 'dry_run': True, 'sample_records': samples})
+
+        cursor.execute("""
+            DELETE FROM goals
+            WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = goals.user_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned goals', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/notifications', methods=['POST'])
+def admin_cleanup_notifications():
+    """Remove orphaned notifications (notifications without valid users)"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM notifications n
+            WHERE n.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = n.user_id)
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned notifications found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            cursor.execute("""
+                SELECT n.id, n.user_id, n.title, n.type, n.created_at
+                FROM notifications n
+                WHERE n.user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = n.user_id)
+                LIMIT 10
+            """)
+            samples = [{'id': r[0], 'user_id': r[1], 'title': r[2], 'type': r[3]} for r in cursor.fetchall()]
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned notifications', 'would_delete': orphan_count, 'dry_run': True, 'sample_records': samples})
+
+        cursor.execute("""
+            DELETE FROM notifications
+            WHERE user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = notifications.user_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned notifications', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/allocations', methods=['POST'])
+def admin_cleanup_allocations():
+    """Remove orphaned round-up allocations"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM round_up_allocations ra
+            WHERE (ra.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ra.user_id))
+               OR (ra.goal_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.id = ra.goal_id))
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned allocations found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned allocations', 'would_delete': orphan_count, 'dry_run': True})
+
+        cursor.execute("""
+            DELETE FROM round_up_allocations
+            WHERE (user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = round_up_allocations.user_id))
+               OR (goal_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.id = round_up_allocations.goal_id))
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned allocations', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/messages', methods=['POST'])
+def admin_cleanup_messages():
+    """Remove orphaned admin messages"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM admin_messages am
+            WHERE am.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = am.user_id)
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned messages found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned messages', 'would_delete': orphan_count, 'dry_run': True})
+
+        cursor.execute("""
+            DELETE FROM admin_messages
+            WHERE user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = admin_messages.user_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned messages', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/blog-posts', methods=['POST'])
+def admin_cleanup_blog_posts():
+    """Remove orphaned blog posts (posts without valid authors)"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM blog_posts bp
+            WHERE bp.author_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM admins a WHERE a.id = bp.author_id)
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned blog posts found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            cursor.execute("""
+                SELECT bp.id, bp.author_id, bp.title, bp.status, bp.created_at
+                FROM blog_posts bp
+                WHERE bp.author_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM admins a WHERE a.id = bp.author_id)
+                LIMIT 10
+            """)
+            samples = [{'id': r[0], 'author_id': r[1], 'title': r[2], 'status': r[3]} for r in cursor.fetchall()]
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned blog posts', 'would_delete': orphan_count, 'dry_run': True, 'sample_records': samples})
+
+        cursor.execute("""
+            DELETE FROM blog_posts
+            WHERE author_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM admins a WHERE a.id = blog_posts.author_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned blog posts', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/promo-usage', methods=['POST'])
+def admin_cleanup_promo_usage():
+    """Remove orphaned promo code usage records"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM promo_code_usage pcu
+            WHERE (pcu.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = pcu.user_id))
+               OR (pcu.subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_subscriptions us WHERE us.id = pcu.subscription_id))
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned promo usage found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned promo usage records', 'would_delete': orphan_count, 'dry_run': True})
+
+        cursor.execute("""
+            DELETE FROM promo_code_usage
+            WHERE (user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = promo_code_usage.user_id))
+               OR (subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_subscriptions us WHERE us.id = promo_code_usage.subscription_id))
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned promo usage records', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/subscription-changes', methods=['POST'])
+def admin_cleanup_subscription_changes():
+    """Remove orphaned subscription change records"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM subscription_changes sc
+            WHERE (sc.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = sc.user_id))
+        """)
+        orphan_count = cursor.fetchone()[0]
+
+        if orphan_count == 0:
+            conn.close()
+            return jsonify({'success': True, 'message': 'No orphaned subscription changes found', 'deleted': 0, 'dry_run': dry_run})
+
+        if dry_run:
+            conn.close()
+            return jsonify({'success': True, 'message': f'DRY RUN: Would delete {orphan_count} orphaned subscription changes', 'would_delete': orphan_count, 'dry_run': True})
+
+        cursor.execute("""
+            DELETE FROM subscription_changes
+            WHERE user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = subscription_changes.user_id)
+        """)
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': f'Cleaned up {deleted} orphaned subscription changes', 'deleted': deleted, 'dry_run': False})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/database/cleanup/all', methods=['POST'])
+def admin_cleanup_all():
+    """Run ALL cleanup operations in sequence"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'No token provided'}), 401
+
+        dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+
+        results = {
+            'subscriptions': 0,
+            'transactions': 0,
+            'goals': 0,
+            'notifications': 0,
+            'allocations': 0,
+            'messages': 0,
+            'blog_posts': 0,
+            'promo_usage': 0,
+            'subscription_changes': 0
+        }
+
+        cleanup_queries = [
+            ('subscriptions', """
+                DELETE FROM user_subscriptions
+                WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = user_subscriptions.user_id)
+            """, """
+                SELECT COUNT(*) FROM user_subscriptions us
+                WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = us.user_id)
+            """),
+            ('transactions', """
+                DELETE FROM transactions
+                WHERE user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = transactions.user_id)
+            """, """
+                SELECT COUNT(*) FROM transactions t
+                WHERE t.user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id)
+            """),
+            ('goals', """
+                DELETE FROM goals
+                WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = goals.user_id)
+            """, """
+                SELECT COUNT(*) FROM goals g
+                WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = g.user_id)
+            """),
+            ('notifications', """
+                DELETE FROM notifications
+                WHERE user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = notifications.user_id)
+            """, """
+                SELECT COUNT(*) FROM notifications n
+                WHERE n.user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = n.user_id)
+            """),
+            ('allocations', """
+                DELETE FROM round_up_allocations
+                WHERE (user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = round_up_allocations.user_id))
+                   OR (goal_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.id = round_up_allocations.goal_id))
+            """, """
+                SELECT COUNT(*) FROM round_up_allocations ra
+                WHERE (ra.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ra.user_id))
+                   OR (ra.goal_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.id = ra.goal_id))
+            """),
+            ('messages', """
+                DELETE FROM admin_messages
+                WHERE user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = admin_messages.user_id)
+            """, """
+                SELECT COUNT(*) FROM admin_messages am
+                WHERE am.user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = am.user_id)
+            """),
+            ('blog_posts', """
+                DELETE FROM blog_posts
+                WHERE author_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM admins a WHERE a.id = blog_posts.author_id)
+            """, """
+                SELECT COUNT(*) FROM blog_posts bp
+                WHERE bp.author_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM admins a WHERE a.id = bp.author_id)
+            """),
+            ('promo_usage', """
+                DELETE FROM promo_code_usage
+                WHERE (user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = promo_code_usage.user_id))
+                   OR (subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_subscriptions us WHERE us.id = promo_code_usage.subscription_id))
+            """, """
+                SELECT COUNT(*) FROM promo_code_usage pcu
+                WHERE (pcu.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = pcu.user_id))
+                   OR (pcu.subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_subscriptions us WHERE us.id = pcu.subscription_id))
+            """),
+            ('subscription_changes', """
+                DELETE FROM subscription_changes
+                WHERE user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = subscription_changes.user_id)
+            """, """
+                SELECT COUNT(*) FROM subscription_changes sc
+                WHERE sc.user_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = sc.user_id)
+            """),
+        ]
+
+        for name, delete_query, count_query in cleanup_queries:
+            cursor.execute(count_query)
+            count = cursor.fetchone()[0]
+            if dry_run:
+                results[name] = count
+            else:
+                if count > 0:
+                    cursor.execute(delete_query)
+                    results[name] = cursor.rowcount
+                else:
+                    results[name] = 0
+
+        if not dry_run:
+            conn.commit()
+        conn.close()
+
+        total_cleaned = sum(results.values())
+
+        return jsonify({
+            'success': True,
+            'message': f'{"DRY RUN: Would clean" if dry_run else "Cleaned"} {total_cleaned} orphaned records',
+            'dry_run': dry_run,
+            'results': results,
+            'total': total_cleaned
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == "__main__":
     print("Starting Kamioi Backend Server...")

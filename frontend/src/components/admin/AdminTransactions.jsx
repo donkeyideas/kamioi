@@ -152,7 +152,7 @@ const AdminTransactions = ({ user, onTransactionsUpdate }) => {
       }
     },
     staleTime: 0, // Always refetch - no cache
-    cacheTime: 0, // No cache
+    gcTime: 0, // No cache
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     retry: 2, // 🚀 FIX: Retry up to 2 times on failure

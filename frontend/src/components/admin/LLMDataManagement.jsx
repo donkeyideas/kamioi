@@ -1,225 +1,103 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeContext'
-import prefetchRegistry from '../../services/prefetchRegistry'
-import prefetchService from '../../services/prefetchService'
-import { Database, Brain, Search, Activity, RefreshCw, CheckCircle, AlertCircle, Info, Play, Settings, BarChart3, Network, FileText, Users, Clock, XCircle, User } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query' // 🚀 PERFORMANCE FIX: Import React Query
+import { Database, Search, Activity, RefreshCw, CheckCircle, AlertCircle, Info, Play, Settings, BarChart3, Network, FileText } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 const LLMDataManagement = () => {
   const navigate = useNavigate()
-  const queryClient = useQueryClient() // 🚀 PERFORMANCE FIX: For cache invalidation
-  const { isLightMode, isDarkMode, isCloudMode } = useTheme()
+  const queryClient = useQueryClient()
+  const { isLightMode } = useTheme()
   const [activeTab, setActiveTab] = useState('overview')
-  const [systemStatus, setSystemStatus] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
-  const [eventStats, setEventStats] = useState(null)
-  const [vectorEmbeddings, setVectorEmbeddings] = useState(null)
-  const [featureStore, setFeatureStore] = useState(null)
   const [manualLoading, setManualLoading] = useState(false)
   const [showNotificationModal, setShowNotificationModal] = useState(false)
   const [notificationMessage, setNotificationMessage] = useState('')
-  const [notificationType, setNotificationType] = useState('success') // 'success', 'error', 'info'
+  const [notificationType, setNotificationType] = useState('success')
 
-  // Register fetch function for prefetching
-  useEffect(() => {
-    const fetchFn = async () => {
-      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
-      if (!token) return null
-      
-      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-      const headers = { 'Authorization': `Bearer ${token}` }
-      
-      try {
-        const [statusRes, statsRes, vectorsRes, featuresRes] = await Promise.all([
-          fetch(`${apiUrl}/api/llm-data/system-status`, { headers }),
-          fetch(`${apiUrl}/api/llm-data/event-stats`, { headers }),
-          fetch(`${apiUrl}/api/llm-data/vector-embeddings`, { headers }),
-          fetch(`${apiUrl}/api/llm-data/feature-store`, { headers })
-        ])
-        
-        const [statusData, statsData, vectorsData, featuresData] = await Promise.all([
-          statusRes.ok ? statusRes.json() : null,
-          statsRes.ok ? statsRes.json() : null,
-          vectorsRes.ok ? vectorsRes.json() : null,
-          featuresRes.ok ? featuresRes.json() : null
-        ])
-        
-        return {
-          systemStatus: statusData?.data || null,
-          eventStats: statsData?.data || null,
-          vectorEmbeddings: vectorsData?.data || null,
-          featureStore: featuresData?.data || null
-        }
-      } catch (e) {
-        return null
-      }
-    }
-    
-    prefetchRegistry.register('llm-data', fetchFn)
-  }, [])
+  // Helper to get auth token
+  const getAuthToken = () => {
+    return localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+  }
 
-  // 🚀 PERFORMANCE FIX: Use React Query for LLM data - proper caching, no unnecessary reloads
-  const { data: llmDataManagementData, isLoading: isLoadingLLMDataManagement, error: llmDataManagementError, refetch: refetchLLMDataManagement } = useQuery({
+  // React Query v5 compatible - fetch LLM data
+  const { data: llmData, isLoading, error, refetch } = useQuery({
     queryKey: ['llm-data-management'],
     queryFn: async () => {
-      // 🚀 FIX: Try multiple token sources and wait a bit if token not immediately available
-      let token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
-      
-      // If no token, wait a short time and retry (handles race condition)
+      const token = getAuthToken()
       if (!token) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+        return { systemStatus: null, eventStats: null, vectorEmbeddings: null, featureStore: null }
       }
-      
-      if (!token) {
-        console.warn('⚠️ LLMDataManagement - No authentication token available, returning empty data')
-        return {
-          systemStatus: null,
-          eventStats: null,
-          vectorEmbeddings: null,
-          featureStore: null
-        }
-      }
-      
+
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const headers = { 'Authorization': `Bearer ${token}` }
-      
-      // Fetch all data in parallel
+
       const [statusRes, statsRes, vectorsRes, featuresRes] = await Promise.allSettled([
         fetch(`${apiUrl}/api/llm-data/system-status`, { headers }),
         fetch(`${apiUrl}/api/llm-data/event-stats`, { headers }),
         fetch(`${apiUrl}/api/llm-data/vector-embeddings`, { headers }),
         fetch(`${apiUrl}/api/llm-data/feature-store`, { headers })
       ])
-      
-      const systemStatus = statusRes.status === 'fulfilled' && statusRes.value.ok
-        ? (await statusRes.value.json()).data || null
-        : null
-      
-      const eventStats = statsRes.status === 'fulfilled' && statsRes.value.ok
-        ? (await statsRes.value.json()).data || null
-        : null
-      
-      const vectorEmbeddings = vectorsRes.status === 'fulfilled' && vectorsRes.value.ok
-        ? (await vectorsRes.value.json()).data || null
-        : null
-      
-      const featureStore = featuresRes.status === 'fulfilled' && featuresRes.value.ok
-        ? (await featuresRes.value.json()).data || null
-        : null
-      
+
+      const parseResponse = async (result) => {
+        if (result.status === 'fulfilled' && result.value.ok) {
+          const json = await result.value.json()
+          return json.data || null
+        }
+        return null
+      }
+
       return {
-        systemStatus,
-        eventStats,
-        vectorEmbeddings,
-        featureStore
+        systemStatus: await parseResponse(statusRes),
+        eventStats: await parseResponse(statsRes),
+        vectorEmbeddings: await parseResponse(vectorsRes),
+        featureStore: await parseResponse(featuresRes)
       }
     },
-    staleTime: 300000, // 🚀 FIX: 5 minutes - data is fresh for 5 minutes
-    cacheTime: 600000, // 10 minutes - keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // 🚀 FIX: Don't refetch on window focus
-    refetchOnMount: false, // 🚀 FIX: Don't refetch on mount if data is fresh
-    retry: 2,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    onSuccess: (data) => {
-      // Update local state from React Query cache
-      if (data) {
-        if (data.systemStatus) setSystemStatus(data.systemStatus)
-        if (data.eventStats) setEventStats(data.eventStats)
-        if (data.vectorEmbeddings) setVectorEmbeddings(data.vectorEmbeddings)
-        if (data.featureStore) setFeatureStore(data.featureStore)
-      }
-      
-      // Dispatch page load completion event
-      window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
-        detail: { pageId: 'llm-data' }
-      }))
-    },
-    onError: (error) => {
-      // Log error but don't crash the UI
-      console.error('❌ LLMDataManagement - Query error:', error)
-      // Still dispatch event so loading report knows something happened
-      window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
-        detail: { pageId: 'llm-data', error: true }
-      }))
-    }
+    staleTime: 300000, // 5 minutes
+    gcTime: 600000, // 10 minutes (renamed from cacheTime in v5)
+    refetchOnWindowFocus: false,
+    refetchOnMount: 'always', // Always fetch on mount to ensure fresh data
+    retry: 2
   })
-  
-  // 🚀 PERFORMANCE FIX: Map React Query loading to component loading state for backward compatibility
-  const loading = isLoadingLLMDataManagement || manualLoading
-  
-  // 🚀 PERFORMANCE FIX: Only show loading for initial load, not for cached data
-  const isInitialLoad = isLoadingLLMDataManagement && !llmDataManagementData
-  
-  // Update local state when React Query data changes
+
+  // Extract data from query result
+  const systemStatus = llmData?.systemStatus || null
+  const eventStats = llmData?.eventStats || null
+  const vectorEmbeddings = llmData?.vectorEmbeddings || null
+  const featureStore = llmData?.featureStore || null
+  const loading = isLoading || manualLoading
+
+  // Dispatch page load completion
   useEffect(() => {
-    if (llmDataManagementData) {
-      if (llmDataManagementData.systemStatus) setSystemStatus(llmDataManagementData.systemStatus)
-      if (llmDataManagementData.eventStats) setEventStats(llmDataManagementData.eventStats)
-      if (llmDataManagementData.vectorEmbeddings) setVectorEmbeddings(llmDataManagementData.vectorEmbeddings)
-      if (llmDataManagementData.featureStore) setFeatureStore(llmDataManagementData.featureStore)
-      
-      // 🚀 FIX: Dispatch completion event when data is loaded (even from cache)
-      // This ensures the event is dispatched even if onSuccess wasn't called (cached data)
-      const timer = setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
-          detail: { pageId: 'llm-data' }
-        }))
-      }, 100)
-      return () => clearTimeout(timer)
-    } else if (!isLoadingLLMDataManagement && llmDataManagementError) {
-      // If there's an error and we're not loading, dispatch completion event
+    if (!isLoading) {
       window.dispatchEvent(new CustomEvent('admin-page-load-complete', {
-        detail: { pageId: 'llm-data', error: true }
+        detail: { pageId: 'llm-data', error: !!error }
       }))
     }
-  }, [llmDataManagementData, isLoadingLLMDataManagement, llmDataManagementError])
-  
-  // 🚀 PERFORMANCE FIX: Wrapper functions for backward compatibility
-  const loadDataFresh = async (abortController) => {
-    // React Query handles caching automatically - just trigger a refetch
-    await refetchLLMDataManagement()
+  }, [isLoading, error])
+
+  // Refresh function for buttons
+  const handleRefresh = async () => {
+    await refetch()
   }
-  
-  const fetchSystemStatus = async (signal = null) => {
-    // React Query handles this - just trigger a refetch
-    await refetchLLMDataManagement()
-  }
-  
-  const fetchEventStats = async (signal = null) => {
-    // React Query handles this - just trigger a refetch
-    await refetchLLMDataManagement()
-  }
-  
-  const fetchVectorEmbeddings = async (signal = null) => {
-    // React Query handles this - just trigger a refetch
-    await refetchLLMDataManagement()
-  }
-  
-  const fetchFeatureStore = async (signal = null) => {
-    // React Query handles this - just trigger a refetch
-    await refetchLLMDataManagement()
-  }
-  
-  // 🚀 DEPRECATED: Old fetch functions removed - now using React Query above
 
   const initializeSystem = async () => {
     try {
       setManualLoading(true)
-      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const token = getAuthToken()
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const response = await fetch(`${apiUrl}/api/llm-data/initialize-system`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3' || 'admin_token_3'}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
-      
+
       if (response.ok) {
-        await fetchSystemStatus()
+        await refetch()
         showNotification('LLM data systems initialized successfully!', 'success')
       } else {
         showNotification('Failed to initialize systems', 'error')
@@ -234,10 +112,10 @@ const LLMDataManagement = () => {
 
   const searchRAG = async () => {
     if (!searchQuery.trim()) return
-    
+
     try {
       setManualLoading(true)
-      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const token = getAuthToken()
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const response = await fetch(`${apiUrl}/api/llm-data/search`, {
         method: 'POST',
@@ -251,10 +129,10 @@ const LLMDataManagement = () => {
           threshold: 0.7
         })
       })
-      
+
       if (response.ok) {
         const data = await response.json()
-        setSearchResults(data.data.passages)
+        setSearchResults(data.data?.passages || [])
       }
     } catch (error) {
       console.error('Failed to search RAG:', error)
@@ -266,7 +144,7 @@ const LLMDataManagement = () => {
   const handleRefreshFeatures = async () => {
     try {
       setManualLoading(true)
-      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const token = getAuthToken()
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const response = await fetch(`${apiUrl}/api/llm-data/refresh-features`, {
         method: 'POST',
@@ -275,12 +153,10 @@ const LLMDataManagement = () => {
           'Content-Type': 'application/json'
         }
       })
-      
+
       if (response.ok) {
-        const data = await response.json()
         showNotification('Features refreshed successfully!', 'success')
-        // Refresh feature store data
-        await fetchFeatureStore()
+        await refetch()
       } else {
         showNotification('Failed to refresh features', 'error')
       }
@@ -295,7 +171,7 @@ const LLMDataManagement = () => {
   const handleRebuildCache = async () => {
     try {
       setManualLoading(true)
-      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const token = getAuthToken()
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const response = await fetch(`${apiUrl}/api/llm-data/rebuild-cache`, {
         method: 'POST',
@@ -304,12 +180,10 @@ const LLMDataManagement = () => {
           'Content-Type': 'application/json'
         }
       })
-      
+
       if (response.ok) {
-        const data = await response.json()
         showNotification('Cache rebuilt successfully!', 'success')
-        // Refresh feature store data
-        await fetchFeatureStore()
+        await refetch()
       } else {
         showNotification('Failed to rebuild cache', 'error')
       }
@@ -324,7 +198,7 @@ const LLMDataManagement = () => {
   const handleConfigureFeatures = async () => {
     try {
       setManualLoading(true)
-      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const token = getAuthToken()
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
       const response = await fetch(`${apiUrl}/api/llm-data/configure-features`, {
         method: 'POST',
@@ -341,12 +215,10 @@ const LLMDataManagement = () => {
           }
         })
       })
-      
+
       if (response.ok) {
-        const data = await response.json()
         showNotification('Feature store configured successfully!', 'success')
-        // Refresh feature store data
-        await fetchFeatureStore()
+        await refetch()
       } else {
         showNotification('Failed to configure features', 'error')
       }
@@ -501,7 +373,7 @@ const LLMDataManagement = () => {
           </button>
           
           <button
-            onClick={fetchSystemStatus}
+            onClick={handleRefresh}
             className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
           >
             <RefreshCw className="w-4 h-4" />

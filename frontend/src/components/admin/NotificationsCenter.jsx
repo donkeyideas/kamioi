@@ -76,7 +76,7 @@ const NotificationsCenter = ({ user }) => {
       }
     },
     staleTime: 60000, // 1 minute cache
-    cacheTime: 300000, // 5 minutes cache
+    gcTime: 300000, // 5 minutes cache
     refetchOnWindowFocus: false,
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000)
@@ -120,7 +120,7 @@ const NotificationsCenter = ({ user }) => {
       }
     },
     staleTime: 300000, // 5 minutes cache
-    cacheTime: 600000, // 10 minutes cache
+    gcTime: 600000, // 10 minutes cache
     refetchOnWindowFocus: false,
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000)
@@ -159,7 +159,7 @@ const NotificationsCenter = ({ user }) => {
       }
     },
     staleTime: 60000, // 1 minute cache
-    cacheTime: 300000, // 5 minutes cache
+    gcTime: 300000, // 5 minutes cache
     refetchOnWindowFocus: false,
     retry: 2,
     enabled: activeTab === 'delivery_logs' // Only fetch when tab is active

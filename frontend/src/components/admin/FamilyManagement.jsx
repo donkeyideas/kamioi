@@ -217,7 +217,7 @@ const FamilyManagement = () => {
     },
     enabled: !!selectedFamily?.id, // Only fetch when a family is selected
     staleTime: 300000, // 🚀 FIX: 5 minutes - data is fresh for 5 minutes
-    cacheTime: 600000, // 10 minutes - keep in cache for 10 minutes
+    gcTime: 600000, // 10 minutes - keep in cache for 10 minutes
     refetchOnWindowFocus: false, // 🚀 FIX: Don't refetch on window focus
     refetchOnMount: false, // 🚀 FIX: Don't refetch on mount if data is fresh
     retry: 2,

@@ -17,6 +17,13 @@ const AdminDatabaseManagement = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { accountType, dataType }
 
+  // Database Health State
+  const [auditResults, setAuditResults] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+  const [cleanupInProgress, setCleanupInProgress] = useState(null);
+  const [cleanupResults, setCleanupResults] = useState(null);
+
   useEffect(() => {
     // Wait for AuthContext to initialize before loading stats
     if (isInitialized && !authLoading) {
@@ -170,6 +177,61 @@ const AdminDatabaseManagement = () => {
       setDeleteError(err.response?.data?.error || err.message || 'Failed to delete data');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Database Health Functions
+  const runFullAudit = async () => {
+    try {
+      setAuditLoading(true);
+      setAuditError(null);
+
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('admin_token_3') || localStorage.getItem('authToken');
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111';
+
+      const response = await axios.get(`${apiBaseUrl}/api/admin/database/full-audit`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        setAuditResults(response.data);
+      } else {
+        setAuditError(response.data.error || 'Failed to run audit');
+      }
+    } catch (err) {
+      setAuditError(err.response?.data?.error || err.message || 'Failed to run audit');
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const runCleanup = async (table, dryRun = true) => {
+    try {
+      setCleanupInProgress(table);
+      setCleanupResults(null);
+
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('admin_token_3') || localStorage.getItem('authToken');
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111';
+
+      const endpoint = table === 'all'
+        ? `${apiBaseUrl}/api/admin/database/cleanup/all?dry_run=${dryRun}`
+        : `${apiBaseUrl}/api/admin/database/cleanup/${table}?dry_run=${dryRun}`;
+
+      const response = await axios.post(endpoint, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        setCleanupResults(response.data);
+        // Refresh audit after cleanup
+        if (!dryRun) {
+          setTimeout(() => runFullAudit(), 1000);
+        }
+      }
+    } catch (err) {
+      setCleanupResults({ success: false, error: err.response?.data?.error || err.message });
+    } finally {
+      setCleanupInProgress(null);
     }
   };
 
@@ -416,6 +478,189 @@ const AdminDatabaseManagement = () => {
                 </div>
               </div>
             )}
+
+            {/* Database Health Section */}
+            <div className={getCardClass()}>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className={`text-2xl font-bold ${getTextColor()}`}>🔍 Database Health Audit</h2>
+                  <p className={`${getSubtextClass()} mt-1`}>Detect and clean orphaned records across all tables</p>
+                </div>
+                <button
+                  onClick={runFullAudit}
+                  disabled={auditLoading}
+                  className={`px-4 py-2 rounded-lg font-bold ${
+                    auditLoading
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {auditLoading ? 'Running Audit...' : 'Run Full Audit'}
+                </button>
+              </div>
+
+              {auditError && (
+                <div className={`rounded p-3 mb-4 ${isLightMode ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-red-800 text-red-200 border border-red-600'}`}>
+                  <p>{auditError}</p>
+                </div>
+              )}
+
+              {auditResults && (
+                <div className="space-y-4">
+                  {/* Health Status Banner */}
+                  <div className={`rounded-lg p-4 ${
+                    auditResults.summary.health_status === 'healthy'
+                      ? (isLightMode ? 'bg-green-100 border border-green-200' : 'bg-green-900/30 border border-green-700')
+                      : auditResults.summary.health_status === 'critical'
+                        ? (isLightMode ? 'bg-red-100 border border-red-200' : 'bg-red-900/30 border border-red-700')
+                        : (isLightMode ? 'bg-yellow-100 border border-yellow-200' : 'bg-yellow-900/30 border border-yellow-700')
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">
+                          {auditResults.summary.health_status === 'healthy' ? '✅' : auditResults.summary.health_status === 'critical' ? '🚨' : '⚠️'}
+                        </span>
+                        <div>
+                          <h3 className={`font-bold ${
+                            auditResults.summary.health_status === 'healthy' ? 'text-green-600' :
+                            auditResults.summary.health_status === 'critical' ? 'text-red-600' : 'text-yellow-600'
+                          }`}>
+                            Database Health: {auditResults.summary.health_status.toUpperCase()}
+                          </h3>
+                          <p className={getSubtextClass()}>
+                            {auditResults.summary.total_orphans} orphaned records found across {auditResults.summary.total_tables_audited} tables
+                          </p>
+                        </div>
+                      </div>
+                      {auditResults.summary.total_orphans > 0 && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => runCleanup('all', true)}
+                            disabled={cleanupInProgress}
+                            className={`px-3 py-1 rounded text-sm font-medium ${
+                              cleanupInProgress ? 'bg-gray-600 text-gray-400' : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                            }`}
+                          >
+                            {cleanupInProgress === 'all' ? 'Running...' : 'Preview Cleanup'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm('This will permanently delete all orphaned records. Continue?')) {
+                                runCleanup('all', false);
+                              }
+                            }}
+                            disabled={cleanupInProgress}
+                            className={`px-3 py-1 rounded text-sm font-medium ${
+                              cleanupInProgress ? 'bg-gray-600 text-gray-400' : 'bg-red-600 hover:bg-red-700 text-white'
+                            }`}
+                          >
+                            Clean All
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Issues List */}
+                  {(auditResults.data.critical_issues.length > 0 || auditResults.data.warnings.length > 0) && (
+                    <div className={`rounded-lg p-4 ${isLightMode ? 'bg-gray-100 border border-gray-200' : 'bg-gray-800/50 border border-gray-700'}`}>
+                      {auditResults.data.critical_issues.length > 0 && (
+                        <div className="mb-3">
+                          <h4 className="text-red-500 font-bold mb-2">🚨 Critical Issues:</h4>
+                          <ul className="list-disc list-inside space-y-1">
+                            {auditResults.data.critical_issues.map((issue, idx) => (
+                              <li key={idx} className="text-red-400 text-sm">{issue}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {auditResults.data.warnings.length > 0 && (
+                        <div>
+                          <h4 className="text-yellow-500 font-bold mb-2">⚠️ Warnings:</h4>
+                          <ul className="list-disc list-inside space-y-1">
+                            {auditResults.data.warnings.map((warning, idx) => (
+                              <li key={idx} className="text-yellow-400 text-sm">{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Table-by-Table Breakdown */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {Object.entries(auditResults.data.tables).map(([tableName, tableData]) => (
+                      <div
+                        key={tableName}
+                        className={`rounded-lg p-4 ${
+                          tableData.total_orphans > 0
+                            ? (isLightMode ? 'bg-red-50 border border-red-200' : 'bg-red-900/20 border border-red-700')
+                            : (isLightMode ? 'bg-green-50 border border-green-200' : 'bg-green-900/20 border border-green-700')
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className={`font-bold text-sm ${getTextColor()}`}>
+                            {tableName.replace(/_/g, ' ')}
+                          </h4>
+                          {tableData.total_orphans > 0 ? (
+                            <span className="text-red-500 text-xs">🔴 {tableData.total_orphans}</span>
+                          ) : (
+                            <span className="text-green-500 text-xs">✓</span>
+                          )}
+                        </div>
+                        {tableData.total_orphans > 0 && (
+                          <div className="text-xs text-gray-400 space-y-1">
+                            {Object.entries(tableData).filter(([k]) => k !== 'total_orphans').map(([key, val]) => (
+                              val > 0 && <p key={key}>{key.replace(/_/g, ' ')}: {val}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Cleanup Results */}
+                  {cleanupResults && (
+                    <div className={`rounded-lg p-4 ${
+                      cleanupResults.success
+                        ? (isLightMode ? 'bg-blue-100 border border-blue-200' : 'bg-blue-900/30 border border-blue-700')
+                        : (isLightMode ? 'bg-red-100 border border-red-200' : 'bg-red-900/30 border border-red-700')
+                    }`}>
+                      {cleanupResults.success ? (
+                        <div>
+                          <h4 className="font-bold text-blue-500 mb-2">
+                            {cleanupResults.dry_run ? '🔍 Preview Results (Dry Run)' : '✅ Cleanup Complete'}
+                          </h4>
+                          <p className={getSubtextClass()}>{cleanupResults.message}</p>
+                          {cleanupResults.results && (
+                            <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                              {Object.entries(cleanupResults.results).map(([key, val]) => (
+                                val > 0 && (
+                                  <div key={key} className={`${isLightMode ? 'bg-white' : 'bg-gray-800'} rounded p-2`}>
+                                    <span className={getSubtextClass()}>{key}:</span> <span className="font-bold">{val}</span>
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 className="font-bold text-red-500">❌ Cleanup Failed</h4>
+                          <p className="text-red-400">{cleanupResults.error}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!auditResults && !auditLoading && (
+                <div className={`text-center py-8 ${getSubtextClass()}`}>
+                  <p>Click &quot;Run Full Audit&quot; to scan all database tables for orphaned records</p>
+                </div>
+              )}
+            </div>
 
             {/* Delete All Data Section */}
             <div className={`rounded-lg p-6 ${isLightMode ? 'bg-red-50 border border-red-200' : 'bg-red-900 border-2 border-red-700'}`}>

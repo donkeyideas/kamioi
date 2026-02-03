@@ -733,7 +733,7 @@ const LLMCenter = () => {
       }
     },
     staleTime: 300000, // 🚀 FIX: 5 minutes - data is fresh for 5 minutes
-    cacheTime: 600000, // 10 minutes - keep in cache for 10 minutes
+    gcTime: 600000, // 10 minutes - keep in cache for 10 minutes
     refetchOnWindowFocus: false, // 🚀 FIX: Don't refetch on window focus
     refetchOnMount: false, // 🚀 FIX: Don't refetch on mount if data is fresh
     keepPreviousData: true, // Prevent flash when switching tabs
@@ -3024,7 +3024,7 @@ Errors: ${errorCount}`,
     },
     enabled: activeTab === 'receipt-mappings', // Only fetch when tab is active
     staleTime: 30000, // 30 seconds cache
-    cacheTime: 300000, // 5 minutes cache
+    gcTime: 300000, // 5 minutes cache
     refetchOnWindowFocus: false,
     keepPreviousData: true, // Prevent flash when paginating
     retry: 2,

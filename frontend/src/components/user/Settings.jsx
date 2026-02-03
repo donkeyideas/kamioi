@@ -156,7 +156,8 @@ const Settings = ({ user }) => {
       }
       
       // Save profile to backend (mock for now)
-      const response = await fetch('http://127.0.0.1:5111/api/user/profile', {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const response = await fetch(`${apiBaseUrl}/api/user/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
