@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Download, Search, Filter, Edit, Eye, CheckCircle, AlertTriangle, Clock, DollarSign, TrendingUp, ExternalLink, ChevronLeft, ChevronRight, X, Upload, User } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useTheme } from '../../context/ThemeContext'
