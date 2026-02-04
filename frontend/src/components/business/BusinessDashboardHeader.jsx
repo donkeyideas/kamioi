@@ -451,12 +451,12 @@ const BusinessDashboardHeader = ({ user, activeTab, onReceiptProcessed }) => {
                 autoFocus
               />
             ) : (
-              <span 
+              <span
                 onClick={() => setShowInput(true)}
                 className="cursor-pointer"
                 title={roundUpEnabled ? 'Click to edit round-up amount' : 'Round-ups are disabled'}
               >
-                ${roundUpAmount}.00 Round Up
+                {roundUpAmount}.00 Round Up
               </span>
             )}
           </div>
