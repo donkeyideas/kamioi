@@ -20,17 +20,20 @@ import { useData } from '../../context/DataContext'
 
 const BusinessOverview = ({ user, onNavigate }) => {
   const navigate = useNavigate()
-  
+
   // Helper function to get the correct auth token (demo token takes precedence)
   const getAuthToken = () => {
-    return localStorage.getItem('kamioi_demo_token') || 
+    return localStorage.getItem('kamioi_demo_token') ||
            localStorage.getItem('kamioi_business_token') ||
-           localStorage.getItem('kamioi_user_token') || 
+           localStorage.getItem('kamioi_user_token') ||
            localStorage.getItem('kamioi_token') ||
            localStorage.getItem('authToken')
   }
   const { isBlackMode, isLightMode } = useTheme()
-  const { transactions, totalRoundUps } = useData()
+  const { transactions, totalRoundUps, portfolioValue, portfolioStats, holdings } = useData()
+
+  // Check if in demo mode
+  const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
   const [lastUpdated, setLastUpdated] = useState(new Date())
   const [isLoading, setIsLoading] = useState(false)
   const [businessData, setBusinessData] = useState({
@@ -285,52 +288,64 @@ const BusinessOverview = ({ user, onNavigate }) => {
     fetchBusinessData()
   }
 
+  // Use portfolioStats for demo mode, otherwise use calculated business data
+  const safePortfolioValue = isDemoMode ? (portfolioValue || 0) : (businessData?.quick_stats?.total_invested || 0)
+  const gainPct = isDemoMode ? (portfolioStats?.gainPercentage || 0) : 0
+  const todayGainPct = isDemoMode ? (portfolioStats?.todayGainPct || 0) : 0
+  const safeHoldings = isDemoMode ? (holdings || []) : []
+
+  // Calculate total invested from completed transactions
+  const safeTransactions = Array.isArray(transactions) ? transactions : []
+  const completedTransactions = safeTransactions.filter(t => t.status === 'completed')
+  const totalInvested = completedTransactions.reduce((sum, t) => sum + (t.roundUp || t.round_up || 0), 0)
+  const completedCount = completedTransactions.length
+
   const stats = [
     {
-      title: 'Total Transactions',
-      value: (businessData?.quick_stats?.total_transactions || transactions?.length || 0).toString(),
-      change: `$${(businessData?.quick_stats?.monthly_purchases || businessData?.quick_stats?.total_revenue || 0).toLocaleString()} this month`,
+      title: 'Portfolio Value',
+      value: `$${safePortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% all time`,
       icon: DollarSign,
-      color: 'text-green-400',
-      bgColor: 'bg-green-500/20'
+      color: gainPct >= 0 ? 'text-green-400' : 'text-red-400',
+      bgColor: gainPct >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'
     },
     {
-      title: 'Monthly Revenue',
-      value: `$${(businessData?.quick_stats?.monthly_revenue || 0).toLocaleString()}`,
-      change: `${businessData?.quick_stats?.revenue_growth >= 0 ? '+' : ''}${(businessData?.quick_stats?.revenue_growth || 0).toFixed(1)}%`,
+      title: 'Today\'s Change',
+      value: `${todayGainPct >= 0 ? '+' : ''}${todayGainPct.toFixed(2)}%`,
+      change: `${todayGainPct >= 0 ? '+' : ''}$${(safePortfolioValue * todayGainPct / 100).toFixed(2)}`,
       icon: TrendingUp,
-      color: 'text-blue-400',
-      bgColor: 'bg-blue-500/20'
+      color: todayGainPct >= 0 ? 'text-green-400' : 'text-red-400',
+      bgColor: todayGainPct >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'
     },
     {
-      title: 'Invested Transactions',
-      value: (businessData?.quick_stats?.invested_transactions || 0).toString(),
-      change: `${businessData?.key_metrics?.investment_rate || 0}% invested`,
+      title: 'Active Investments',
+      value: safeHoldings.length.toString(),
+      change: `${safeHoldings.length} stocks`,
       icon: Target,
       color: 'text-purple-400',
       bgColor: 'bg-purple-500/20'
     },
     {
-      title: 'Available to Invest',
-      value: `$${(businessData?.key_metrics?.available_to_invest || businessData?.quick_stats?.available_to_invest || 0).toLocaleString()}`,
-      change: `${businessData?.key_metrics?.mapped_count || businessData?.quick_stats?.mapped_transactions || 0} transactions ready`,
+      title: 'Total Round-ups',
+      value: `$${totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: `${completedCount} invested`,
       icon: Wallet,
-      color: 'text-orange-400',
-      bgColor: 'bg-orange-500/20'
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/20'
     },
     {
-      title: 'Investment Rate',
-      value: `${businessData?.key_metrics?.investment_rate || 0}%`,
-      change: `${businessData?.quick_stats?.invested_transactions || 0} of ${businessData?.quick_stats?.total_transactions || transactions?.length || 0}`,
-      icon: TrendingUp,
-      color: 'text-pink-400',
-      bgColor: 'bg-pink-500/20'
+      title: 'Total Transactions',
+      value: (businessData?.quick_stats?.total_transactions || transactions?.length || 0).toString(),
+      change: `$${(businessData?.quick_stats?.monthly_purchases || businessData?.quick_stats?.total_revenue || 0).toLocaleString()} this month`,
+      icon: BarChart3,
+      color: 'text-blue-400',
+      bgColor: 'bg-blue-500/20'
     },
     {
       title: 'Monthly Growth',
       value: `${businessData?.quick_stats?.revenue_growth >= 0 ? '+' : ''}${(businessData?.quick_stats?.revenue_growth || 0).toFixed(1)}%`,
       change: 'vs last month',
-      icon: BarChart3,
+      icon: TrendingUp,
       color: 'text-cyan-400',
       bgColor: 'bg-cyan-500/20'
     }

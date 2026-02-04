@@ -11,7 +11,7 @@ import { formatCurrency, formatNumber } from '../../utils/formatters'
 const DashboardOverview = ({ user }) => {
   const navigate = useNavigate()
   // useData now returns default values if context not available, so this is safe
-  const { portfolioValue = 0, holdings = [], transactions = [] } = useData()
+  const { portfolioValue = 0, portfolioStats, holdings = [], transactions = [] } = useData()
   const { isLightMode } = useTheme()
 
   // Calculate stats from actual transaction data to match transaction page
@@ -19,25 +19,30 @@ const DashboardOverview = ({ user }) => {
   const totalInvested = completedTransactions.reduce((sum, t) => sum + (t.roundUp || t.round_up || 0), 0)
   const completedCount = completedTransactions.length
 
+  // Use portfolioStats for gain/growth data (calculated from holdings)
+  const gainPct = portfolioStats?.gainPercentage || 0
+  const todayGainPct = portfolioStats?.todayGainPct || 0
+  const totalGain = portfolioStats?.totalGain || 0
+
   const stats = [
     {
       label: 'Portfolio Value',
       value: formatCurrency(portfolioValue),
-      change: '0.0%',
+      change: `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% all time`,
       icon: DollarSign,
-      color: 'text-green-400'
+      color: gainPct >= 0 ? 'text-green-400' : 'text-red-400'
     },
     {
-      label: 'Monthly Growth',
-      value: '0.0%',
-      change: '0.0%',
+      label: 'Today\'s Change',
+      value: `${todayGainPct >= 0 ? '+' : ''}${todayGainPct.toFixed(2)}%`,
+      change: `${todayGainPct >= 0 ? '+' : ''}${formatCurrency(portfolioValue * todayGainPct / 100)}`,
       icon: TrendingUp,
-      color: 'text-blue-400'
+      color: todayGainPct >= 0 ? 'text-green-400' : 'text-red-400'
     },
     {
       label: 'Active Investments',
       value: formatNumber(holdings.length),
-      change: '+0',
+      change: `${holdings.length} stocks`,
       icon: PieChart,
       color: 'text-purple-400'
     },

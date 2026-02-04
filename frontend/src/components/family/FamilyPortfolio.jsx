@@ -16,12 +16,15 @@ const FamilyPortfolio = ({ user }) => {
   const [showRebalancing, setShowRebalancing] = useState(false)
   const [showTaxHarvesting, setShowTaxHarvesting] = useState(false)
   const itemsPerPage = 10
-  const { portfolioValue } = useData()
+  const { portfolioValue, holdings: contextHoldings, portfolioStats } = useData()
   const { isLightMode } = useTheme()
   const [familyMembers, setFamilyMembers] = useState([])
-  
+
+  // Check if in demo mode
+  const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
+
   // Use clean data from DataContext (no hardcoded values)
-  const [holdings, setHoldings] = useState([])
+  const [apiHoldings, setApiHoldings] = useState([])
   const [familyPortfolio, setFamilyPortfolio] = useState({
     today_gain: 0,
     today_gain_percentage: 0,
@@ -30,9 +33,32 @@ const FamilyPortfolio = ({ user }) => {
     ytd_return: 0,
     ytd_return_percentage: 0
   })
+
+  // In demo mode, use context data; otherwise use API data
+  const holdings = isDemoMode ? (contextHoldings || []) : apiHoldings
   
-  // Fetch holdings and portfolio data from API when component mounts
+  // Fetch holdings and portfolio data from API when component mounts (skip in demo mode)
   useEffect(() => {
+    // In demo mode, use context data directly and set familyPortfolio from portfolioStats
+    if (isDemoMode) {
+      setFamilyPortfolio({
+        today_gain: portfolioStats?.todayGain || 0,
+        today_gain_percentage: portfolioStats?.todayGainPct || 0,
+        roi: portfolioStats?.gainPercentage || 0,
+        cash_available: 0,
+        ytd_return: portfolioStats?.totalGain || 0,
+        ytd_return_percentage: portfolioStats?.gainPercentage || 0
+      })
+      // Set demo family members
+      setFamilyMembers([
+        { id: 1, name: 'John Doe', role: 'Parent', contribution: portfolioStats?.totalCost * 0.4 || 0, portfolio: portfolioValue * 0.4, percentage: 40 },
+        { id: 2, name: 'Jane Doe', role: 'Parent', contribution: portfolioStats?.totalCost * 0.35 || 0, portfolio: portfolioValue * 0.35, percentage: 35 },
+        { id: 3, name: 'Sam Doe', role: 'Child', contribution: portfolioStats?.totalCost * 0.15 || 0, portfolio: portfolioValue * 0.15, percentage: 15 },
+        { id: 4, name: 'Emma Doe', role: 'Child', contribution: portfolioStats?.totalCost * 0.1 || 0, portfolio: portfolioValue * 0.1, percentage: 10 }
+      ])
+      return
+    }
+
     const fetchPortfolioData = async () => {
       try {
         const token = localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
@@ -49,11 +75,11 @@ const FamilyPortfolio = ({ user }) => {
             }
           })
         ])
-        
+
         if (portfolioResponse.ok) {
           const result = await portfolioResponse.json()
           if (result.success && result.portfolio) {
-            setHoldings(result.portfolio.holdings || [])
+            setApiHoldings(result.portfolio.holdings || [])
             setFamilyPortfolio({
               today_gain: result.portfolio.today_gain || 0,
               today_gain_percentage: result.portfolio.today_gain_percentage || 0,
@@ -64,7 +90,7 @@ const FamilyPortfolio = ({ user }) => {
             })
           }
         }
-        
+
         if (membersResponse.ok) {
           const membersResult = await membersResponse.json()
           if (membersResult.success && membersResult.data) {
@@ -77,9 +103,9 @@ const FamilyPortfolio = ({ user }) => {
         setFamilyMembers([])
       }
     }
-    
+
     fetchPortfolioData()
-  }, [])
+  }, [isDemoMode, portfolioStats, portfolioValue, contextHoldings])
 
 
   const getSelectClass = () => {

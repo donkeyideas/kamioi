@@ -9,15 +9,18 @@ import { useTheme } from '../../context/ThemeContext'
 
 const FamilyOverview = ({ user }) => {
   const navigate = useNavigate()
-  
+
   // Helper function to get the correct auth token (demo token takes precedence)
   const getAuthToken = () => {
-    return localStorage.getItem('kamioi_demo_token') || 
-           localStorage.getItem('kamioi_user_token') || 
+    return localStorage.getItem('kamioi_demo_token') ||
+           localStorage.getItem('kamioi_user_token') ||
            localStorage.getItem('authToken')
   }
-  const { portfolioValue, totalRoundUps, transactions } = useData()
+  const { portfolioValue, portfolioStats, totalRoundUps, transactions, holdings: contextHoldings } = useData()
   const { isLightMode } = useTheme()
+
+  // Check if in demo mode
+  const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
   
   // Family-specific data from API
   const [familyMembers, setFamilyMembers] = useState([])
@@ -92,11 +95,14 @@ const FamilyOverview = ({ user }) => {
   
   // Safety checks for undefined data
   const safeFamilyPortfolio = familyPortfolio || {}
-  const safeTotalValue = safeFamilyPortfolio.total_value || 0
-  const safeGainPercentage = safeFamilyPortfolio.gain_percentage || 0
   const safeFamilyMembers = Array.isArray(familyMembers) ? familyMembers : []
   const safeTransactions = Array.isArray(transactions) ? transactions : []
-  const holdings = Array.isArray(safeFamilyPortfolio.holdings) ? safeFamilyPortfolio.holdings : []
+
+  // In demo mode, use context data; otherwise use API data
+  const safeTotalValue = isDemoMode ? (portfolioValue || 0) : (safeFamilyPortfolio.total_value || 0)
+  const safeGainPercentage = isDemoMode ? (portfolioStats?.gainPercentage || 0) : (safeFamilyPortfolio.gain_percentage || 0)
+  const todayGainPct = portfolioStats?.todayGainPct || 0
+  const holdings = isDemoMode ? (contextHoldings || []) : (Array.isArray(safeFamilyPortfolio.holdings) ? safeFamilyPortfolio.holdings : [])
 
   // Calculate stats from completed transactions to match transaction page
   const completedTransactions = safeTransactions.filter(t => t.status === 'completed')
@@ -107,23 +113,23 @@ const FamilyOverview = ({ user }) => {
     {
       label: 'Family Portfolio Value',
       value: `$${safeTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      change: safeGainPercentage > 0 ? `+${safeGainPercentage.toFixed(1)}%` : '0.0%',
+      change: `${safeGainPercentage >= 0 ? '+' : ''}${safeGainPercentage.toFixed(1)}% all time`,
       icon: DollarSign,
-      color: 'text-green-400'
+      color: safeGainPercentage >= 0 ? 'text-green-400' : 'text-red-400'
     },
     {
       label: 'Family Members',
-      value: safeFamilyMembers.length.toString(),
-      change: '+0',
+      value: isDemoMode ? '4' : safeFamilyMembers.length.toString(),
+      change: 'active members',
       icon: Users,
       color: 'text-blue-400'
     },
     {
-      label: 'Monthly Growth',
-      value: safeGainPercentage > 0 ? `${safeGainPercentage.toFixed(1)}%` : '0.0%',
-      change: safeGainPercentage > 0 ? `+${(safeGainPercentage * 0.25).toFixed(1)}%` : '0.0%',
+      label: 'Today\'s Change',
+      value: `${todayGainPct >= 0 ? '+' : ''}${todayGainPct.toFixed(2)}%`,
+      change: `${todayGainPct >= 0 ? '+' : ''}$${(safeTotalValue * todayGainPct / 100).toFixed(2)}`,
       icon: TrendingUp,
-      color: 'text-purple-400'
+      color: todayGainPct >= 0 ? 'text-green-400' : 'text-red-400'
     },
     {
       label: 'Total Round-ups',

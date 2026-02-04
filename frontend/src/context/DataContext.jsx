@@ -68,6 +68,166 @@ const DEMO_MERCHANTS = {
 const FAMILY_MEMBERS = ['Demo Family Admin', 'Jane Demo', 'Tommy Demo', 'Sara Demo']
 const BUSINESS_EMPLOYEES = ['John Manager', 'Carol Designer', 'Alice Accountant', 'Bob Developer', 'Demo Business']
 
+// Mock stock prices with purchase price (when bought) and current price (today)
+// This allows us to calculate actual gains/losses
+const MOCK_STOCK_PRICES = {
+  // Individual merchants
+  SBUX: { purchasePrice: 92.50, currentPrice: 98.45, name: 'Starbucks' },
+  AMZN: { purchasePrice: 145.00, currentPrice: 178.50, name: 'Amazon' },
+  AAPL: { purchasePrice: 165.00, currentPrice: 178.50, name: 'Apple Inc.' },
+  NFLX: { purchasePrice: 580.00, currentPrice: 612.45, name: 'Netflix' },
+  UBER: { purchasePrice: 62.00, currentPrice: 71.50, name: 'Uber' },
+  TGT: { purchasePrice: 138.00, currentPrice: 145.20, name: 'Target' },
+  CMG: { purchasePrice: 2150.00, currentPrice: 2345.00, name: 'Chipotle' },
+  NKE: { purchasePrice: 95.00, currentPrice: 108.75, name: 'Nike' },
+  WMT: { purchasePrice: 155.00, currentPrice: 162.30, name: 'Walmart' },
+  MCD: { purchasePrice: 265.00, currentPrice: 285.40, name: 'McDonalds' },
+  COST: { purchasePrice: 540.00, currentPrice: 578.90, name: 'Costco' },
+  HD: { purchasePrice: 325.00, currentPrice: 348.75, name: 'Home Depot' },
+  SPOT: { purchasePrice: 285.00, currentPrice: 312.60, name: 'Spotify' },
+  DIS: { purchasePrice: 95.00, currentPrice: 112.30, name: 'Disney' },
+  CVS: { purchasePrice: 72.00, currentPrice: 78.45, name: 'CVS Health' },
+  BBY: { purchasePrice: 78.00, currentPrice: 85.30, name: 'Best Buy' },
+  LYFT: { purchasePrice: 12.50, currentPrice: 14.85, name: 'Lyft' },
+  DPZ: { purchasePrice: 385.00, currentPrice: 412.80, name: 'Dominos' },
+  SHEL: { purchasePrice: 62.00, currentPrice: 67.45, name: 'Shell' },
+
+  // Family-specific merchants
+  LOW: { purchasePrice: 215.00, currentPrice: 232.50, name: 'Lowes' },
+  KR: { purchasePrice: 45.00, currentPrice: 52.30, name: 'Kroger' },
+  WBA: { purchasePrice: 18.50, currentPrice: 21.25, name: 'Walgreens' },
+
+  // Business merchants
+  ADBE: { purchasePrice: 520.00, currentPrice: 568.90, name: 'Adobe' },
+  ODP: { purchasePrice: 48.00, currentPrice: 52.15, name: 'Office Depot' },
+  DAL: { purchasePrice: 42.00, currentPrice: 48.75, name: 'Delta Airlines' },
+  MSFT: { purchasePrice: 380.00, currentPrice: 412.50, name: 'Microsoft' },
+  ZM: { purchasePrice: 65.00, currentPrice: 72.30, name: 'Zoom' },
+  CRM: { purchasePrice: 265.00, currentPrice: 298.45, name: 'Salesforce' },
+  FDX: { purchasePrice: 245.00, currentPrice: 268.90, name: 'FedEx' },
+  UPS: { purchasePrice: 155.00, currentPrice: 172.45, name: 'UPS' },
+  SPLS: { purchasePrice: 12.00, currentPrice: 13.45, name: 'Staples' },
+  UAL: { purchasePrice: 45.00, currentPrice: 52.80, name: 'United Airlines' },
+  MAR: { purchasePrice: 225.00, currentPrice: 248.65, name: 'Marriott' },
+  GOOGL: { purchasePrice: 138.00, currentPrice: 155.35, name: 'Alphabet Inc.' }
+}
+
+// Calculate holdings from completed transactions
+const calculateHoldingsFromTransactions = (transactions) => {
+  // Only use completed transactions for holdings
+  const completedTx = transactions.filter(t => t.status === 'completed')
+
+  // Group by ticker and sum shares bought
+  const holdingsMap = {}
+
+  completedTx.forEach(tx => {
+    const ticker = tx.ticker
+    if (!ticker || !MOCK_STOCK_PRICES[ticker]) return
+
+    const priceData = MOCK_STOCK_PRICES[ticker]
+    const sharesBought = tx.roundUp / priceData.purchasePrice
+
+    if (!holdingsMap[ticker]) {
+      holdingsMap[ticker] = {
+        symbol: ticker,
+        name: priceData.name,
+        shares: 0,
+        totalCost: 0,
+        currentPrice: priceData.currentPrice,
+        purchasePrice: priceData.purchasePrice
+      }
+    }
+
+    holdingsMap[ticker].shares += sharesBought
+    holdingsMap[ticker].totalCost += tx.roundUp
+  })
+
+  // Convert to array and calculate current values
+  const holdings = Object.values(holdingsMap).map(h => {
+    const currentValue = h.shares * h.currentPrice
+    const gain = currentValue - h.totalCost
+    const gainPct = h.totalCost > 0 ? (gain / h.totalCost) * 100 : 0
+
+    return {
+      symbol: h.symbol,
+      name: h.name,
+      shares: parseFloat(h.shares.toFixed(4)),
+      avgCost: h.totalCost / h.shares,
+      currentPrice: h.currentPrice,
+      value: parseFloat(currentValue.toFixed(2)),
+      change: parseFloat(gainPct.toFixed(2)),
+      totalCost: parseFloat(h.totalCost.toFixed(2))
+    }
+  })
+
+  // Sort by value descending
+  holdings.sort((a, b) => b.value - a.value)
+
+  // Calculate allocation percentages
+  const totalValue = holdings.reduce((sum, h) => sum + h.value, 0)
+  holdings.forEach(h => {
+    h.allocation = totalValue > 0 ? parseFloat(((h.value / totalValue) * 100).toFixed(1)) : 0
+  })
+
+  return holdings
+}
+
+// Calculate portfolio stats from holdings
+const calculatePortfolioStats = (holdings) => {
+  const totalValue = holdings.reduce((sum, h) => sum + h.value, 0)
+  const totalCost = holdings.reduce((sum, h) => sum + h.totalCost, 0)
+  const totalGain = totalValue - totalCost
+  const gainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0
+
+  // Simulated today's change (between 0.3% and 1.2%)
+  const todayGainPct = parseFloat((Math.random() * 0.9 + 0.3).toFixed(2))
+  const todayGain = totalValue * (todayGainPct / 100)
+
+  return {
+    portfolioValue: parseFloat(totalValue.toFixed(2)),
+    totalCost: parseFloat(totalCost.toFixed(2)),
+    totalGain: parseFloat(totalGain.toFixed(2)),
+    gainPercentage: parseFloat(gainPct.toFixed(2)),
+    todayGain: parseFloat(todayGain.toFixed(2)),
+    todayGainPct: todayGainPct,
+    holdingsCount: holdings.length
+  }
+}
+
+// Generate goals based on actual invested amount
+const getDemoGoals = (accountType, totalInvested) => {
+  const goalTemplates = {
+    individual: [
+      { id: 1, name: 'Emergency Fund', targetMultiplier: 8, category: 'Savings', status: 'active' },
+      { id: 2, name: 'Vacation Fund', targetMultiplier: 4, category: 'Travel', status: 'active' },
+      { id: 3, name: 'New Car', targetMultiplier: 12, category: 'Big Purchase', status: 'active' }
+    ],
+    family: [
+      { id: 1, name: 'Family Vacation', targetMultiplier: 6, category: 'Travel', status: 'active' },
+      { id: 2, name: 'College Fund', targetMultiplier: 40, category: 'Education', status: 'active' },
+      { id: 3, name: 'Emergency Fund', targetMultiplier: 16, category: 'Savings', status: 'active' }
+    ],
+    business: [
+      { id: 1, name: 'Q1 Investment Target', targetMultiplier: 4, category: 'Investment', status: 'active' },
+      { id: 2, name: 'Annual Growth Fund', targetMultiplier: 16, category: 'Growth', status: 'active' },
+      { id: 3, name: 'Emergency Reserve', targetMultiplier: 8, category: 'Reserve', status: 'active' }
+    ]
+  }
+
+  const templates = goalTemplates[accountType] || goalTemplates.individual
+  return templates.map(g => {
+    const target = Math.round(totalInvested * g.targetMultiplier / 100) * 100 || 1000
+    const current = Math.round(totalInvested * (0.3 + Math.random() * 0.5))
+    const progress = Math.min(Math.round((current / target) * 100), 100)
+    return {
+      ...g,
+      target,
+      current,
+      progress
+    }
+  })
+}
+
 // Generate a full year of 2025 transactions with status variety
 const generateDemoTransactions = (accountType, roundUpAmount = 1) => {
   const merchants = DEMO_MERCHANTS[accountType] || DEMO_MERCHANTS.individual
@@ -129,72 +289,36 @@ const generateDemoTransactions = (accountType, roundUpAmount = 1) => {
 }
 
 // Get demo data with dynamic round-up amount from user settings
+// Now calculates holdings and portfolio value from actual transactions
 const getDemoDataWithRoundUp = (accountType, roundUpAmount = 1) => {
+  // 1. Generate transactions (source of truth)
   const transactions = generateDemoTransactions(accountType, roundUpAmount)
-  const totalRoundUps = transactions.length * roundUpAmount
+
+  // 2. Calculate holdings FROM completed transactions
+  const holdings = calculateHoldingsFromTransactions(transactions)
+
+  // 3. Calculate portfolio stats FROM holdings
+  const portfolioStats = calculatePortfolioStats(holdings)
+
+  // 4. Calculate transaction-based stats
+  const completedTx = transactions.filter(t => t.status === 'completed')
+  const totalRoundUps = completedTx.reduce((sum, t) => sum + (t.roundUp || 0), 0)
   const totalFeesPaid = transactions.length * 0.25 // $0.25 fee per transaction
 
-  const baseData = {
-    individual: {
-      portfolio: {
-        totalValue: 12547.82,
-        totalGain: 1847.32,
-        gainPercent: 17.24,
-        holdings: [
-          { symbol: 'AAPL', name: 'Apple Inc.', shares: 5.234, value: 934.12, avgCost: 155.00, currentPrice: 178.50, change: 15.4, allocation: 25 },
-          { symbol: 'GOOGL', name: 'Alphabet Inc.', shares: 2.156, value: 334.89, avgCost: 140.00, currentPrice: 155.35, change: 15.6, allocation: 15 },
-          { symbol: 'AMZN', name: 'Amazon.com', shares: 1.892, value: 370.45, avgCost: 175.00, currentPrice: 195.80, change: 16.4, allocation: 20 },
-          { symbol: 'MSFT', name: 'Microsoft', shares: 3.445, value: 1421.34, avgCost: 380.00, currentPrice: 412.50, change: 15.2, allocation: 25 },
-          { symbol: 'NVDA', name: 'NVIDIA', shares: 0.987, value: 863.45, avgCost: 650.00, currentPrice: 874.80, change: 37.2, allocation: 15 }
-        ]
-      },
-      goals: [
-        { id: 1, name: 'Emergency Fund', target: 10000, current: 6500, progress: 65, category: 'Savings' },
-        { id: 2, name: 'Vacation Fund', target: 5000, current: 2100, progress: 42, category: 'Travel' },
-        { id: 3, name: 'New Car', target: 15000, current: 3200, progress: 21, category: 'Big Purchase' }
-      ]
-    },
-    family: {
-      portfolio: {
-        totalValue: 28934.56,
-        totalGain: 4523.12,
-        gainPercent: 18.52,
-        holdings: [
-          { symbol: 'AAPL', name: 'Apple Inc.', shares: 12.345, value: 2205.67, avgCost: 160.00, currentPrice: 178.70, change: 18.6, allocation: 30 },
-          { symbol: 'GOOGL', name: 'Alphabet Inc.', shares: 5.678, value: 881.45, avgCost: 142.00, currentPrice: 155.25, change: 16.3, allocation: 15 },
-          { symbol: 'VTI', name: 'Vanguard Total Stock', shares: 45.234, value: 10234.56, avgCost: 210.00, currentPrice: 226.25, change: 18.1, allocation: 35 },
-          { symbol: 'QQQ', name: 'Invesco QQQ', shares: 15.678, value: 6789.12, avgCost: 400.00, currentPrice: 433.00, change: 17.0, allocation: 20 }
-        ]
-      },
-      goals: [
-        { id: 1, name: 'Family Vacation', target: 8000, current: 4500, progress: 56, category: 'Travel' },
-        { id: 2, name: 'College Fund', target: 50000, current: 12000, progress: 24, category: 'Education' },
-        { id: 3, name: 'Emergency Fund', target: 20000, current: 15000, progress: 75, category: 'Savings' }
-      ]
-    },
-    business: {
-      portfolio: {
-        totalValue: 156789.34,
-        totalGain: 23456.78,
-        gainPercent: 17.58,
-        holdings: [
-          { symbol: 'SPY', name: 'S&P 500 ETF', shares: 234.567, value: 112345.67, avgCost: 450.00, currentPrice: 478.85, change: 16.2, allocation: 45 },
-          { symbol: 'VTI', name: 'Vanguard Total Stock', shares: 89.123, value: 20123.45, avgCost: 210.00, currentPrice: 225.80, change: 20.7, allocation: 25 },
-          { symbol: 'BND', name: 'Vanguard Bond ETF', shares: 123.456, value: 9876.54, avgCost: 78.00, currentPrice: 80.00, change: 5.8, allocation: 15 },
-          { symbol: 'AAPL', name: 'Apple Inc.', shares: 45.678, value: 8156.78, avgCost: 165.00, currentPrice: 178.55, change: 17.8, allocation: 15 }
-        ]
-      },
-      goals: [
-        { id: 1, name: 'Q1 Investment Target', target: 50000, current: 35000, progress: 70, category: 'Investment' },
-        { id: 2, name: 'Annual Growth Fund', target: 200000, current: 78000, progress: 39, category: 'Growth' },
-        { id: 3, name: 'Emergency Reserve', target: 100000, current: 85000, progress: 85, category: 'Reserve' }
-      ]
-    }
-  }
+  // 5. Generate goals based on actual invested amount
+  const goals = getDemoGoals(accountType, totalRoundUps)
 
   return {
-    ...baseData[accountType],
     transactions,
+    holdings,
+    portfolio: {
+      totalValue: portfolioStats.portfolioValue,
+      totalGain: portfolioStats.totalGain,
+      gainPercent: portfolioStats.gainPercentage,
+      holdings: holdings
+    },
+    portfolioStats,  // Extra stats for dashboard display
+    goals,
     totalRoundUps,
     totalFeesPaid
   }
@@ -208,6 +332,7 @@ export const useData = () => {
     return {
       transactions: [],
       portfolioValue: 0,
+      portfolioStats: null,
       totalRoundUps: 0,
       holdings: [],
       goals: [],
@@ -233,6 +358,7 @@ export const DataProvider = ({ children }) => {
   const [recommendations, setRecommendations] = useState([])
   const [notifications, setNotifications] = useState([])
   const [portfolioValue, setPortfolioValue] = useState(0)
+  const [portfolioStats, setPortfolioStats] = useState(null)  // Extra portfolio stats for demo mode
   const [totalRoundUps, setTotalRoundUps] = useState(0)
   const [totalFeesPaid, setTotalFeesPaid] = useState(0)
   const [adminReports, setAdminReports] = useState([])
@@ -273,10 +399,11 @@ export const DataProvider = ({ children }) => {
         console.log('DataContext - Demo mode detected, using demo data for:', demoAccountType, 'with round-up:', roundUpAmount)
         const demoData = getDemoDataWithRoundUp(demoAccountType, roundUpAmount)
 
-        // Set demo data
+        // Set demo data - now using calculated values from transactions
         setTransactions(demoData.transactions || [])
-        setHoldings(demoData.portfolio?.holdings || [])
-        setPortfolioValue(demoData.portfolio?.totalValue || 0)
+        setHoldings(demoData.holdings || [])
+        setPortfolioValue(demoData.portfolioStats?.portfolioValue || 0)
+        setPortfolioStats(demoData.portfolioStats || null)
         setGoals(demoData.goals || [])
         setTotalRoundUps(demoData.totalRoundUps || 0)
         setTotalFeesPaid(demoData.totalFeesPaid || 0)
@@ -1047,6 +1174,7 @@ export const DataProvider = ({ children }) => {
     recommendations,
     notifications,
     portfolioValue,
+    portfolioStats,  // Extra portfolio stats (gain %, today's change, etc.)
     totalRoundUps,
     totalFeesPaid,
     adminReports,
