@@ -179,8 +179,10 @@ const calculatePortfolioStats = (holdings) => {
   const totalGain = totalValue - totalCost
   const gainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0
 
-  // Simulated today's change (between 0.3% and 1.2%)
-  const todayGainPct = parseFloat((Math.random() * 0.9 + 0.3).toFixed(2))
+  // Deterministic today's change based on holdings count and total value
+  // This creates a stable value that doesn't change on re-render
+  const seed = (holdings.length * 17 + Math.floor(totalValue)) % 100
+  const todayGainPct = parseFloat((0.3 + (seed / 100) * 0.9).toFixed(2))
   const todayGain = totalValue * (todayGainPct / 100)
 
   return {
@@ -215,9 +217,11 @@ const getDemoGoals = (accountType, totalInvested) => {
   }
 
   const templates = goalTemplates[accountType] || goalTemplates.individual
-  return templates.map(g => {
+  return templates.map((g, index) => {
     const target = Math.round(totalInvested * g.targetMultiplier / 100) * 100 || 1000
-    const current = Math.round(totalInvested * (0.3 + Math.random() * 0.5))
+    // Use deterministic progress based on goal id and totalInvested
+    const progressSeed = ((g.id * 31 + index * 17 + Math.floor(totalInvested)) % 50) + 30 // 30-80%
+    const current = Math.round(target * (progressSeed / 100))
     const progress = Math.min(Math.round((current / target) * 100), 100)
     return {
       ...g,
