@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 
 const DemoContext = createContext();
 
@@ -142,16 +142,37 @@ export const DemoProvider = ({ children }) => {
     return localStorage.getItem('kamioi_demo_account_type') || 'individual';
   });
 
+  // Track previous values to only dispatch event when they actually change
+  const prevDemoModeRef = useRef(isDemoMode);
+  const prevAccountTypeRef = useRef(demoAccountType);
+  const isInitialMount = useRef(true);
+
   useEffect(() => {
     localStorage.setItem('kamioi_demo_mode', isDemoMode.toString());
   }, [isDemoMode]);
 
   useEffect(() => {
     localStorage.setItem('kamioi_demo_account_type', demoAccountType);
-    // Dispatch event so DataContext can reload with new account type data
-    if (isDemoMode) {
+
+    // Skip dispatching on initial mount - DataContext handles initial load
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      prevDemoModeRef.current = isDemoMode;
+      prevAccountTypeRef.current = demoAccountType;
+      return;
+    }
+
+    // Only dispatch if values actually changed (not just effect re-running)
+    const demoModeChanged = prevDemoModeRef.current !== isDemoMode;
+    const accountTypeChanged = prevAccountTypeRef.current !== demoAccountType;
+
+    if (isDemoMode && (demoModeChanged || accountTypeChanged)) {
+      console.log('DemoContext - Dispatching demoModeChanged (actual change detected)');
       window.dispatchEvent(new CustomEvent('demoModeChanged'));
     }
+
+    prevDemoModeRef.current = isDemoMode;
+    prevAccountTypeRef.current = demoAccountType;
   }, [demoAccountType, isDemoMode]);
 
   const enableDemoMode = (accountType = 'individual') => {
