@@ -1,6 +1,6 @@
 import React from 'react'
 import { DollarSign, TrendingUp, PieChart, BarChart3, Users } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import RechartsChart from '../common/RechartsChart'
 import CompanyLogo from '../common/CompanyLogo'
 import TimeOfDay from '../common/TimeOfDay'
@@ -8,11 +8,40 @@ import { useData } from '../../context/DataContext'
 import { useTheme } from '../../context/ThemeContext'
 import { formatCurrency, formatNumber } from '../../utils/formatters'
 
+// Helper function to format date as MM/DD/YYYY
+const formatDate = (dateString) => {
+  if (!dateString || dateString === 'No activity yet') return dateString
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const day = date.getDate().toString().padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}/${day}/${year}`
+}
+
+// Helper function to get month/year labels for chart
+const getChartLabels = () => {
+  const now = new Date()
+  const labels = []
+  for (let i = 4; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const month = date.toLocaleString('default', { month: 'short' })
+    const year = date.getFullYear()
+    labels.push(`${month} ${year}`)
+  }
+  return labels
+}
+
 const DashboardOverview = ({ user }) => {
   const navigate = useNavigate()
+  const location = useLocation()
   // useData now returns default values if context not available, so this is safe
   const { portfolioValue = 0, portfolioStats, holdings = [], transactions = [] } = useData()
   const { isLightMode } = useTheme()
+
+  // Check if in demo mode based on current path
+  const isDemoMode = location.pathname.includes('/demo/')
+  const transactionsPath = isDemoMode ? '/demo/user/transactions' : '/dashboard/transactions'
 
   // Calculate stats from actual transaction data to match transaction page
   const completedTransactions = transactions.filter(t => t.status === 'completed')
@@ -105,7 +134,7 @@ const DashboardOverview = ({ user }) => {
             <div 
               key={index} 
               className={`${getCardClass()} cursor-pointer hover:scale-105 transition-transform`}
-              onClick={() => navigate('/dashboard/transactions')}
+              onClick={() => navigate(transactionsPath)}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -127,16 +156,19 @@ const DashboardOverview = ({ user }) => {
         <div className={getCardClass()}>
           <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>Portfolio Performance</h3>
           {portfolioValue > 0 ? (
-            <RechartsChart 
-              type="line" 
+            <RechartsChart
+              type="line"
               height={250}
-              data={[
-                { name: 'Week 1', value: portfolioValue * 0.8 },
-                { name: 'Week 2', value: portfolioValue * 0.85 },
-                { name: 'Week 3', value: portfolioValue * 0.9 },
-                { name: 'Week 4', value: portfolioValue * 0.95 },
-                { name: 'Today', value: portfolioValue }
-              ]}
+              data={(() => {
+                const labels = getChartLabels()
+                return [
+                  { name: labels[0], value: portfolioValue * 0.8 },
+                  { name: labels[1], value: portfolioValue * 0.85 },
+                  { name: labels[2], value: portfolioValue * 0.9 },
+                  { name: labels[3], value: portfolioValue * 0.95 },
+                  { name: labels[4], value: portfolioValue }
+                ]
+              })()}
               series={[{ dataKey: 'value', name: 'Portfolio Value' }]}
             />
           ) : (
@@ -178,8 +210,8 @@ const DashboardOverview = ({ user }) => {
       <div className={getCardClass()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className={`text-xl font-semibold ${getTextClass()}`}>Recent Activity</h3>
-          <button 
-            onClick={() => navigate('/dashboard/transactions')}
+          <button
+            onClick={() => navigate(transactionsPath)}
             className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
           >
             View All →
@@ -187,10 +219,10 @@ const DashboardOverview = ({ user }) => {
         </div>
         <div className="space-y-3">
           {recentActivity.map((activity) => (
-            <div 
-              key={activity.id} 
+            <div
+              key={activity.id}
               className={`flex items-center justify-between p-3 ${isLightMode ? 'bg-gray-100' : 'bg-white/5'} rounded-lg cursor-pointer hover:bg-white/10 transition-colors`}
-              onClick={() => navigate('/dashboard/transactions')}
+              onClick={() => navigate(transactionsPath)}
             >
               <div className="flex items-center space-x-3">
                 {activity.company && (
@@ -202,7 +234,7 @@ const DashboardOverview = ({ user }) => {
                   <p className={`${getTextClass()} font-medium`}>
                     {activity.action} {activity.company && `in ${activity.company}`}
                   </p>
-                  <p className={`${getSubtextClass()} text-sm`}>{activity.date}</p>
+                  <p className={`${getSubtextClass()} text-sm`}>{formatDate(activity.date)}</p>
                 </div>
               </div>
               <div className="text-green-400 font-semibold">
