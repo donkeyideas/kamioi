@@ -10,6 +10,7 @@ const AIInsights = ({ user }) => {
   const { isLightMode } = useTheme()
   const { addNotification } = useNotifications()
   const { showSuccessModal, showErrorModal } = useModal()
+  const { transactions, holdings, portfolioValue, goals } = useData()
   const [activeTab, setActiveTab] = useState('ai-recommendations')
   const [loading, setLoading] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState(null)
@@ -369,8 +370,6 @@ const AIInsights = ({ user }) => {
       if (interval) clearInterval(interval)
     }
   }, [isDemoMode, transactions])
-
-  const { transactions, holdings, portfolioValue, goals } = useData()
 
   // Fetch AI Recommendations with caching - only call API when needed
   const fetchAIRecommendations = useCallback(async (forceRefresh = false) => {
