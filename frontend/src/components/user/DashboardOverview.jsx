@@ -1,6 +1,6 @@
 import React from 'react'
 import { DollarSign, TrendingUp, PieChart, BarChart3, Users } from 'lucide-react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import RechartsChart from '../common/RechartsChart'
 import CompanyLogo from '../common/CompanyLogo'
 import TimeOfDay from '../common/TimeOfDay'
@@ -34,13 +34,12 @@ const getChartLabels = () => {
 
 const DashboardOverview = ({ user }) => {
   const navigate = useNavigate()
-  const location = useLocation()
   // useData now returns default values if context not available, so this is safe
   const { portfolioValue = 0, portfolioStats, holdings = [], transactions = [] } = useData()
   const { isLightMode } = useTheme()
 
-  // Check if in demo mode based on current path
-  const isDemoMode = location.pathname.includes('/demo/')
+  // Check if in demo mode - use localStorage for consistent detection
+  const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
   const transactionsPath = isDemoMode ? '/demo/user/transactions' : '/dashboard/transactions'
 
   // Calculate stats from actual transaction data to match transaction page
@@ -131,10 +130,9 @@ const DashboardOverview = ({ user }) => {
         {stats.map((stat, index) => {
           const IconComponent = stat.icon;
           return (
-            <div 
-              key={index} 
-              className={`${getCardClass()} cursor-pointer hover:scale-105 transition-transform`}
-              onClick={() => navigate(transactionsPath)}
+            <div
+              key={index}
+              className={getCardClass()}
             >
               <div className="flex items-center justify-between">
                 <div>
