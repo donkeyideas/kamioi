@@ -198,21 +198,146 @@ const calculatePortfolioStats = (holdings) => {
 
 // Generate goals based on actual invested amount
 const getDemoGoals = (accountType, totalInvested) => {
+  // Calculate end dates based on timeframes
+  const getEndDate = (months) => {
+    const date = new Date()
+    date.setMonth(date.getMonth() + months)
+    return date.toISOString().split('T')[0]
+  }
+
   const goalTemplates = {
     individual: [
-      { id: 1, name: 'Emergency Fund', targetMultiplier: 8, category: 'Savings', status: 'active' },
-      { id: 2, name: 'Vacation Fund', targetMultiplier: 4, category: 'Travel', status: 'active' },
-      { id: 3, name: 'New Car', targetMultiplier: 12, category: 'Big Purchase', status: 'active' }
+      {
+        id: 1,
+        title: 'Emergency Fund',
+        name: 'Emergency Fund',
+        type: 'amount',
+        targetMultiplier: 8,
+        category: 'Savings',
+        status: 'active',
+        timeframe: 12,
+        aiRecommendations: [
+          'Increase your round-up amount to reach this goal faster',
+          'Consider setting up recurring deposits',
+          'You\'re on track to meet this goal ahead of schedule'
+        ]
+      },
+      {
+        id: 2,
+        title: 'Vacation Fund',
+        name: 'Vacation Fund',
+        type: 'amount',
+        targetMultiplier: 4,
+        category: 'Travel',
+        status: 'active',
+        timeframe: 6,
+        aiRecommendations: [
+          'Summer is approaching - great timing for this goal!',
+          'Consider investing in travel-related stocks for bonus growth'
+        ]
+      },
+      {
+        id: 3,
+        title: 'New Car Down Payment',
+        name: 'New Car Down Payment',
+        type: 'amount',
+        targetMultiplier: 12,
+        category: 'Big Purchase',
+        status: 'active',
+        timeframe: 24,
+        aiRecommendations: [
+          'Long-term goals benefit from consistent contributions',
+          'Consider increasing round-ups on larger purchases'
+        ]
+      }
     ],
     family: [
-      { id: 1, name: 'Family Vacation', targetMultiplier: 6, category: 'Travel', status: 'active' },
-      { id: 2, name: 'College Fund', targetMultiplier: 40, category: 'Education', status: 'active' },
-      { id: 3, name: 'Emergency Fund', targetMultiplier: 16, category: 'Savings', status: 'active' }
+      {
+        id: 1,
+        title: 'Family Vacation',
+        name: 'Family Vacation',
+        type: 'amount',
+        targetMultiplier: 6,
+        category: 'Travel',
+        status: 'active',
+        timeframe: 8,
+        aiRecommendations: [
+          'Family contributions are helping you reach this goal',
+          'Consider booking early for better deals'
+        ]
+      },
+      {
+        id: 2,
+        title: 'College Fund',
+        name: 'College Fund',
+        type: 'amount',
+        targetMultiplier: 40,
+        category: 'Education',
+        status: 'active',
+        timeframe: 60,
+        aiRecommendations: [
+          'Long-term education savings benefit from compound growth',
+          'Consider 529 plan options for tax advantages'
+        ]
+      },
+      {
+        id: 3,
+        title: 'Emergency Fund',
+        name: 'Emergency Fund',
+        type: 'amount',
+        targetMultiplier: 16,
+        category: 'Savings',
+        status: 'active',
+        timeframe: 18,
+        aiRecommendations: [
+          'Family emergency funds should cover 6 months of expenses',
+          'Great progress on building financial security'
+        ]
+      }
     ],
     business: [
-      { id: 1, name: 'Q1 Investment Target', targetMultiplier: 4, category: 'Investment', status: 'active' },
-      { id: 2, name: 'Annual Growth Fund', targetMultiplier: 16, category: 'Growth', status: 'active' },
-      { id: 3, name: 'Emergency Reserve', targetMultiplier: 8, category: 'Reserve', status: 'active' }
+      {
+        id: 1,
+        title: 'Q1 Investment Target',
+        name: 'Q1 Investment Target',
+        type: 'amount',
+        targetMultiplier: 4,
+        category: 'Investment',
+        status: 'active',
+        timeframe: 3,
+        aiRecommendations: [
+          'On track to meet quarterly investment goals',
+          'Consider diversifying across sectors'
+        ]
+      },
+      {
+        id: 2,
+        title: 'Annual Growth Fund',
+        name: 'Annual Growth Fund',
+        type: 'amount',
+        targetMultiplier: 16,
+        category: 'Growth',
+        status: 'active',
+        timeframe: 12,
+        aiRecommendations: [
+          'Business investments showing strong returns',
+          'Consider reinvesting dividends for compound growth'
+        ]
+      },
+      {
+        id: 3,
+        title: 'Emergency Reserve',
+        name: 'Emergency Reserve',
+        type: 'amount',
+        targetMultiplier: 8,
+        category: 'Reserve',
+        status: 'active',
+        timeframe: 6,
+        aiRecommendations: [
+          'Business reserves protect against market fluctuations',
+          'Aim for 3-6 months of operating expenses'
+        ]
+      }
     ]
   }
 
@@ -223,11 +348,14 @@ const getDemoGoals = (accountType, totalInvested) => {
     const progressSeed = ((g.id * 31 + index * 17 + Math.floor(totalInvested)) % 50) + 30 // 30-80%
     const current = Math.round(target * (progressSeed / 100))
     const progress = Math.min(Math.round((current / target) * 100), 100)
+    const endDate = getEndDate(g.timeframe)
+
     return {
       ...g,
       target,
       current,
-      progress
+      progress,
+      endDate
     }
   })
 }
@@ -1251,6 +1379,14 @@ export const DataProvider = ({ children }) => {
     clearAllData,
     clearAllLocalStorage,
     setTransactions,
+
+    // Setters
+    setGoals,
+    setHoldings,
+    setPortfolioValue,
+    setTotalRoundUps,
+    setNotifications,
+    setRecommendations,
 
     // Utility functions
     mapMerchantToTicker,

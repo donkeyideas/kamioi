@@ -388,18 +388,22 @@ const UserGoals = () => {
       <div className="glass-card p-6">
         <h3 className="text-xl font-semibold text-white mb-4">Goal Progress Over Time</h3>
         {goals.length > 0 ? (
-          <RechartsChart 
-            type="line" 
+          <RechartsChart
+            type="line"
             height={300}
-            series={[
-              { name: 'Emergency Fund', data: [0, 100, 200, 350, 500, 650, 750] },
-              { name: 'Nike Investment', data: [0, 50, 120, 180, 250, 300, 320] },
-              { name: 'Round-Up Count', data: [0, 8, 18, 28, 38, 48, 58, 67] }
-            ]}
-            options={{
-              xaxis: { categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'] },
-              title: { text: 'Monthly Progress' }
-            }}
+            showLegend={false}
+            data={(() => {
+              // Generate monthly progress data for all goals combined
+              const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug']
+              return months.map((month, index) => {
+                // Calculate cumulative progress toward all goals
+                const totalCurrent = goals.reduce((sum, g) => sum + (g.current || 0), 0)
+                // Simulate growth from 0 to current value over the months
+                const growthFactor = (index + 1) / months.length
+                const value = Math.round(totalCurrent * growthFactor)
+                return { name: month, value }
+              })
+            })()}
           />
         ) : (
           <div className="flex items-center justify-center h-64">
