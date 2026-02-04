@@ -7003,18 +7003,122 @@ def user_subscription_plans():
 
 @app.route('/api/business/subscriptions/current', methods=['GET'])
 def business_subscriptions_current():
-    """Stub endpoint for business subscriptions"""
+    """Get business's current subscription"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
-        return jsonify({
-            'success': True,
-            'subscription': None,
-            'has_subscription': False,
-            'message': 'No active subscription'
-        })
+        token = auth_header.split(' ')[1]
+        if token.startswith('business_token_'):
+            business_id = token.replace('business_token_', '')
+        elif token.startswith('user_token_'):
+            business_id = token.replace('user_token_', '')
+        else:
+            return jsonify({'success': False, 'error': 'Invalid token format'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check user_subscriptions table
+        try:
+            cursor.execute("""
+                SELECT us.id, us.plan_id, us.status, us.billing_cycle, us.amount,
+                       us.current_period_start, us.current_period_end, us.cancel_at_period_end,
+                       sp.name, sp.description, sp.features
+                FROM user_subscriptions us
+                JOIN subscription_plans sp ON us.plan_id = sp.id
+                WHERE us.user_id = %s
+                ORDER BY us.created_at DESC
+                LIMIT 1
+            """, (business_id,))
+            active_sub = cursor.fetchone()
+
+            if active_sub and active_sub[2] in ('active', 'trialing'):
+                features = []
+                if active_sub[10]:
+                    try:
+                        features = json.loads(active_sub[10]) if isinstance(active_sub[10], str) else active_sub[10]
+                    except:
+                        features = []
+
+                conn.close()
+                return jsonify({
+                    'success': True,
+                    'subscription': {
+                        'subscription_id': active_sub[0],
+                        'plan_id': active_sub[1],
+                        'status': active_sub[2],
+                        'billing_cycle': active_sub[3],
+                        'amount': float(active_sub[4]) if active_sub[4] else 0,
+                        'current_period_start': str(active_sub[5]) if active_sub[5] else None,
+                        'current_period_end': str(active_sub[6]) if active_sub[6] else None,
+                        'cancel_at_period_end': active_sub[7],
+                        'plan_name': active_sub[8],
+                        'description': active_sub[9],
+                        'features': features
+                    }
+                })
+        except Exception as e:
+            print(f"user_subscriptions check error: {e}")
+            conn.rollback()
+
+        # Fall back to checking users.subscription_plan_id for pending selection
+        try:
+            cursor.execute("""
+                SELECT subscription_plan_id, billing_cycle FROM users WHERE id = %s
+            """, (business_id,))
+            user_result = cursor.fetchone()
+
+            if user_result and user_result[0]:
+                subscription_plan_id = user_result[0]
+                billing_cycle = user_result[1] or 'monthly'
+
+                # Get the plan details
+                cursor.execute("""
+                    SELECT id, name, description, price, price_monthly, price_yearly, billing_period, account_type, features
+                    FROM subscription_plans
+                    WHERE id = %s
+                """, (subscription_plan_id,))
+                plan = cursor.fetchone()
+                conn.close()
+
+                if plan:
+                    features = []
+                    if plan[8]:
+                        try:
+                            features = json.loads(plan[8]) if isinstance(plan[8], str) else plan[8]
+                        except:
+                            features = []
+
+                    # Determine price based on billing cycle
+                    price_monthly = float(plan[4]) if plan[4] else float(plan[3]) if plan[3] else 0
+                    price_yearly = float(plan[5]) if plan[5] else price_monthly * 12
+                    amount = price_yearly if billing_cycle == 'yearly' else price_monthly
+
+                    return jsonify({
+                        'success': True,
+                        'subscription': {
+                            'plan_id': plan[0],
+                            'plan_name': plan[1],
+                            'description': plan[2],
+                            'amount': amount,
+                            'price_monthly': price_monthly,
+                            'price_yearly': price_yearly,
+                            'billing_cycle': billing_cycle,
+                            'account_type': plan[7],
+                            'features': features,
+                            'status': 'pending_payment',
+                            'requires_payment': True
+                        },
+                        'has_subscription': True,
+                        'message': 'Subscription plan selected - payment required'
+                    })
+        except Exception as e:
+            print(f"users.subscription_plan_id check error: {e}")
+
+        conn.close()
+        return jsonify({'success': True, 'subscription': None, 'has_subscription': False})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -8311,6 +8415,60 @@ def family_subscription_current():
         except Exception as e:
             print(f"user_subscriptions check error: {e}")
             conn.rollback()
+
+        # Fall back to checking users.subscription_plan_id for pending selection
+        try:
+            cursor.execute("""
+                SELECT subscription_plan_id, billing_cycle FROM users WHERE id = %s
+            """, (family_id,))
+            user_result = cursor.fetchone()
+
+            if user_result and user_result[0]:
+                subscription_plan_id = user_result[0]
+                billing_cycle = user_result[1] or 'monthly'
+
+                # Get the plan details
+                cursor.execute("""
+                    SELECT id, name, description, price, price_monthly, price_yearly, billing_period, account_type, features
+                    FROM subscription_plans
+                    WHERE id = %s
+                """, (subscription_plan_id,))
+                plan = cursor.fetchone()
+                conn.close()
+
+                if plan:
+                    features = []
+                    if plan[8]:
+                        try:
+                            features = json.loads(plan[8]) if isinstance(plan[8], str) else plan[8]
+                        except:
+                            features = []
+
+                    # Determine price based on billing cycle
+                    price_monthly = float(plan[4]) if plan[4] else float(plan[3]) if plan[3] else 0
+                    price_yearly = float(plan[5]) if plan[5] else price_monthly * 12
+                    amount = price_yearly if billing_cycle == 'yearly' else price_monthly
+
+                    return jsonify({
+                        'success': True,
+                        'subscription': {
+                            'plan_id': plan[0],
+                            'plan_name': plan[1],
+                            'description': plan[2],
+                            'amount': amount,
+                            'price_monthly': price_monthly,
+                            'price_yearly': price_yearly,
+                            'billing_cycle': billing_cycle,
+                            'account_type': plan[7],
+                            'features': features,
+                            'status': 'pending_payment',  # User selected but hasn't paid yet
+                            'requires_payment': True
+                        },
+                        'has_subscription': True,
+                        'message': 'Subscription plan selected - payment required'
+                    })
+        except Exception as e:
+            print(f"users.subscription_plan_id check error: {e}")
 
         conn.close()
         return jsonify({'success': True, 'subscription': None})
@@ -22635,11 +22793,27 @@ def stripe_create_checkout_session():
 
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
-            user_id = token.replace('user_token_', '')
+            # Handle different token prefixes
+            if token.startswith('user_token_'):
+                user_id = token.replace('user_token_', '')
+            elif token.startswith('family_token_'):
+                user_id = token.replace('family_token_', '')
+            elif token.startswith('business_token_'):
+                user_id = token.replace('business_token_', '')
 
         data = request.get_json() or {}
         plan_id = data.get('plan_id')
         billing_cycle = data.get('billing_cycle', 'monthly')
+
+        # If no token provided but userGuid is in request body, extract user ID from it
+        # This handles the case when registration just completed and token isn't in localStorage yet
+        if not user_id and data.get('userGuid'):
+            user_guid = data.get('userGuid')
+            # userGuid format: kamioi_user_{user_id}_{timestamp}
+            if user_guid.startswith('kamioi_user_'):
+                parts = user_guid.split('_')
+                if len(parts) >= 3:
+                    user_id = parts[2]
 
         if not plan_id:
             return jsonify({'success': False, 'error': 'Plan ID required'}), 400
@@ -22749,6 +22923,7 @@ def stripe_create_checkout_session():
             'success': True,
             'session_id': session_id,
             'url': success_url,
+            'checkout_url': success_url,  # Frontend expects this key
             'mode': 'sandbox',
             'message': 'Subscription activated (sandbox mode)'
         })
