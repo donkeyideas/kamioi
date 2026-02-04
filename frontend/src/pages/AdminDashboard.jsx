@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useDemo } from '../context/DemoContext'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // Import all admin components
@@ -36,10 +37,14 @@ const AdminDashboard = () => {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
   const { isDarkMode, isLightMode, isCloudMode } = useTheme()
+  const { isDemoMode, getDemoUser } = useDemo()
   const [activeTab, setActiveTab] = useState('overview')
   const [allTransactions, setAllTransactions] = useState([])
   const pageLoadStartTimeRef = useRef(null)
   const activeTabRef = useRef(activeTab) // Track current activeTab for event handler
+
+  // Use demo user when in demo mode, otherwise use auth user
+  const effectiveUser = isDemoMode ? getDemoUser() : user
   
   // Debug logging for transaction updates
   const handleTransactionsUpdate = (transactions) => {
@@ -50,8 +55,13 @@ const AdminDashboard = () => {
 
   // Handle admin logout
   const handleLogout = async () => {
-    await logout()
-    navigate('/admin-login')
+    if (isDemoMode) {
+      // In demo mode, just navigate to login
+      navigate('/login')
+    } else {
+      await logout()
+      navigate('/admin-login')
+    }
   }
 
   // Handle setActiveTab events from other components
@@ -262,17 +272,17 @@ const AdminDashboard = () => {
         return <AdminTransactions onTransactionsUpdate={handleTransactionsUpdate} />
       case 'investments':
         console.log('🔍 AdminDashboard - Passing transactions to InvestmentSummary:', allTransactions.length)
-        return <InvestmentSummary user={user} transactions={allTransactions} />
+        return <InvestmentSummary user={effectiveUser} transactions={allTransactions} />
       case 'investment-processing':
-        return <InvestmentProcessingDashboard user={user} transactions={allTransactions} onRefresh={refreshTransactions} />
+        return <InvestmentProcessingDashboard user={effectiveUser} transactions={allTransactions} onRefresh={refreshTransactions} />
       case 'llm':
         return <LLMCenter />
       case 'llm-data':
         return <LLMDataManagement />
       case 'ml-dashboard':
-        return <MLDashboard user={user} />
+        return <MLDashboard user={effectiveUser} />
       case 'users2':
-        return <EnhancedUserManagement user={user} />
+        return <EnhancedUserManagement user={effectiveUser} />
       case 'employees':
         return <EmployeeManagement />
       case 'consolidated-users':
@@ -288,7 +298,7 @@ const AdminDashboard = () => {
       case 'advertisement':
         return <AdvertisementModule />
       case 'content':
-        return <ContentManagement user={user} />
+        return <ContentManagement user={effectiveUser} />
       case 'subscriptions':
         return <Subscriptions />
       case 'settings':
@@ -317,10 +327,10 @@ const AdminDashboard = () => {
     >
       {/* Sidebar - Fixed height, no scroll */}
       <motion.div variants={itemVariants} className="flex-shrink-0">
-        <AdminSidebar 
-          activeTab={activeTab} 
-          setActiveTab={setActiveTab} 
-          user={user}
+        <AdminSidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          user={effectiveUser}
           onLogout={handleLogout}
         />
       </motion.div>

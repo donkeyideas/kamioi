@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useDemo } from '../context/DemoContext'
 import DashboardHeader from '../components/user/DashboardHeader'
 import DashboardSidebar from '../components/user/DashboardSidebar'
 import DashboardOverview from '../components/user/DashboardOverview'
@@ -15,10 +17,16 @@ import UserSettings from '../components/user/UserSettings'
 import CommunicationHub from '../components/common/CommunicationHub'
 
 const UserDashboard = () => {
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
   const { isBlackMode, isLightMode, isCloudMode } = useTheme()
+  const { isDemoMode, getDemoUser } = useDemo()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showCommunication, setShowCommunication] = useState(false)
+
+  // Use demo user when in demo mode, otherwise use auth user
+  const effectiveUser = isDemoMode ? getDemoUser() : user
+  const effectiveLogout = isDemoMode ? () => navigate('/login') : logout
 
   // macOS-style animation variants
   const pageVariants = {
@@ -81,23 +89,23 @@ const UserDashboard = () => {
           {(() => {
             switch (activeTab) {
               case 'dashboard':
-                return <DashboardOverview user={user} />
+                return <DashboardOverview user={effectiveUser} />
               case 'portfolio':
-                return <PortfolioOverview user={user} />
+                return <PortfolioOverview user={effectiveUser} />
               case 'transactions':
-                return <UserTransactions user={user} />
+                return <UserTransactions user={effectiveUser} />
               case 'goals':
-                return <UserGoals user={user} />
+                return <UserGoals user={effectiveUser} />
               case 'ai':
-                return <AIInsights user={user} />
+                return <AIInsights user={effectiveUser} />
               case 'analytics':
-                return <PortfolioStats user={user} />
+                return <PortfolioStats user={effectiveUser} />
               case 'notifications':
-                return <UserNotifications user={user} />
+                return <UserNotifications user={effectiveUser} />
               case 'settings':
-                return <UserSettings user={user} />
+                return <UserSettings user={effectiveUser} />
               default:
-                return <DashboardOverview user={user} />
+                return <DashboardOverview user={effectiveUser} />
             }
           })()}
         </motion.div>
@@ -120,11 +128,11 @@ const UserDashboard = () => {
       animate="in"
     >
       <motion.div variants={itemVariants} className="flex-shrink-0">
-        <DashboardSidebar 
-          activeTab={activeTab} 
-          setActiveTab={setActiveTab} 
-          user={user}
-          onLogout={logout}
+        <DashboardSidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          user={effectiveUser}
+          onLogout={effectiveLogout}
           onOpenCommunication={() => setShowCommunication(true)}
         />
       </motion.div>
@@ -134,7 +142,7 @@ const UserDashboard = () => {
         variants={itemVariants}
       >
         <motion.div variants={itemVariants} className="flex-shrink-0">
-          <DashboardHeader user={user} />
+          <DashboardHeader user={effectiveUser} />
         </motion.div>
         
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">

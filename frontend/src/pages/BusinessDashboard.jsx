@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useDemo } from '../context/DemoContext'
 import BusinessDashboardHeader from '../components/business/BusinessDashboardHeader'
 import BusinessSidebar from '../components/business/BusinessSidebar'
 import BusinessOverview from '../components/business/BusinessOverview'
@@ -16,11 +18,17 @@ import BusinessAIInsights from '../components/business/BusinessAIInsights'
 import CommunicationHub from '../components/common/CommunicationHub'
 
 const BusinessDashboard = () => {
+  const navigate = useNavigate()
   const { logout, user } = useAuth()
   const { isBlackMode, isLightMode, isCloudMode } = useTheme()
+  const { isDemoMode, getDemoUser } = useDemo()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showCommunication, setShowCommunication] = useState(false)
   const aiInsightsRefreshRef = useRef(null)
+
+  // Use demo user when in demo mode, otherwise use auth user
+  const effectiveUser = isDemoMode ? getDemoUser() : user
+  const effectiveLogout = isDemoMode ? () => navigate('/login') : logout
 
   // macOS-style animation variants
   const pageVariants = {
@@ -62,25 +70,25 @@ const BusinessDashboard = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <BusinessOverview user={user} onNavigate={setActiveTab} />
+        return <BusinessOverview user={effectiveUser} onNavigate={setActiveTab} />
       case 'transactions':
-        return <BusinessTransactions user={user} />
+        return <BusinessTransactions user={effectiveUser} />
       case 'team':
-        return <BusinessTeam user={user} />
+        return <BusinessTeam user={effectiveUser} />
       case 'goals':
-        return <BusinessGoals user={user} />
+        return <BusinessGoals user={effectiveUser} />
       case 'ai':
-        return <BusinessAIInsights user={user} onRefresh={(refreshFn) => { aiInsightsRefreshRef.current = refreshFn }} />
+        return <BusinessAIInsights user={effectiveUser} onRefresh={(refreshFn) => { aiInsightsRefreshRef.current = refreshFn }} />
       case 'analytics':
-        return <BusinessAnalytics user={user} />
+        return <BusinessAnalytics user={effectiveUser} />
       case 'reports':
-        return <BusinessReports user={user} />
+        return <BusinessReports user={effectiveUser} />
       case 'settings':
-        return <BusinessSettings user={user} />
+        return <BusinessSettings user={effectiveUser} />
       case 'notifications':
-        return <BusinessNotifications user={user} />
+        return <BusinessNotifications user={effectiveUser} />
       default:
-        return <BusinessOverview user={user} />
+        return <BusinessOverview user={effectiveUser} />
     }
   }
 
@@ -99,11 +107,11 @@ const BusinessDashboard = () => {
       animate="in"
     >
       <motion.div variants={itemVariants} className="flex-shrink-0">
-        <BusinessSidebar 
-          activeTab={activeTab} 
-          setActiveTab={setActiveTab} 
-          user={user}
-          onLogout={logout}
+        <BusinessSidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          user={effectiveUser}
+          onLogout={effectiveLogout}
           onOpenCommunication={() => setShowCommunication(true)}
         />
       </motion.div>
@@ -114,8 +122,8 @@ const BusinessDashboard = () => {
         initial="initial"
         animate="in"
       >
-        <BusinessDashboardHeader 
-          user={user} 
+        <BusinessDashboardHeader
+          user={effectiveUser}
           activeTab={activeTab}
           onReceiptProcessed={() => {
             // Refresh AI Insights receipt mappings when a new receipt is processed

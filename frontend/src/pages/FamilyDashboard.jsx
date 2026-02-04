@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useDemo } from '../context/DemoContext'
 import FamilySidebar from '../components/family/FamilySidebar'
 import FamilyDashboardHeader from '../components/family/FamilyDashboardHeader'
 import FamilyOverview from '../components/family/FamilyOverview'
@@ -15,10 +17,16 @@ import FamilySettings from '../components/family/FamilySettings'
 import CommunicationHub from '../components/common/CommunicationHub'
 
 const FamilyDashboard = () => {
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
   const { isDarkMode, isLightMode, isCloudMode } = useTheme()
+  const { isDemoMode, getDemoUser } = useDemo()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showCommunication, setShowCommunication] = useState(false)
+
+  // Use demo user when in demo mode, otherwise use auth user
+  const effectiveUser = isDemoMode ? getDemoUser() : user
+  const effectiveLogout = isDemoMode ? () => navigate('/login') : logout
 
   // macOS-style animation variants
   const pageVariants = {
@@ -81,23 +89,23 @@ const FamilyDashboard = () => {
           {(() => {
             switch (activeTab) {
               case 'dashboard':
-                return <FamilyOverview user={user} />
+                return <FamilyOverview user={effectiveUser} />
               case 'members':
-                return <FamilyMembers user={user} />
+                return <FamilyMembers user={effectiveUser} />
               case 'transactions':
-                return <FamilyTransactions user={user} />
+                return <FamilyTransactions user={effectiveUser} />
               case 'portfolio':
-                return <FamilyPortfolio user={user} />
+                return <FamilyPortfolio user={effectiveUser} />
               case 'goals':
-                return <FamilyGoals user={user} />
+                return <FamilyGoals user={effectiveUser} />
               case 'ai':
-                return <FamilyAIInsights user={user} />
+                return <FamilyAIInsights user={effectiveUser} />
               case 'notifications':
-                return <FamilyNotifications user={user} />
+                return <FamilyNotifications user={effectiveUser} />
               case 'settings':
-                return <FamilySettings user={user} />
+                return <FamilySettings user={effectiveUser} />
               default:
-                return <FamilyOverview user={user} />
+                return <FamilyOverview user={effectiveUser} />
             }
           })()}
         </motion.div>
@@ -120,11 +128,11 @@ const FamilyDashboard = () => {
       animate="in"
     >
       <motion.div variants={itemVariants} className="flex-shrink-0">
-        <FamilySidebar 
-          activeTab={activeTab} 
-          setActiveTab={setActiveTab} 
-          user={user}
-          onLogout={logout}
+        <FamilySidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          user={effectiveUser}
+          onLogout={effectiveLogout}
           onOpenCommunication={() => setShowCommunication(true)}
         />
       </motion.div>
@@ -134,7 +142,7 @@ const FamilyDashboard = () => {
         variants={itemVariants}
       >
         <motion.div variants={itemVariants} className="flex-shrink-0">
-          <FamilyDashboardHeader user={user} activeTab={activeTab} />
+          <FamilyDashboardHeader user={effectiveUser} activeTab={activeTab} />
         </motion.div>
         
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
