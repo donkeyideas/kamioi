@@ -5112,10 +5112,12 @@ def admin_demo_codes():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
         token = auth_header.split(' ')[1]
-        decoded = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
 
-        if decoded.get('role') != 'admin':
+        # Admin tokens are simple strings like 'admin_token_1', not JWT
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
+        admin_id = token.replace('admin_token_', '')
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -5154,7 +5156,7 @@ def admin_demo_codes():
                        COUNT(dl.id) as usage_count
                 FROM demo_codes dc
                 LEFT JOIN demo_logins dl ON dc.id = dl.demo_code_id
-                GROUP BY dc.id
+                GROUP BY dc.id, dc.code, dc.dashboard_type, dc.is_active, dc.expires_at, dc.created_at
                 ORDER BY dc.created_at DESC
             """)
             codes = cursor.fetchall()
@@ -5189,7 +5191,7 @@ def admin_demo_codes():
                 INSERT INTO demo_codes (code, dashboard_type, expires_at, created_by)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, code, dashboard_type, is_active, expires_at, created_at
-            """, (code, dashboard_type, expires_at, decoded.get('id')))
+            """, (code, dashboard_type, expires_at if expires_at else None, admin_id))
 
             result = cursor.fetchone()
             conn.commit()
@@ -5219,12 +5221,10 @@ def admin_demo_codes():
 
             return jsonify({'success': True, 'message': 'Demo code deleted'})
 
-    except jwt.ExpiredSignatureError:
-        return jsonify({'success': False, 'error': 'Token expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'success': False, 'error': 'Invalid token'}), 401
     except Exception as e:
         print(f"Demo codes error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/demo-codes/<int:code_id>/toggle', methods=['PUT'])
@@ -5236,9 +5236,9 @@ def toggle_demo_code(code_id):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
         token = auth_header.split(' ')[1]
-        decoded = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
 
-        if decoded.get('role') != 'admin':
+        # Admin tokens are simple strings like 'admin_token_1', not JWT
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
 
         conn = get_db_connection()
@@ -5274,9 +5274,9 @@ def admin_demo_logins():
             return jsonify({'success': False, 'error': 'No token provided'}), 401
 
         token = auth_header.split(' ')[1]
-        decoded = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
 
-        if decoded.get('role') != 'admin':
+        # Admin tokens are simple strings like 'admin_token_1', not JWT
+        if not token.startswith('admin_token_'):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
 
         conn = get_db_connection()
