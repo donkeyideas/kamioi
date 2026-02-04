@@ -11,9 +11,14 @@ import { formatCurrency, formatNumber } from '../../utils/formatters'
 const DashboardOverview = ({ user }) => {
   const navigate = useNavigate()
   // useData now returns default values if context not available, so this is safe
-  const { portfolioValue = 0, totalRoundUps = 0, holdings = [], transactions = [] } = useData()
+  const { portfolioValue = 0, holdings = [], transactions = [] } = useData()
   const { isLightMode } = useTheme()
-  
+
+  // Calculate stats from actual transaction data to match transaction page
+  const completedTransactions = transactions.filter(t => t.status === 'completed')
+  const totalInvested = completedTransactions.reduce((sum, t) => sum + (t.roundUp || t.round_up || 0), 0)
+  const completedCount = completedTransactions.length
+
   const stats = [
     {
       label: 'Portfolio Value',
@@ -38,8 +43,8 @@ const DashboardOverview = ({ user }) => {
     },
     {
       label: 'Total Round-ups',
-      value: formatCurrency(totalRoundUps),
-      change: '+0',
+      value: formatCurrency(totalInvested),
+      change: `${completedCount} invested`,
       icon: Users,
       color: 'text-yellow-400'
     }

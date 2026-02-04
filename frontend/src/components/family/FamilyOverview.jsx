@@ -95,9 +95,13 @@ const FamilyOverview = ({ user }) => {
   const safeTotalValue = safeFamilyPortfolio.total_value || 0
   const safeGainPercentage = safeFamilyPortfolio.gain_percentage || 0
   const safeFamilyMembers = Array.isArray(familyMembers) ? familyMembers : []
-  const safeTotalRoundUps = typeof totalRoundUps === 'number' ? totalRoundUps : 0
   const safeTransactions = Array.isArray(transactions) ? transactions : []
   const holdings = Array.isArray(safeFamilyPortfolio.holdings) ? safeFamilyPortfolio.holdings : []
+
+  // Calculate stats from completed transactions to match transaction page
+  const completedTransactions = safeTransactions.filter(t => t.status === 'completed')
+  const totalInvested = completedTransactions.reduce((sum, t) => sum + (t.roundUp || t.round_up || 0), 0)
+  const completedCount = completedTransactions.length
 
   const stats = [
     {
@@ -123,8 +127,8 @@ const FamilyOverview = ({ user }) => {
     },
     {
       label: 'Total Round-ups',
-      value: `$${safeTotalRoundUps.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      change: safeTotalRoundUps > 0 ? '+1' : '+0',
+      value: `$${totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: `${completedCount} invested`,
       icon: PieChart,
       color: 'text-yellow-400'
     }
