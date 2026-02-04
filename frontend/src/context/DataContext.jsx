@@ -5,91 +5,188 @@ import { getToken, ROLES } from '../services/apiService' // Import getToken and 
 
 const DataContext = createContext()
 
-// Demo data for different account types - matches DemoContext structure
-const DEMO_DATA = {
-  individual: {
-    portfolio: {
-      totalValue: 12547.82,
-      totalGain: 1847.32,
-      gainPercent: 17.24,
-      holdings: [
-        { symbol: 'AAPL', name: 'Apple Inc.', shares: 5.234, value: 934.12, avgCost: 155.00, currentPrice: 178.50, change: 15.4, allocation: 25 },
-        { symbol: 'GOOGL', name: 'Alphabet Inc.', shares: 2.156, value: 334.89, avgCost: 140.00, currentPrice: 155.35, change: 15.6, allocation: 15 },
-        { symbol: 'AMZN', name: 'Amazon.com', shares: 1.892, value: 370.45, avgCost: 175.00, currentPrice: 195.80, change: 16.4, allocation: 20 },
-        { symbol: 'MSFT', name: 'Microsoft', shares: 3.445, value: 1421.34, avgCost: 380.00, currentPrice: 412.50, change: 15.2, allocation: 25 },
-        { symbol: 'NVDA', name: 'NVIDIA', shares: 0.987, value: 863.45, avgCost: 650.00, currentPrice: 874.80, change: 37.2, allocation: 15 }
+// Demo merchant data for generating transactions
+const DEMO_MERCHANTS = {
+  individual: [
+    { merchant: 'Starbucks', ticker: 'SBUX', category: 'Food & Drink' },
+    { merchant: 'Amazon', ticker: 'AMZN', category: 'Shopping' },
+    { merchant: 'Apple Store', ticker: 'AAPL', category: 'Technology' },
+    { merchant: 'Netflix', ticker: 'NFLX', category: 'Entertainment' },
+    { merchant: 'Uber', ticker: 'UBER', category: 'Transportation' },
+    { merchant: 'Target', ticker: 'TGT', category: 'Shopping' },
+    { merchant: 'Chipotle', ticker: 'CMG', category: 'Food & Drink' },
+    { merchant: 'Nike', ticker: 'NKE', category: 'Shopping' },
+    { merchant: 'Walmart', ticker: 'WMT', category: 'Shopping' },
+    { merchant: 'McDonalds', ticker: 'MCD', category: 'Food & Drink' },
+    { merchant: 'Costco', ticker: 'COST', category: 'Shopping' },
+    { merchant: 'Home Depot', ticker: 'HD', category: 'Home' },
+    { merchant: 'Spotify', ticker: 'SPOT', category: 'Entertainment' },
+    { merchant: 'Disney+', ticker: 'DIS', category: 'Entertainment' },
+    { merchant: 'CVS Pharmacy', ticker: 'CVS', category: 'Health' },
+    { merchant: 'Whole Foods', ticker: 'AMZN', category: 'Groceries' },
+    { merchant: 'Best Buy', ticker: 'BBY', category: 'Technology' },
+    { merchant: 'Lyft', ticker: 'LYFT', category: 'Transportation' },
+    { merchant: 'Dominos', ticker: 'DPZ', category: 'Food & Drink' },
+    { merchant: 'Shell Gas', ticker: 'SHEL', category: 'Transportation' }
+  ],
+  family: [
+    { merchant: 'Costco', ticker: 'COST', category: 'Groceries' },
+    { merchant: 'Amazon', ticker: 'AMZN', category: 'Shopping' },
+    { merchant: 'Target', ticker: 'TGT', category: 'Shopping' },
+    { merchant: 'Disney+', ticker: 'DIS', category: 'Entertainment' },
+    { merchant: 'Walmart', ticker: 'WMT', category: 'Groceries' },
+    { merchant: 'Netflix', ticker: 'NFLX', category: 'Entertainment' },
+    { merchant: 'Home Depot', ticker: 'HD', category: 'Home' },
+    { merchant: 'Lowes', ticker: 'LOW', category: 'Home' },
+    { merchant: 'Kroger', ticker: 'KR', category: 'Groceries' },
+    { merchant: 'Chick-fil-A', ticker: null, category: 'Food & Drink' },
+    { merchant: 'McDonalds', ticker: 'MCD', category: 'Food & Drink' },
+    { merchant: 'Publix', ticker: null, category: 'Groceries' },
+    { merchant: 'CVS Pharmacy', ticker: 'CVS', category: 'Health' },
+    { merchant: 'Walgreens', ticker: 'WBA', category: 'Health' },
+    { merchant: 'Shell Gas', ticker: 'SHEL', category: 'Transportation' }
+  ],
+  business: [
+    { merchant: 'AWS', ticker: 'AMZN', category: 'Cloud Services' },
+    { merchant: 'Adobe', ticker: 'ADBE', category: 'Software' },
+    { merchant: 'Office Depot', ticker: 'ODP', category: 'Office Supplies' },
+    { merchant: 'Delta Airlines', ticker: 'DAL', category: 'Travel' },
+    { merchant: 'WeWork', ticker: null, category: 'Office Space' },
+    { merchant: 'Microsoft 365', ticker: 'MSFT', category: 'Software' },
+    { merchant: 'Zoom', ticker: 'ZM', category: 'Software' },
+    { merchant: 'Slack', ticker: 'CRM', category: 'Software' },
+    { merchant: 'FedEx', ticker: 'FDX', category: 'Shipping' },
+    { merchant: 'UPS', ticker: 'UPS', category: 'Shipping' },
+    { merchant: 'Staples', ticker: 'SPLS', category: 'Office Supplies' },
+    { merchant: 'United Airlines', ticker: 'UAL', category: 'Travel' },
+    { merchant: 'Marriott', ticker: 'MAR', category: 'Travel' },
+    { merchant: 'Google Cloud', ticker: 'GOOGL', category: 'Cloud Services' },
+    { merchant: 'Salesforce', ticker: 'CRM', category: 'Software' }
+  ]
+}
+
+const FAMILY_MEMBERS = ['Demo Family Admin', 'Jane Demo', 'Tommy Demo', 'Sara Demo']
+const BUSINESS_EMPLOYEES = ['John Manager', 'Carol Designer', 'Alice Accountant', 'Bob Developer', 'Demo Business']
+
+// Generate a full year of 2025 transactions
+const generateDemoTransactions = (accountType, roundUpAmount = 1) => {
+  const merchants = DEMO_MERCHANTS[accountType] || DEMO_MERCHANTS.individual
+  const transactions = []
+  let id = 1
+
+  // Generate ~3-4 transactions per week for the full year 2025
+  const startDate = new Date('2025-01-01')
+  const endDate = new Date('2025-12-31')
+
+  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 2)) {
+    // Skip some days randomly to make it realistic (not exactly every 2 days)
+    if (Math.random() > 0.85) continue
+
+    const merchantData = merchants[Math.floor(Math.random() * merchants.length)]
+    const baseAmount = Math.floor(Math.random() * 150) + 5 + Math.random() * 0.99 // $5.xx to $155.xx
+
+    const transaction = {
+      id: id++,
+      merchant: merchantData.merchant,
+      description: `${merchantData.category} purchase`,
+      amount: parseFloat(baseAmount.toFixed(2)),
+      purchase: parseFloat(baseAmount.toFixed(2)),
+      roundUp: roundUpAmount,
+      round_up: roundUpAmount,
+      ticker: merchantData.ticker,
+      date: date.toISOString().split('T')[0],
+      status: 'completed',
+      category: merchantData.category
+    }
+
+    // Add member for family accounts
+    if (accountType === 'family') {
+      transaction.member = FAMILY_MEMBERS[Math.floor(Math.random() * FAMILY_MEMBERS.length)]
+    }
+
+    // Add employee for business accounts
+    if (accountType === 'business') {
+      transaction.employee = BUSINESS_EMPLOYEES[Math.floor(Math.random() * BUSINESS_EMPLOYEES.length)]
+      // Business transactions are larger
+      transaction.amount = parseFloat((baseAmount * 5 + Math.random() * 500).toFixed(2))
+      transaction.purchase = transaction.amount
+    }
+
+    transactions.push(transaction)
+  }
+
+  return transactions.sort((a, b) => new Date(b.date) - new Date(a.date)) // Most recent first
+}
+
+// Get demo data with dynamic round-up amount from user settings
+const getDemoDataWithRoundUp = (accountType, roundUpAmount = 1) => {
+  const transactions = generateDemoTransactions(accountType, roundUpAmount)
+  const totalRoundUps = transactions.length * roundUpAmount
+  const totalFeesPaid = transactions.length * 0.25 // $0.25 fee per transaction
+
+  const baseData = {
+    individual: {
+      portfolio: {
+        totalValue: 12547.82,
+        totalGain: 1847.32,
+        gainPercent: 17.24,
+        holdings: [
+          { symbol: 'AAPL', name: 'Apple Inc.', shares: 5.234, value: 934.12, avgCost: 155.00, currentPrice: 178.50, change: 15.4, allocation: 25 },
+          { symbol: 'GOOGL', name: 'Alphabet Inc.', shares: 2.156, value: 334.89, avgCost: 140.00, currentPrice: 155.35, change: 15.6, allocation: 15 },
+          { symbol: 'AMZN', name: 'Amazon.com', shares: 1.892, value: 370.45, avgCost: 175.00, currentPrice: 195.80, change: 16.4, allocation: 20 },
+          { symbol: 'MSFT', name: 'Microsoft', shares: 3.445, value: 1421.34, avgCost: 380.00, currentPrice: 412.50, change: 15.2, allocation: 25 },
+          { symbol: 'NVDA', name: 'NVIDIA', shares: 0.987, value: 863.45, avgCost: 650.00, currentPrice: 874.80, change: 37.2, allocation: 15 }
+        ]
+      },
+      goals: [
+        { id: 1, name: 'Emergency Fund', target: 10000, current: 6500, progress: 65, category: 'Savings' },
+        { id: 2, name: 'Vacation Fund', target: 5000, current: 2100, progress: 42, category: 'Travel' },
+        { id: 3, name: 'New Car', target: 15000, current: 3200, progress: 21, category: 'Big Purchase' }
       ]
     },
-    transactions: [
-      { id: 1, merchant: 'Starbucks', description: 'Coffee purchase', amount: 5.75, purchase: 5.75, roundUp: 0.25, round_up: 0.25, ticker: 'SBUX', date: '2024-01-20', status: 'completed', category: 'Food & Drink' },
-      { id: 2, merchant: 'Amazon', description: 'Online shopping', amount: 47.32, purchase: 47.32, roundUp: 0.68, round_up: 0.68, ticker: 'AMZN', date: '2024-01-19', status: 'completed', category: 'Shopping' },
-      { id: 3, merchant: 'Apple Store', description: 'Electronics', amount: 129.00, purchase: 129.00, roundUp: 1.00, round_up: 1.00, ticker: 'AAPL', date: '2024-01-18', status: 'completed', category: 'Technology' },
-      { id: 4, merchant: 'Netflix', description: 'Subscription', amount: 15.99, purchase: 15.99, roundUp: 0.01, round_up: 0.01, ticker: 'NFLX', date: '2024-01-17', status: 'completed', category: 'Entertainment' },
-      { id: 5, merchant: 'Uber', description: 'Ride share', amount: 23.45, purchase: 23.45, roundUp: 0.55, round_up: 0.55, ticker: 'UBER', date: '2024-01-16', status: 'completed', category: 'Transportation' },
-      { id: 6, merchant: 'Target', description: 'General merchandise', amount: 67.89, purchase: 67.89, roundUp: 0.11, round_up: 0.11, ticker: 'TGT', date: '2024-01-15', status: 'completed', category: 'Shopping' },
-      { id: 7, merchant: 'Chipotle', description: 'Restaurant', amount: 12.34, purchase: 12.34, roundUp: 0.66, round_up: 0.66, ticker: 'CMG', date: '2024-01-14', status: 'completed', category: 'Food & Drink' },
-      { id: 8, merchant: 'Nike', description: 'Athletic wear', amount: 89.99, purchase: 89.99, roundUp: 0.01, round_up: 0.01, ticker: 'NKE', date: '2024-01-13', status: 'completed', category: 'Shopping' }
-    ],
-    goals: [
-      { id: 1, name: 'Emergency Fund', target: 10000, current: 6500, progress: 65, category: 'Savings' },
-      { id: 2, name: 'Vacation Fund', target: 5000, current: 2100, progress: 42, category: 'Travel' },
-      { id: 3, name: 'New Car', target: 15000, current: 3200, progress: 21, category: 'Big Purchase' }
-    ],
-    totalRoundUps: 847.32,
-    totalFeesPaid: 42.50
-  },
-  family: {
-    portfolio: {
-      totalValue: 28934.56,
-      totalGain: 4523.12,
-      gainPercent: 18.52,
-      holdings: [
-        { symbol: 'AAPL', name: 'Apple Inc.', shares: 12.345, value: 2205.67, avgCost: 160.00, currentPrice: 178.70, change: 18.6, allocation: 30 },
-        { symbol: 'GOOGL', name: 'Alphabet Inc.', shares: 5.678, value: 881.45, avgCost: 142.00, currentPrice: 155.25, change: 16.3, allocation: 15 },
-        { symbol: 'VTI', name: 'Vanguard Total Stock', shares: 45.234, value: 10234.56, avgCost: 210.00, currentPrice: 226.25, change: 18.1, allocation: 35 },
-        { symbol: 'QQQ', name: 'Invesco QQQ', shares: 15.678, value: 6789.12, avgCost: 400.00, currentPrice: 433.00, change: 17.0, allocation: 20 }
+    family: {
+      portfolio: {
+        totalValue: 28934.56,
+        totalGain: 4523.12,
+        gainPercent: 18.52,
+        holdings: [
+          { symbol: 'AAPL', name: 'Apple Inc.', shares: 12.345, value: 2205.67, avgCost: 160.00, currentPrice: 178.70, change: 18.6, allocation: 30 },
+          { symbol: 'GOOGL', name: 'Alphabet Inc.', shares: 5.678, value: 881.45, avgCost: 142.00, currentPrice: 155.25, change: 16.3, allocation: 15 },
+          { symbol: 'VTI', name: 'Vanguard Total Stock', shares: 45.234, value: 10234.56, avgCost: 210.00, currentPrice: 226.25, change: 18.1, allocation: 35 },
+          { symbol: 'QQQ', name: 'Invesco QQQ', shares: 15.678, value: 6789.12, avgCost: 400.00, currentPrice: 433.00, change: 17.0, allocation: 20 }
+        ]
+      },
+      goals: [
+        { id: 1, name: 'Family Vacation', target: 8000, current: 4500, progress: 56, category: 'Travel' },
+        { id: 2, name: 'College Fund', target: 50000, current: 12000, progress: 24, category: 'Education' },
+        { id: 3, name: 'Emergency Fund', target: 20000, current: 15000, progress: 75, category: 'Savings' }
       ]
     },
-    transactions: [
-      { id: 1, merchant: 'Costco', description: 'Groceries', amount: 234.56, purchase: 234.56, roundUp: 0.44, round_up: 0.44, ticker: 'COST', date: '2024-01-20', status: 'completed', category: 'Groceries', member: 'Demo Family Admin' },
-      { id: 2, merchant: 'Amazon', description: 'Household items', amount: 89.99, purchase: 89.99, roundUp: 0.01, round_up: 0.01, ticker: 'AMZN', date: '2024-01-19', status: 'completed', category: 'Shopping', member: 'Jane Demo' },
-      { id: 3, merchant: 'Target', description: 'School supplies', amount: 45.67, purchase: 45.67, roundUp: 0.33, round_up: 0.33, ticker: 'TGT', date: '2024-01-18', status: 'completed', category: 'Education', member: 'Tommy Demo' },
-      { id: 4, merchant: 'Disney+', description: 'Family subscription', amount: 13.99, purchase: 13.99, roundUp: 0.01, round_up: 0.01, ticker: 'DIS', date: '2024-01-17', status: 'completed', category: 'Entertainment', member: 'Demo Family Admin' }
-    ],
-    goals: [
-      { id: 1, name: 'Family Vacation', target: 8000, current: 4500, progress: 56, category: 'Travel' },
-      { id: 2, name: 'College Fund', target: 50000, current: 12000, progress: 24, category: 'Education' },
-      { id: 3, name: 'Emergency Fund', target: 20000, current: 15000, progress: 75, category: 'Savings' }
-    ],
-    totalRoundUps: 1892.35,
-    totalFeesPaid: 95.50
-  },
-  business: {
-    portfolio: {
-      totalValue: 156789.34,
-      totalGain: 23456.78,
-      gainPercent: 17.58,
-      holdings: [
-        { symbol: 'SPY', name: 'S&P 500 ETF', shares: 234.567, value: 112345.67, avgCost: 450.00, currentPrice: 478.85, change: 16.2, allocation: 45 },
-        { symbol: 'VTI', name: 'Vanguard Total Stock', shares: 89.123, value: 20123.45, avgCost: 210.00, currentPrice: 225.80, change: 20.7, allocation: 25 },
-        { symbol: 'BND', name: 'Vanguard Bond ETF', shares: 123.456, value: 9876.54, avgCost: 78.00, currentPrice: 80.00, change: 5.8, allocation: 15 },
-        { symbol: 'AAPL', name: 'Apple Inc.', shares: 45.678, value: 8156.78, avgCost: 165.00, currentPrice: 178.55, change: 17.8, allocation: 15 }
+    business: {
+      portfolio: {
+        totalValue: 156789.34,
+        totalGain: 23456.78,
+        gainPercent: 17.58,
+        holdings: [
+          { symbol: 'SPY', name: 'S&P 500 ETF', shares: 234.567, value: 112345.67, avgCost: 450.00, currentPrice: 478.85, change: 16.2, allocation: 45 },
+          { symbol: 'VTI', name: 'Vanguard Total Stock', shares: 89.123, value: 20123.45, avgCost: 210.00, currentPrice: 225.80, change: 20.7, allocation: 25 },
+          { symbol: 'BND', name: 'Vanguard Bond ETF', shares: 123.456, value: 9876.54, avgCost: 78.00, currentPrice: 80.00, change: 5.8, allocation: 15 },
+          { symbol: 'AAPL', name: 'Apple Inc.', shares: 45.678, value: 8156.78, avgCost: 165.00, currentPrice: 178.55, change: 17.8, allocation: 15 }
+        ]
+      },
+      goals: [
+        { id: 1, name: 'Q1 Investment Target', target: 50000, current: 35000, progress: 70, category: 'Investment' },
+        { id: 2, name: 'Annual Growth Fund', target: 200000, current: 78000, progress: 39, category: 'Growth' },
+        { id: 3, name: 'Emergency Reserve', target: 100000, current: 85000, progress: 85, category: 'Reserve' }
       ]
-    },
-    transactions: [
-      { id: 1, merchant: 'AWS', description: 'Cloud Services', amount: 2345.67, purchase: 2345.67, roundUp: 0.33, round_up: 0.33, ticker: 'AMZN', date: '2024-01-20', status: 'completed', category: 'Cloud Services', employee: 'John Manager' },
-      { id: 2, merchant: 'Adobe', description: 'Software licenses', amount: 599.88, purchase: 599.88, roundUp: 0.12, round_up: 0.12, ticker: 'ADBE', date: '2024-01-19', status: 'completed', category: 'Software', employee: 'Carol Designer' },
-      { id: 3, merchant: 'Office Depot', description: 'Office supplies', amount: 234.56, purchase: 234.56, roundUp: 0.44, round_up: 0.44, ticker: 'ODP', date: '2024-01-18', status: 'completed', category: 'Office Supplies', employee: 'Alice Accountant' },
-      { id: 4, merchant: 'Delta Airlines', description: 'Business travel', amount: 567.89, purchase: 567.89, roundUp: 0.11, round_up: 0.11, ticker: 'DAL', date: '2024-01-17', status: 'completed', category: 'Travel', employee: 'Demo Business' },
-      { id: 5, merchant: 'WeWork', description: 'Office space', amount: 1500.00, purchase: 1500.00, roundUp: 0.00, round_up: 0.00, ticker: null, date: '2024-01-15', status: 'completed', category: 'Office Space', employee: 'Demo Business' }
-    ],
-    goals: [
-      { id: 1, name: 'Q1 Investment Target', target: 50000, current: 35000, progress: 70, category: 'Investment' },
-      { id: 2, name: 'Annual Growth Fund', target: 200000, current: 78000, progress: 39, category: 'Growth' },
-      { id: 3, name: 'Emergency Reserve', target: 100000, current: 85000, progress: 85, category: 'Reserve' }
-    ],
-    totalRoundUps: 12345.67,
-    totalFeesPaid: 625.00
+    }
+  }
+
+  return {
+    ...baseData[accountType],
+    transactions,
+    totalRoundUps,
+    totalFeesPaid
   }
 }
 
@@ -161,8 +258,10 @@ export const DataProvider = ({ children }) => {
       const demoAccountType = localStorage.getItem('kamioi_demo_account_type') || 'individual'
 
       if (isDemoMode) {
-        console.log('DataContext - Demo mode detected, using demo data for:', demoAccountType)
-        const demoData = DEMO_DATA[demoAccountType] || DEMO_DATA.individual
+        // Get user's round-up preference from localStorage (default $1)
+        const roundUpAmount = parseInt(localStorage.getItem('kamioi_round_up_amount')) || 1
+        console.log('DataContext - Demo mode detected, using demo data for:', demoAccountType, 'with round-up:', roundUpAmount)
+        const demoData = getDemoDataWithRoundUp(demoAccountType, roundUpAmount)
 
         // Set demo data
         setTransactions(demoData.transactions || [])
@@ -505,15 +604,28 @@ export const DataProvider = ({ children }) => {
       loadDataFromAPI()
     }
 
+    // Listen for round-up settings changes in demo mode
+    const handleRoundUpSettingsChange = () => {
+      const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
+      if (isDemoMode) {
+        console.log('DataContext - Round-up settings changed in demo mode, regenerating demo data')
+        loadDataFromAPI()
+      }
+    }
+
     // Listen for storage changes (when demo mode is toggled)
     window.addEventListener('storage', handleDemoModeChange)
 
     // Also listen for custom demo mode change event
     window.addEventListener('demoModeChanged', handleDemoModeChange)
 
+    // Listen for round-up settings changes to update demo data
+    window.addEventListener('roundUpSettingsUpdated', handleRoundUpSettingsChange)
+
     return () => {
       window.removeEventListener('storage', handleDemoModeChange)
       window.removeEventListener('demoModeChanged', handleDemoModeChange)
+      window.removeEventListener('roundUpSettingsUpdated', handleRoundUpSettingsChange)
     }
   }, [loadDataFromAPI])
 
