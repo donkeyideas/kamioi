@@ -5369,20 +5369,17 @@ def validate_demo_code():
         conn.commit()
         conn.close()
 
-        # Create demo session token (4 hour expiry)
-        demo_token = jwt.encode({
-            'type': 'demo',
-            'email': email,
-            'dashboard': demo[2],
-            'exp': datetime.utcnow() + timedelta(hours=4)
-        }, JWT_SECRET_KEY, algorithm='HS256')
+        # Create simple demo session token (no JWT needed for demo)
+        import uuid
+        demo_token = f"demo_session_{uuid.uuid4().hex}"
+        expires_at = datetime.utcnow() + timedelta(hours=4)
 
         return jsonify({
             'success': True,
             'session': {
                 'token': demo_token,
                 'dashboard': demo[2],
-                'expiresAt': (datetime.utcnow() + timedelta(hours=4)).isoformat()
+                'expiresAt': expires_at.isoformat()
             }
         })
 
