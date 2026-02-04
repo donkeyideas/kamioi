@@ -31,7 +31,7 @@ import { DataProvider } from './context/DataContext'
 import { ModalProvider } from './context/ModalContext'
 import { TutorialProvider } from './context/TutorialContext'
 import { DemoProvider } from './context/DemoContext'
-import DemoModeToggle from './components/common/DemoModeToggle'
+// DemoModeToggle removed - demo mode dropdown now in dashboard headers
 import GoogleAnalyticsTracker from './components/common/GoogleAnalyticsTracker'
 import NotificationManager from './components/common/NotificationManager'
 import AdminRoute from './components/AdminRoute'
@@ -405,7 +405,6 @@ function App() {
                       }}
                     >
                       <Suspense fallback={<LoadingSpinner />}>
-                        <DemoModeToggle />
                         <AppRoutes />
                       </Suspense>
                     </Router>
