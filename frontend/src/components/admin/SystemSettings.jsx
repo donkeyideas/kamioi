@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react'
-import { Settings, Save, Users, Building2, AlertTriangle, CheckCircle, RefreshCw, Phone, Info } from 'lucide-react'
+import { Settings, Save, Users, Building2, AlertTriangle, CheckCircle, RefreshCw, Phone, Info, Lock, User, Briefcase } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const SystemSettings = ({ user }) => {
@@ -31,6 +31,14 @@ const SystemSettings = ({ user }) => {
     description: ''
   })
 
+  // Access controls state for login page
+  const [accessControls, setAccessControls] = useState({
+    signInEnabled: true,
+    signUpEnabled: true,
+    demoOnly: false,
+    allowedAccountTypes: ['individual', 'family', 'business']
+  })
+
   const getTextColor = () => (isLightMode ? 'text-gray-800' : 'text-white')
   const getSubtextClass = () => (isLightMode ? 'text-gray-600' : 'text-gray-400')
   const getCardClass = () => `bg-white/10 backdrop-blur-xl rounded-lg shadow-lg p-6 border border-white/20 ${isLightMode ? 'bg-opacity-80' : 'bg-opacity-10'}`
@@ -43,7 +51,7 @@ const SystemSettings = ({ user }) => {
       
       // OPTIMIZED: Parallelize API calls for better performance
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
-      const [systemResponse, businessResponse] = await Promise.all([
+      const [systemResponse, businessResponse, accessResponse] = await Promise.all([
         fetch(`${apiBaseUrl}/api/admin/settings/system`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -51,6 +59,12 @@ const SystemSettings = ({ user }) => {
           signal
         }),
         fetch(`${apiBaseUrl}/api/admin/settings/business`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          signal
+        }),
+        fetch(`${apiBaseUrl}/api/admin/settings/access-controls`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },
@@ -75,6 +89,20 @@ const SystemSettings = ({ user }) => {
       } else {
         // Business settings endpoint doesn't exist - that's okay, use defaults
         console.log('Business settings endpoint not available, using defaults')
+      }
+
+      if (accessResponse.ok) {
+        const accessResult = await accessResponse.json()
+        if (accessResult.success && accessResult.settings) {
+          setAccessControls({
+            signInEnabled: accessResult.settings.sign_in_enabled !== false,
+            signUpEnabled: accessResult.settings.sign_up_enabled !== false,
+            demoOnly: accessResult.settings.demo_only === true,
+            allowedAccountTypes: accessResult.settings.allowed_account_types || ['individual', 'family', 'business']
+          })
+        }
+      } else {
+        console.log('Access controls endpoint not available, using defaults')
       }
       
       if (!signal?.aborted) {
@@ -167,6 +195,59 @@ const SystemSettings = ({ user }) => {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const saveAccessControls = async () => {
+    setIsSaving(true)
+    setSaveStatus(null)
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const response = await fetch(`${apiBaseUrl}/api/admin/settings/access-controls`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sign_in_enabled: accessControls.signInEnabled,
+          sign_up_enabled: accessControls.signUpEnabled,
+          demo_only: accessControls.demoOnly,
+          allowed_account_types: accessControls.allowedAccountTypes
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setSaveStatus('success')
+          setTimeout(() => setSaveStatus(null), 3000)
+        } else {
+          setSaveStatus('error')
+        }
+      } else {
+        setSaveStatus('error')
+      }
+    } catch (err) {
+      console.error('Error saving access controls:', err)
+      setSaveStatus('error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const toggleAccountType = (type) => {
+    setAccessControls(prev => {
+      const current = prev.allowedAccountTypes || []
+      if (current.includes(type)) {
+        // Remove if already included (but keep at least one)
+        const filtered = current.filter(t => t !== type)
+        return { ...prev, allowedAccountTypes: filtered.length > 0 ? filtered : [type] }
+      } else {
+        // Add if not included
+        return { ...prev, allowedAccountTypes: [...current, type] }
+      }
+    })
   }
 
   useEffect(() => {
@@ -407,6 +488,187 @@ const SystemSettings = ({ user }) => {
     </div>
   )
 
+  const renderAccessControlsTab = () => (
+    <div className="space-y-6">
+      <div className={getCardClass()}>
+        <h3 className={`text-lg font-semibold ${getTextColor()} mb-4 flex items-center space-x-2`}>
+          <Lock className="w-5 h-5" />
+          <span>Login Page Access Controls</span>
+        </h3>
+        <p className={`${getSubtextClass()} mb-6`}>Control which authentication options are available on the login page.</p>
+
+        {/* Main Toggle - Demo Only Mode */}
+        <div className="mb-8 p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className={`block text-sm font-medium ${getTextColor()}`}>Demo Only Mode</label>
+              <p className={`text-xs ${getSubtextClass()}`}>When enabled, only the Demo tab is visible (hides Sign In & Sign Up)</p>
+            </div>
+            <button
+              onClick={() => setAccessControls({...accessControls, demoOnly: !accessControls.demoOnly})}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                accessControls.demoOnly ? 'bg-purple-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  accessControls.demoOnly ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Individual Tab Controls */}
+        <div className={`space-y-4 ${accessControls.demoOnly ? 'opacity-50 pointer-events-none' : ''}`}>
+          <h4 className={`text-sm font-semibold ${getTextColor()} mb-3`}>Tab Visibility</h4>
+
+          <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <User className="w-5 h-5 text-blue-400" />
+              <div>
+                <label className={`block text-sm font-medium ${getTextColor()}`}>Sign In Tab</label>
+                <p className={`text-xs ${getSubtextClass()}`}>Allow existing users to sign in</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAccessControls({...accessControls, signInEnabled: !accessControls.signInEnabled})}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                accessControls.signInEnabled ? 'bg-blue-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  accessControls.signInEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <Users className="w-5 h-5 text-green-400" />
+              <div>
+                <label className={`block text-sm font-medium ${getTextColor()}`}>Sign Up Tab</label>
+                <p className={`text-xs ${getSubtextClass()}`}>Allow new user registrations</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAccessControls({...accessControls, signUpEnabled: !accessControls.signUpEnabled})}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                accessControls.signUpEnabled ? 'bg-green-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  accessControls.signUpEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Account Type Controls */}
+        <div className={`mt-8 ${accessControls.demoOnly || !accessControls.signUpEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <h4 className={`text-sm font-semibold ${getTextColor()} mb-3`}>Allowed Account Types for Sign Up</h4>
+          <p className={`text-xs ${getSubtextClass()} mb-4`}>Select which account types users can create during registration</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Individual */}
+            <button
+              onClick={() => toggleAccountType('individual')}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                accessControls.allowedAccountTypes?.includes('individual')
+                  ? 'border-blue-500 bg-blue-500/20'
+                  : 'border-gray-500/30 bg-white/5 hover:border-gray-400'
+              }`}
+            >
+              <User className={`w-8 h-8 mx-auto mb-2 ${
+                accessControls.allowedAccountTypes?.includes('individual') ? 'text-blue-400' : 'text-gray-400'
+              }`} />
+              <p className={`font-medium ${getTextColor()}`}>Individual</p>
+              <p className={`text-xs ${getSubtextClass()}`}>Personal accounts</p>
+            </button>
+
+            {/* Family */}
+            <button
+              onClick={() => toggleAccountType('family')}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                accessControls.allowedAccountTypes?.includes('family')
+                  ? 'border-green-500 bg-green-500/20'
+                  : 'border-gray-500/30 bg-white/5 hover:border-gray-400'
+              }`}
+            >
+              <Users className={`w-8 h-8 mx-auto mb-2 ${
+                accessControls.allowedAccountTypes?.includes('family') ? 'text-green-400' : 'text-gray-400'
+              }`} />
+              <p className={`font-medium ${getTextColor()}`}>Family</p>
+              <p className={`text-xs ${getSubtextClass()}`}>Family accounts</p>
+            </button>
+
+            {/* Business */}
+            <button
+              onClick={() => toggleAccountType('business')}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                accessControls.allowedAccountTypes?.includes('business')
+                  ? 'border-purple-500 bg-purple-500/20'
+                  : 'border-gray-500/30 bg-white/5 hover:border-gray-400'
+              }`}
+            >
+              <Briefcase className={`w-8 h-8 mx-auto mb-2 ${
+                accessControls.allowedAccountTypes?.includes('business') ? 'text-purple-400' : 'text-gray-400'
+              }`} />
+              <p className={`font-medium ${getTextColor()}`}>Business</p>
+              <p className={`text-xs ${getSubtextClass()}`}>Business accounts</p>
+            </button>
+          </div>
+        </div>
+
+        {/* Current Status Summary */}
+        <div className="mt-8 p-4 bg-white/5 rounded-lg">
+          <h4 className={`text-sm font-semibold ${getTextColor()} mb-2`}>Current Configuration</h4>
+          <div className="space-y-1 text-sm">
+            <p className={getSubtextClass()}>
+              <span className="font-medium">Visible Tabs:</span>{' '}
+              {accessControls.demoOnly ? (
+                <span className="text-yellow-400">Demo Only</span>
+              ) : (
+                [
+                  accessControls.signInEnabled && 'Sign In',
+                  accessControls.signUpEnabled && 'Sign Up',
+                  'Demo'
+                ].filter(Boolean).join(', ')
+              )}
+            </p>
+            {!accessControls.demoOnly && accessControls.signUpEnabled && (
+              <p className={getSubtextClass()}>
+                <span className="font-medium">Available Account Types:</span>{' '}
+                {accessControls.allowedAccountTypes?.length > 0
+                  ? accessControls.allowedAccountTypes.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')
+                  : 'None selected'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={saveAccessControls}
+            disabled={isSaving}
+            className="px-6 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+          >
+            {isSaving ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span>{isSaving ? 'Saving...' : 'Save Access Controls'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -460,18 +722,29 @@ const SystemSettings = ({ user }) => {
         <button
           onClick={() => setActiveTab('business')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'business' 
-              ? 'bg-blue-500 text-white' 
+            activeTab === 'business'
+              ? 'bg-blue-500 text-white'
               : 'text-gray-400 hover:text-white'
           }`}
         >
           Business Info
+        </button>
+        <button
+          onClick={() => setActiveTab('access')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'access'
+              ? 'bg-purple-500 text-white'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Access Controls
         </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'system' && renderSystemConfigTab()}
       {activeTab === 'business' && renderBusinessInfoTab()}
+      {activeTab === 'access' && renderAccessControlsTab()}
 
       {/* Save Status */}
       {saveStatus && (

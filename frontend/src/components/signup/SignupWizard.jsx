@@ -3,7 +3,7 @@
  * Includes tabs for Sign In, Sign Up (wizard), and Demo access
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { SignupProvider, useSignup } from './SignupContext'
 import AccountTypeStep from './steps/AccountTypeStep'
 import CredentialsStep from './steps/CredentialsStep'
@@ -14,7 +14,7 @@ import BankConnectionStep from './steps/BankConnectionStep'
 import ReviewStep from './steps/ReviewStep'
 import SignInForm from './SignInForm'
 import DemoAccessForm from './DemoAccessForm'
-import { ArrowLeft, Check, User, Users, Key } from 'lucide-react'
+import { ArrowLeft, Check, User, Users, Key, Loader2 } from 'lucide-react'
 
 const StepProgress = () => {
   const { formData, goToStep, getTotalSteps } = useSignup()
@@ -92,14 +92,14 @@ const StepProgress = () => {
   )
 }
 
-const SignupWizardContent = ({ onSwitchToSignIn }) => {
+const SignupWizardContent = ({ onSwitchToSignIn, allowedAccountTypes = ['individual', 'family', 'business'] }) => {
   const { formData, prevStep } = useSignup()
   const { currentStep, accountType } = formData
 
   const renderStep = () => {
     switch (currentStep) {
       case 1:
-        return <AccountTypeStep />
+        return <AccountTypeStep allowedAccountTypes={allowedAccountTypes} />
       case 2:
         return <CredentialsStep />
       case 3:
@@ -167,30 +167,41 @@ const SignupWizardContent = ({ onSwitchToSignIn }) => {
 }
 
 // Tab Switcher Component
-const TabSwitcher = ({ activeTab, setActiveTab }) => {
+const TabSwitcher = ({ activeTab, setActiveTab, accessSettings }) => {
+  const { signInEnabled, signUpEnabled, demoOnly } = accessSettings
+
+  // If demo only mode, don't show the tab switcher
+  if (demoOnly) {
+    return null
+  }
+
   return (
     <div className="flex justify-center mb-8">
       <div className="bg-white/5 rounded-lg p-1 flex border border-white/10">
-        <button
-          onClick={() => setActiveTab('signin')}
-          className={`px-6 py-2 rounded-md transition-all font-medium ${
-            activeTab === 'signin'
-              ? 'bg-purple-600 text-white'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          Sign In
-        </button>
-        <button
-          onClick={() => setActiveTab('signup')}
-          className={`px-6 py-2 rounded-md transition-all font-medium ${
-            activeTab === 'signup'
-              ? 'bg-purple-600 text-white'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          Sign Up
-        </button>
+        {signInEnabled && (
+          <button
+            onClick={() => setActiveTab('signin')}
+            className={`px-6 py-2 rounded-md transition-all font-medium ${
+              activeTab === 'signin'
+                ? 'bg-purple-600 text-white'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            Sign In
+          </button>
+        )}
+        {signUpEnabled && (
+          <button
+            onClick={() => setActiveTab('signup')}
+            className={`px-6 py-2 rounded-md transition-all font-medium ${
+              activeTab === 'signup'
+                ? 'bg-purple-600 text-white'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            Sign Up
+          </button>
+        )}
         <button
           onClick={() => setActiveTab('demo')}
           className={`px-6 py-2 rounded-md transition-all flex items-center space-x-2 font-medium ${
@@ -242,6 +253,63 @@ const AuthHeader = ({ activeTab }) => {
 
 const SignupWizard = () => {
   const [activeTab, setActiveTab] = useState('signup') // 'signin' | 'signup' | 'demo'
+  const [accessSettings, setAccessSettings] = useState({
+    signInEnabled: true,
+    signUpEnabled: true,
+    demoOnly: false,
+    allowedAccountTypes: ['individual', 'family', 'business']
+  })
+  const [loading, setLoading] = useState(true)
+
+  // Fetch access settings on mount
+  useEffect(() => {
+    const fetchAccessSettings = async () => {
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+        const response = await fetch(`${apiBaseUrl}/api/public/access-settings`)
+        const data = await response.json()
+
+        if (data.success) {
+          setAccessSettings({
+            signInEnabled: data.signInEnabled !== false,
+            signUpEnabled: data.signUpEnabled !== false,
+            demoOnly: data.demoOnly === true,
+            allowedAccountTypes: data.allowedAccountTypes || ['individual', 'family', 'business']
+          })
+
+          // If demo only mode, switch to demo tab
+          if (data.demoOnly) {
+            setActiveTab('demo')
+          } else if (!data.signUpEnabled && data.signInEnabled) {
+            // If signup is disabled but signin is enabled, switch to signin
+            setActiveTab('signin')
+          } else if (!data.signUpEnabled && !data.signInEnabled) {
+            // If both are disabled, switch to demo
+            setActiveTab('demo')
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching access settings:', error)
+        // Keep defaults on error
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAccessSettings()
+  }, [])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto mb-4" />
+          <p className="text-white/70">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -250,10 +318,10 @@ const SignupWizard = () => {
         <AuthHeader activeTab={activeTab} />
 
         {/* Tab Switcher */}
-        <TabSwitcher activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabSwitcher activeTab={activeTab} setActiveTab={setActiveTab} accessSettings={accessSettings} />
 
         {/* Content based on active tab */}
-        {activeTab === 'signin' && (
+        {activeTab === 'signin' && accessSettings.signInEnabled && !accessSettings.demoOnly && (
           <SignInForm onSwitchToSignUp={() => setActiveTab('signup')} />
         )}
 
@@ -261,9 +329,12 @@ const SignupWizard = () => {
           <DemoAccessForm onSwitchToSignUp={() => setActiveTab('signup')} />
         )}
 
-        {activeTab === 'signup' && (
+        {activeTab === 'signup' && accessSettings.signUpEnabled && !accessSettings.demoOnly && (
           <SignupProvider>
-            <SignupWizardContent onSwitchToSignIn={() => setActiveTab('signin')} />
+            <SignupWizardContent
+              onSwitchToSignIn={() => setActiveTab('signin')}
+              allowedAccountTypes={accessSettings.allowedAccountTypes}
+            />
           </SignupProvider>
         )}
       </div>

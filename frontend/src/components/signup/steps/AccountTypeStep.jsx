@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react'
 import { useSignup } from '../SignupContext'
 import { User, Users, Building2, Check } from 'lucide-react'
 
-const AccountTypeStep = () => {
+const AccountTypeStep = ({ allowedAccountTypes = ['individual', 'family', 'business'] }) => {
   const { formData, updateField, nextStep } = useSignup()
   const [plans, setPlans] = useState([])
   const [loadingPlans, setLoadingPlans] = useState(true)
@@ -28,6 +28,17 @@ const AccountTypeStep = () => {
     }
     fetchPlans()
   }, [])
+
+  // Auto-select if only one account type is allowed, or clear if selected type is no longer allowed
+  useEffect(() => {
+    if (allowedAccountTypes.length === 1 && !formData.accountType) {
+      // Auto-select the only available type
+      updateField('accountType', allowedAccountTypes[0])
+    } else if (formData.accountType && !allowedAccountTypes.includes(formData.accountType)) {
+      // Clear selection if selected type is no longer allowed
+      updateField('accountType', null)
+    }
+  }, [allowedAccountTypes, formData.accountType, updateField])
 
   const getPriceForType = (accountType) => {
     const plan = plans.find(p => p.account_type === accountType)
@@ -107,7 +118,7 @@ const AccountTypeStep = () => {
         </div>
       ) : (
         <div className="grid gap-4">
-          {accountTypes.map((type) => {
+          {accountTypes.filter(type => allowedAccountTypes.includes(type.id)).map((type) => {
             const Icon = type.icon
             const isSelected = formData.accountType === type.id
             const price = getPriceForType(type.id)
