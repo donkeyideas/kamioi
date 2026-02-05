@@ -17,7 +17,7 @@ const DemoRequestForm = ({ isOpen, onClose }) => {
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [error, setError] = useState('')
 
-  const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5111'
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5111'
 
   const handleChange = (e) => {
     const { name, value } = e.target
