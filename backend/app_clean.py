@@ -1930,34 +1930,57 @@ def admin_login():
         data = request.get_json() or {}
         email = data.get('email', '').strip().lower()
         password = data.get('password', '')
-        
+        totp_code = data.get('totp_code', '').strip() if data.get('totp_code') else None
+
         if not email or not password:
             return jsonify({'success': False, 'error': 'Email and password are required'}), 400
-        
+
         try:
             conn = get_db_connection()
             cursor = get_db_cursor(conn, dict_cursor=True)  # Use dict cursor for admin access
         except Exception as db_error:
             print(f"Database connection error: {db_error}")
             return jsonify({'success': False, 'error': f'Database connection failed: {str(db_error)}'}), 500
-        
+
         try:
-            # Check admin table first
-            cursor.execute("SELECT id, email, name, role, password FROM admins WHERE email = %s", (email,))
+            # Check admin table first - include 2FA fields
+            cursor.execute("SELECT id, email, name, role, password, totp_enabled, totp_secret FROM admins WHERE email = %s", (email,))
             admin = cursor.fetchone()
         except Exception as query_error:
             print(f"Database query error: {query_error}")
             conn.close()
             return jsonify({'success': False, 'error': f'Database query failed: {str(query_error)}'}), 500
-        
+
         if admin:
             # Admin found in admins table
             import hashlib
             password_hash = hashlib.sha256(password.encode()).hexdigest()
             if admin['password'] == password_hash:  # Check hashed password
+                # Check if 2FA is enabled
+                totp_enabled = admin.get('totp_enabled', False)
+                totp_secret = admin.get('totp_secret', None)
+
+                if totp_enabled and totp_secret and TOTP_AVAILABLE:
+                    # 2FA is enabled - verify TOTP code
+                    if not totp_code:
+                        # No code provided, prompt for 2FA
+                        conn.close()
+                        return jsonify({
+                            'success': False,
+                            'requires_2fa': True,
+                            'message': 'Two-factor authentication required'
+                        })
+
+                    # Verify TOTP code
+                    totp = pyotp.TOTP(totp_secret)
+                    if not totp.verify(totp_code, valid_window=1):
+                        conn.close()
+                        return jsonify({'success': False, 'error': 'Invalid 2FA code'}), 401
+
+                # Password valid (and 2FA verified if enabled)
                 token = f"admin_token_{admin['id']}"
                 conn.close()
-                
+
                 return jsonify({
                     'success': True,
                     'token': token,
@@ -1968,10 +1991,10 @@ def admin_login():
                         'role': admin['role']
                     }
                 })
-        
+
         conn.close()
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-        
+
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
