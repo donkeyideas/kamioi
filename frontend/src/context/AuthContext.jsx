@@ -20,10 +20,45 @@ export const AuthProvider = ({ children }) => {
   const ADMIN_SESSION_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours
   const ADMIN_INACTIVITY_TIMEOUT = 45 * 60 * 1000; // 45 minutes
 
+  // Listen for userLoggedIn events (from signup flow, etc.)
+  useEffect(() => {
+    const handleUserLoggedIn = (event) => {
+      const { user: newUser, token } = event.detail || {};
+      console.log('🔔 AuthContext - userLoggedIn event received:', { user: newUser, hasToken: !!token });
+
+      if (newUser) {
+        // Set the user directly in state
+        setUser(newUser);
+
+        // Also ensure token is stored
+        if (token) {
+          setToken(ROLES.USER, token);
+        }
+      }
+    };
+
+    window.addEventListener('userLoggedIn', handleUserLoggedIn);
+    return () => window.removeEventListener('userLoggedIn', handleUserLoggedIn);
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      
+
+      // First, check if there's a user stored in localStorage (from recent signup)
+      try {
+        const storedUser = localStorage.getItem('kamioi_user');
+        const storedToken = localStorage.getItem('kamioi_user_token');
+        if (storedUser && storedToken) {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('🔔 AuthContext - Found stored user from signup:', parsedUser);
+          setUser(parsedUser);
+          setToken(ROLES.USER, storedToken);
+        }
+      } catch (e) {
+        console.error('AuthContext - Error parsing stored user:', e);
+      }
+
       // Get both tokens
       const userToken = getToken(ROLES.USER);
       const adminToken = getToken(ROLES.ADMIN);
