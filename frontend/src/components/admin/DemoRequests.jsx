@@ -17,6 +17,9 @@ const DemoRequests = () => {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showCodeModal, setShowCodeModal] = useState(false)
+  const [generatedCode, setGeneratedCode] = useState(null)
+  const [codeCopied, setCodeCopied] = useState(false)
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5111'
 
@@ -98,7 +101,9 @@ const DemoRequests = () => {
 
       const data = await response.json()
       if (data.success) {
-        alert(`Demo code generated: ${data.data.demo_code}\nEmail: ${data.data.email}\n\nNote: Email sending is pending implementation. Please manually send this code.`)
+        setGeneratedCode(data.data)
+        setShowCodeModal(true)
+        setCodeCopied(false)
         fetchRequests()
         setShowDetailModal(false)
       } else {
@@ -511,6 +516,92 @@ const DemoRequests = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Code Generated Modal */}
+      {showCodeModal && generatedCode && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCodeModal(false)} />
+          <div className={`relative w-full max-w-md ${
+            isLightMode
+              ? 'bg-white border border-gray-200'
+              : 'bg-gradient-to-br from-gray-900/95 to-gray-800/95 border border-green-500/30'
+          } rounded-2xl shadow-2xl p-6`}>
+            <button
+              onClick={() => setShowCodeModal(false)}
+              className={`absolute top-4 right-4 p-2 rounded-lg ${
+                isLightMode ? 'hover:bg-gray-100 text-gray-500' : 'hover:bg-white/10 text-gray-400'
+              } transition-colors`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                isLightMode ? 'bg-green-100' : 'bg-green-500/20'
+              }`}>
+                <CheckCircle className={`w-8 h-8 ${isLightMode ? 'text-green-600' : 'text-green-400'}`} />
+              </div>
+              <h3 className={`text-xl font-bold ${isLightMode ? 'text-gray-800' : 'text-white'}`}>
+                Demo Code Generated!
+              </h3>
+            </div>
+
+            <div className={`p-4 rounded-lg mb-4 ${
+              isLightMode ? 'bg-gray-100' : 'bg-white/5'
+            }`}>
+              <p className={`text-sm mb-2 ${isLightMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                Demo Code:
+              </p>
+              <div className="flex items-center justify-between">
+                <code className={`text-lg font-mono font-bold ${
+                  isLightMode ? 'text-green-600' : 'text-green-400'
+                }`}>
+                  {generatedCode.demo_code}
+                </code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedCode.demo_code)
+                    setCodeCopied(true)
+                    setTimeout(() => setCodeCopied(false), 2000)
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    codeCopied
+                      ? (isLightMode ? 'bg-green-100 text-green-600' : 'bg-green-500/20 text-green-400')
+                      : (isLightMode ? 'hover:bg-gray-200 text-gray-600' : 'hover:bg-white/10 text-gray-400')
+                  }`}
+                  title={codeCopied ? 'Copied!' : 'Copy to clipboard'}
+                >
+                  {codeCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-lg mb-6 ${
+              isLightMode ? 'bg-blue-50' : 'bg-blue-500/10'
+            }`}>
+              <p className={`text-sm ${isLightMode ? 'text-gray-700' : 'text-gray-300'}`}>
+                <strong>Send to:</strong> {generatedCode.name}<br />
+                <strong>Email:</strong> {generatedCode.email}
+              </p>
+            </div>
+
+            <p className={`text-sm text-center mb-4 ${isLightMode ? 'text-gray-500' : 'text-gray-400'}`}>
+              Copy this code and send it to the user via email.
+            </p>
+
+            <button
+              onClick={() => setShowCodeModal(false)}
+              className={`w-full py-3 rounded-lg font-medium transition-colors ${
+                isLightMode
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-green-600 hover:bg-green-500 text-white'
+              }`}
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

@@ -25473,6 +25473,27 @@ def send_demo_code(request_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/demo-requests/<int:request_id>', methods=['DELETE'])
+def delete_demo_request(request_id):
+    """Delete a demo request (admin only)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM demo_requests WHERE id = %s", (request_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Demo request deleted successfully'
+        })
+
+    except Exception as e:
+        print(f"Error deleting demo request: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ============================================================================
 # END OF MISSING ENDPOINTS
 # ============================================================================
