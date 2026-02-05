@@ -2130,7 +2130,7 @@ startxref
                 }`}>
                   <div>
                     <div className="text-white font-semibold">{plan.name}</div>
-                    <div className="text-gray-400 text-sm">${plan.price_monthly}/month • {plan.tier}</div>
+                    <div className="text-gray-400 text-sm">${plan.price_monthly || plan.price || 0}/{plan.interval || 'month'}</div>
                   </div>
                   <button 
                     disabled={subscribing || currentSubscription?.plan_id === plan.id} 
