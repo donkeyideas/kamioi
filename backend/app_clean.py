@@ -2080,6 +2080,41 @@ def admin_logout():
 # Two-Factor Authentication (2FA) Routes
 # =============================================================================
 
+def ensure_2fa_columns():
+    """Ensure 2FA columns exist in admins table"""
+    try:
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+        # Add totp_secret column if not exists
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='admins' AND column_name='totp_secret') THEN
+                    ALTER TABLE admins ADD COLUMN totp_secret VARCHAR(64);
+                END IF;
+            END $$;
+        """)
+        # Add totp_enabled column if not exists
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='admins' AND column_name='totp_enabled') THEN
+                    ALTER TABLE admins ADD COLUMN totp_enabled BOOLEAN DEFAULT FALSE;
+                END IF;
+            END $$;
+        """)
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ 2FA columns ensured in admins table")
+    except Exception as e:
+        print(f"Warning: Could not ensure 2FA columns: {e}")
+
+# Ensure 2FA columns exist on startup
+ensure_2fa_columns()
+
 @app.route('/api/admin/2fa/status', methods=['GET'])
 def admin_2fa_status():
     """Check 2FA status for authenticated admin"""
