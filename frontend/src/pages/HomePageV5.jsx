@@ -1232,16 +1232,16 @@ Passive investing is perfect for busy people who want to build wealth without be
                 <span className="text-sm font-medium">256-bit SSL Encryption</span>
               </div>
               <div className="flex items-center space-x-2 text-white/80">
-                <Award className="w-5 h-5 text-yellow-400" />
-                <span className="text-sm font-medium">4.9/5 Rating</span>
+                <Brain className="w-5 h-5 text-yellow-400" />
+                <span className="text-sm font-medium">AI-Powered Automation</span>
               </div>
               <div className="flex items-center space-x-2 text-white/80">
-                <Users className="w-5 h-5 text-purple-400" />
-                <span className="text-sm font-medium">10,000+ Active Users</span>
+                <TrendingUp className="w-5 h-5 text-purple-400" />
+                <span className="text-sm font-medium">$0 Minimum to Start</span>
               </div>
               <div className="flex items-center space-x-2 text-white/80">
-                <Clock className="w-5 h-5 text-cyan-400" />
-                <span className="text-sm font-medium">14-Day Free Trial</span>
+                <Shield className="w-5 h-5 text-cyan-400" />
+                <span className="text-sm font-medium">SIPC Protection Ready</span>
               </div>
             </div>
           </div>
