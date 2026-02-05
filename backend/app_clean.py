@@ -2165,21 +2165,22 @@ def admin_2fa_setup():
         totp = pyotp.TOTP(secret)
         provisioning_uri = totp.provisioning_uri(name=email, issuer_name='Kamioi Admin')
 
-        # Generate QR code as base64 image
+        # Generate QR code as SVG (no pillow dependency)
+        import qrcode.image.svg
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(provisioning_uri)
         qr.make(fit=True)
-        img = qr.make_image(fill_color='black', back_color='white')
+        img = qr.make_image(image_factory=qrcode.image.svg.SvgImage)
 
-        # Convert to base64
+        # Convert SVG to base64
         buffer = qr_io.BytesIO()
-        img.save(buffer, format='PNG')
+        img.save(buffer)
         qr_base64 = base64.b64encode(buffer.getvalue()).decode()
 
         return jsonify({
             'success': True,
             'secret': secret,
-            'qr_code': f'data:image/png;base64,{qr_base64}',
+            'qr_code': f'data:image/svg+xml;base64,{qr_base64}',
             'provisioning_uri': provisioning_uri
         })
 

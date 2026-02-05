@@ -16,4 +16,3 @@ stripe==7.0.0
 pytz==2024.1
 pyotp==2.9.0
 qrcode==7.4.2
-pillow==10.2.0
