@@ -5,7 +5,7 @@ const SEO = ({
   title = "Kamioi - Smart Investment Platform",
   description = "Invest your spare change automatically with AI-powered insights. Build wealth effortlessly with round-up investments.",
   keywords = "investing, round-ups, AI, wealth building, family investing, smart investing, automatic investing",
-  image = "/og-image.jpg",
+  image = "https://kamioi.com/favicon.png",
   url = "https://kamioi.com",
   type = "website",
   structuredData = null,
@@ -141,7 +141,7 @@ const SEO = ({
             "name": "Kamioi",
             "description": "AI-powered automatic investing platform that turns everyday purchases into stock ownership",
             "url": "https://kamioi.com",
-            "logo": "https://kamioi.com/logo.png",
+            "logo": "https://kamioi.com/favicon.png",
             "sameAs": [
               "https://twitter.com/kamioi",
               "https://linkedin.com/company/kamioi",
