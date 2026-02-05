@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Moon, Sun, Settings as SettingsIcon, Calendar, Upload, Eye, EyeOff, Shield, Phone, MapPin, CreditCard, User, Bell, Cloud } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Moon, Sun, Settings as SettingsIcon, Calendar, Upload, Eye, EyeOff, Shield, Phone, MapPin, CreditCard, User, Bell, Cloud, Smartphone, CheckCircle, XCircle } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import ProfileAvatar from '../common/ProfileAvatar'
 import notificationService from '../../services/notificationService'
@@ -42,6 +42,44 @@ const AdminSettings = ({ user }) => {
     gamification: true
   })
 
+  // 2FA states
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false)
+  const [twoFALoading, setTwoFALoading] = useState(false)
+  const [showSetup2FA, setShowSetup2FA] = useState(false)
+  const [qrCodeData, setQrCodeData] = useState(null)
+  const [totpSecret, setTotpSecret] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [setupError, setSetupError] = useState('')
+
+  // Check 2FA status on mount
+  useEffect(() => {
+    const check2FAStatus = async () => {
+      if (!user?.id) return
+
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+        const token = localStorage.getItem('kamioi_admin_token')
+
+        const response = await fetch(`${apiBaseUrl}/api/admin/auth/2fa/status`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        const data = await response.json()
+        if (data.success) {
+          setTwoFAEnabled(data.enabled)
+        }
+      } catch (err) {
+        console.error('Error checking 2FA status:', err)
+      }
+    }
+
+    check2FAStatus()
+  }, [user?.id])
+
   const handleSaveProfile = () => {
     addNotification({
       type: 'success',
@@ -60,13 +98,144 @@ const AdminSettings = ({ user }) => {
     })
   }
 
-  const handleToggle2FA = () => {
-    addNotification({
-      type: 'info',
-      title: 'Toggle 2FA',
-      message: 'Admin 2FA toggle functionality would be implemented here',
-      timestamp: new Date()
-    })
+  const handleSetup2FA = async () => {
+    setTwoFALoading(true)
+    setSetupError('')
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const token = localStorage.getItem('kamioi_admin_token')
+
+      const response = await fetch(`${apiBaseUrl}/api/admin/auth/2fa/setup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setQrCodeData(data.qr_code)
+        setTotpSecret(data.secret)
+        setShowSetup2FA(true)
+      } else {
+        setSetupError(data.error || 'Failed to setup 2FA')
+      }
+    } catch (err) {
+      console.error('Error setting up 2FA:', err)
+      setSetupError('Network error. Please try again.')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const handleEnable2FA = async () => {
+    if (verificationCode.length !== 6) {
+      setSetupError('Please enter a 6-digit code')
+      return
+    }
+
+    setTwoFALoading(true)
+    setSetupError('')
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const token = localStorage.getItem('kamioi_admin_token')
+
+      const response = await fetch(`${apiBaseUrl}/api/admin/auth/2fa/enable`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          code: verificationCode
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setTwoFAEnabled(true)
+        setShowSetup2FA(false)
+        setVerificationCode('')
+        setQrCodeData(null)
+        setTotpSecret('')
+        addNotification({
+          type: 'success',
+          title: '2FA Enabled',
+          message: 'Two-factor authentication has been enabled for your account.',
+          timestamp: new Date()
+        })
+      } else {
+        setSetupError(data.error || 'Invalid verification code')
+      }
+    } catch (err) {
+      console.error('Error enabling 2FA:', err)
+      setSetupError('Network error. Please try again.')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const handleDisable2FA = async () => {
+    if (!window.confirm('Are you sure you want to disable two-factor authentication? This will make your account less secure.')) {
+      return
+    }
+
+    setTwoFALoading(true)
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const token = localStorage.getItem('kamioi_admin_token')
+
+      const response = await fetch(`${apiBaseUrl}/api/admin/auth/2fa/disable`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setTwoFAEnabled(false)
+        addNotification({
+          type: 'info',
+          title: '2FA Disabled',
+          message: 'Two-factor authentication has been disabled.',
+          timestamp: new Date()
+        })
+      } else {
+        addNotification({
+          type: 'error',
+          title: 'Error',
+          message: data.error || 'Failed to disable 2FA',
+          timestamp: new Date()
+        })
+      }
+    } catch (err) {
+      console.error('Error disabling 2FA:', err)
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Network error. Please try again.',
+        timestamp: new Date()
+      })
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const handleCancelSetup = () => {
+    setShowSetup2FA(false)
+    setVerificationCode('')
+    setQrCodeData(null)
+    setTotpSecret('')
+    setSetupError('')
   }
 
   const handleDeleteAccount = () => {
@@ -128,9 +297,9 @@ const AdminSettings = ({ user }) => {
               Admin Profile Picture
             </h3>
             <div className="flex items-center space-x-6">
-              <ProfileAvatar 
-                user={{...user, accountType: 'admin'}} 
-                size="2xl" 
+              <ProfileAvatar
+                user={{...user, accountType: 'admin'}}
+                size="2xl"
                 showUploadOnHover={false}
                 dashboardType="admin"
                 onImageUpdate={(imageUrl) => {
@@ -487,18 +656,131 @@ const AdminSettings = ({ user }) => {
               Admin Security Settings
             </h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white font-medium">Two-Factor Authentication</p>
-                  <p className="text-gray-400 text-sm">Add an extra layer of security to your admin account</p>
+              {/* 2FA Section */}
+              <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${twoFAEnabled ? 'bg-green-500/20' : 'bg-gray-500/20'}`}>
+                    <Smartphone className={`w-5 h-5 ${twoFAEnabled ? 'text-green-400' : 'text-gray-400'}`} />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-white font-medium">Two-Factor Authentication</p>
+                      {twoFAEnabled ? (
+                        <span className="flex items-center text-green-400 text-xs">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Enabled
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-gray-400 text-xs">
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Disabled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-400 text-sm">
+                      {twoFAEnabled
+                        ? 'Your account is protected with Google Authenticator'
+                        : 'Add an extra layer of security using Google Authenticator'}
+                    </p>
+                  </div>
                 </div>
                 <button
-                  onClick={handleToggle2FA}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  onClick={twoFAEnabled ? handleDisable2FA : handleSetup2FA}
+                  disabled={twoFALoading}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    twoFAEnabled
+                      ? 'bg-gray-600 hover:bg-gray-700 text-white'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  } disabled:opacity-50`}
                 >
-                  Enable Admin 2FA
+                  {twoFALoading ? (
+                    <span className="flex items-center">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                      Loading...
+                    </span>
+                  ) : twoFAEnabled ? (
+                    'Disable 2FA'
+                  ) : (
+                    'Enable 2FA'
+                  )}
                 </button>
               </div>
+
+              {/* 2FA Setup Modal */}
+              {showSetup2FA && (
+                <div className="p-6 bg-white/5 rounded-lg border border-white/20 space-y-4">
+                  <div className="text-center">
+                    <h4 className="text-lg font-semibold text-white mb-2">Setup Two-Factor Authentication</h4>
+                    <p className="text-gray-400 text-sm">
+                      Scan the QR code below with Google Authenticator app
+                    </p>
+                  </div>
+
+                  {/* QR Code */}
+                  {qrCodeData && (
+                    <div className="flex justify-center">
+                      <div className="bg-white p-4 rounded-lg">
+                        <img src={qrCodeData} alt="2FA QR Code" className="w-48 h-48" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Manual Entry */}
+                  {totpSecret && (
+                    <div className="text-center">
+                      <p className="text-gray-400 text-sm mb-2">Or enter this code manually:</p>
+                      <code className="bg-white/10 px-4 py-2 rounded text-white font-mono text-sm">
+                        {totpSecret}
+                      </code>
+                    </div>
+                  )}
+
+                  {/* Verification Input */}
+                  <div className="max-w-xs mx-auto">
+                    <label className="block text-gray-400 text-sm mb-2 text-center">
+                      Enter the 6-digit code from the app
+                    </label>
+                    <input
+                      type="text"
+                      value={verificationCode}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+                        setVerificationCode(value)
+                        setSetupError('')
+                      }}
+                      maxLength={6}
+                      placeholder="000000"
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white text-center text-xl tracking-widest placeholder-gray-500 focus:outline-none focus:border-red-500/50 font-mono"
+                    />
+                  </div>
+
+                  {/* Error */}
+                  {setupError && (
+                    <div className="text-center text-red-400 text-sm">
+                      {setupError}
+                    </div>
+                  )}
+
+                  {/* Buttons */}
+                  <div className="flex justify-center space-x-3">
+                    <button
+                      onClick={handleCancelSetup}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleEnable2FA}
+                      disabled={twoFALoading || verificationCode.length !== 6}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {twoFALoading ? 'Verifying...' : 'Enable 2FA'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Change Password */}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-white font-medium">Change Admin Password</p>
