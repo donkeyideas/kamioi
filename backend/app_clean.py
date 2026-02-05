@@ -25213,6 +25213,209 @@ def admin_badges_award_queue(award_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============================================================================
+# DEMO REQUEST ENDPOINTS
+# ============================================================================
+
+@app.route('/api/demo-requests', methods=['POST'])
+def submit_demo_request():
+    """Submit a new demo request (public endpoint)"""
+    try:
+        data = request.get_json() or {}
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip().lower()
+        phone = data.get('phone', '').strip()
+        address = data.get('address', '').strip()
+        interest_type = data.get('interest_type', '').strip()
+        heard_from = data.get('heard_from', '').strip()
+        experience_level = data.get('experience_level', '').strip()
+        memo = data.get('memo', '').strip()
+
+        if not name or not email:
+            return jsonify({'success': False, 'error': 'Name and email are required'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Create demo_requests table if not exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS demo_requests (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                phone VARCHAR(50),
+                address TEXT,
+                interest_type VARCHAR(50),
+                heard_from VARCHAR(50),
+                experience_level VARCHAR(50),
+                memo TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                demo_code VARCHAR(20),
+                admin_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        # Insert the demo request
+        cursor.execute("""
+            INSERT INTO demo_requests (name, email, phone, address, interest_type, heard_from, experience_level, memo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (name, email, phone, address, interest_type, heard_from, experience_level, memo))
+
+        request_id = cursor.fetchone()[0]
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Demo request submitted successfully',
+            'data': {'id': request_id}
+        })
+
+    except Exception as e:
+        print(f"Error submitting demo request: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/demo-requests', methods=['GET'])
+def get_demo_requests():
+    """Get all demo requests (admin only)"""
+    try:
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn, dict_cursor=True)
+
+        # Create table if not exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS demo_requests (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                phone VARCHAR(50),
+                address TEXT,
+                interest_type VARCHAR(50),
+                heard_from VARCHAR(50),
+                experience_level VARCHAR(50),
+                memo TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                demo_code VARCHAR(20),
+                admin_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        status_filter = request.args.get('status', None)
+
+        if status_filter:
+            cursor.execute("""
+                SELECT * FROM demo_requests WHERE status = %s ORDER BY created_at DESC
+            """, (status_filter,))
+        else:
+            cursor.execute("SELECT * FROM demo_requests ORDER BY created_at DESC")
+
+        requests_list = cursor.fetchall()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'data': requests_list
+        })
+
+    except Exception as e:
+        print(f"Error fetching demo requests: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/demo-requests/pending-count', methods=['GET'])
+def get_pending_demo_request_count():
+    """Get count of pending demo requests (admin only)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Create table if not exists (in case it doesn't exist yet)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS demo_requests (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                phone VARCHAR(50),
+                address TEXT,
+                interest_type VARCHAR(50),
+                heard_from VARCHAR(50),
+                experience_level VARCHAR(50),
+                memo TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                demo_code VARCHAR(20),
+                admin_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        cursor.execute("SELECT COUNT(*) FROM demo_requests WHERE status = 'pending'")
+        count = cursor.fetchone()[0]
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'data': {'count': count}
+        })
+
+    except Exception as e:
+        print(f"Error getting pending count: {e}")
+        return jsonify({'success': False, 'data': {'count': 0}})
+
+
+@app.route('/api/admin/demo-requests/<int:request_id>', methods=['PUT'])
+def update_demo_request(request_id):
+    """Update a demo request status (admin only)"""
+    try:
+        data = request.get_json() or {}
+        status = data.get('status')
+        admin_notes = data.get('admin_notes')
+        demo_code = data.get('demo_code')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Build update query dynamically
+        updates = []
+        values = []
+
+        if status:
+            updates.append("status = %s")
+            values.append(status)
+        if admin_notes is not None:
+            updates.append("admin_notes = %s")
+            values.append(admin_notes)
+        if demo_code:
+            updates.append("demo_code = %s")
+            values.append(demo_code)
+
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        values.append(request_id)
+
+        query = f"UPDATE demo_requests SET {', '.join(updates)} WHERE id = %s"
+        cursor.execute(query, values)
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Demo request updated successfully'
+        })
+
+    except Exception as e:
+        print(f"Error updating demo request: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
 # END OF MISSING ENDPOINTS
 # ============================================================================
 
