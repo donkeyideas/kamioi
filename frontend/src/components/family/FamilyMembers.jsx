@@ -358,53 +358,53 @@ const FamilyMembers = ({ user }) => {
     const statusLower = (member.status || 'active').toLowerCase()
     const isActive = statusLower === 'active'
 
-    const memberDetails = `
-      <div class="space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-white">${member.name}</h3>
-          <span class="px-2 py-1 rounded-full text-xs font-medium ${
+    const memberDetails = (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white">{member.name}</h3>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
             isActive ? 'text-green-400 bg-green-400/20' : 'text-gray-400 bg-gray-400/20'
-          }">
-            ${member.status || 'Active'}
+          }`}>
+            {member.status || 'Active'}
           </span>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label class="text-sm text-gray-400">Email</label>
-            <p class="text-white font-medium">${member.email}</p>
+            <label className="text-sm text-gray-400">Email</label>
+            <p className="text-white font-medium">{member.email}</p>
           </div>
           <div>
-            <label class="text-sm text-gray-400">Role</label>
-            <p class="text-white font-medium">${member.role}</p>
+            <label className="text-sm text-gray-400">Role</label>
+            <p className="text-white font-medium capitalize">{member.role}</p>
           </div>
           <div>
-            <label class="text-sm text-gray-400">Portfolio Value</label>
-            <p class="text-white font-medium">${portfolioValue}</p>
+            <label className="text-sm text-gray-400">Portfolio Value</label>
+            <p className="text-white font-medium">{portfolioValue}</p>
           </div>
           <div>
-            <label class="text-sm text-gray-400">Last Active</label>
-            <p class="text-white font-medium">${member.lastActive || 'N/A'}</p>
+            <label className="text-sm text-gray-400">Last Active</label>
+            <p className="text-white font-medium">{member.lastActive || 'N/A'}</p>
           </div>
           <div>
-            <label class="text-sm text-gray-400">Join Date</label>
-            <p class="text-white font-medium">${member.joinDate || 'N/A'}</p>
+            <label className="text-sm text-gray-400">Join Date</label>
+            <p className="text-white font-medium">{member.joinDate || 'N/A'}</p>
           </div>
           <div>
-            <label class="text-sm text-gray-400">Permissions</label>
-            <p class="text-white font-medium">${member.permissions || 'View Only'}</p>
+            <label className="text-sm text-gray-400">Permissions</label>
+            <p className="text-white font-medium">{member.permissions || 'View Only'}</p>
           </div>
         </div>
 
-        <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-          <h4 class="text-blue-400 font-semibold mb-2">Family Member Information</h4>
-          <p class="text-gray-300 text-sm">
-            This family member has ${(member.role || 'member').toLowerCase()} access to the family account.
-            ${isActive ? 'They are currently active and can manage family finances.' : 'They are currently inactive.'}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <h4 className="text-blue-400 font-semibold mb-2">Family Member Information</h4>
+          <p className="text-gray-300 text-sm">
+            This family member has {(member.role || 'member').toLowerCase()} access to the family account.
+            {isActive ? ' They are currently active and can manage family finances.' : ' They are currently inactive.'}
           </p>
         </div>
       </div>
-    `
+    )
 
     showInfoModal(
       'Family Member Details',
