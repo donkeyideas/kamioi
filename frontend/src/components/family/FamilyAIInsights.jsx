@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Brain, TrendingUp, Award, CheckCircle, XCircle, Clock, Star, Target, BarChart3, Trophy, Users, Zap, ShoppingBag, Home, Upload, X, Building2, DollarSign, BookOpen, Lightbulb } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useData } from '../../context/DataContext'
+import { useDemo } from '../../context/DemoContext'
 import CompanyLogo from '../common/CompanyLogo'
 
-// Check if in demo mode
-const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
+// NOTE: isDemoMode is now retrieved via useDemo() hook inside the component
+// This ensures it's always up-to-date when localStorage changes
 
 // Demo AI recommendations for demo mode
 const DEMO_AI_RECOMMENDATIONS = {
@@ -137,6 +138,7 @@ const DEMO_AI_PERFORMANCE = {
 
 const FamilyAIInsights = ({ user }) => {
   const { isLightMode } = useTheme()
+  const { isDemoMode } = useDemo()
   const [activeTab, setActiveTab] = useState('ai-recommendations')
   const [loading, setLoading] = useState(false)
   const [userStats, setUserStats] = useState({

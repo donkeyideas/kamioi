@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Brain, CheckCircle, XCircle, BarChart3, Eye, Clock, ShoppingBag, Target, TrendingUp, Award, Users, Zap, RefreshCw, Filter, Upload, User, Building2, DollarSign, BookOpen, Lightbulb, Trophy, Star, Gift, Medal } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useData } from '../../context/DataContext'
+import { useDemo } from '../../context/DemoContext'
 import CompanyLogo from '../common/CompanyLogo'
 
-// Check if in demo mode
-const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
+// NOTE: isDemoMode is now retrieved via useDemo() hook inside the component
+// This ensures it's always up-to-date when localStorage changes
 
 // Demo AI recommendations for demo mode
 const DEMO_AI_RECOMMENDATIONS = {
@@ -210,6 +211,7 @@ const getConfidenceColor = (confidence, isLightMode = false) => {
 const BusinessAIInsights = ({ user }) => {
   const { isLightMode } = useTheme()
   const { transactions, holdings, portfolioValue, goals } = useData()
+  const { isDemoMode } = useDemo()
   const [activeTab, setActiveTab] = useState('recommendations')
   const [loading, setLoading] = useState(false)
   const [receiptMappings, setReceiptMappings] = useState([])
