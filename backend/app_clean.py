@@ -27,6 +27,16 @@ try:
 except ImportError as e:
     print(f"AI system not available: {e}")
     AI_SYSTEM_ENABLED = False
+
+# 2FA imports
+try:
+    import pyotp
+    import qrcode
+    import io as qr_io
+    TOTP_AVAILABLE = True
+except ImportError:
+    TOTP_AVAILABLE = False
+    print("Warning: pyotp/qrcode not available - 2FA disabled")
     # Create dummy objects to prevent errors
     class DummyAIEngine:
         def calculate_optimal_fee(self, *args, **kwargs):
@@ -2065,6 +2075,252 @@ def admin_logout():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# =============================================================================
+# Two-Factor Authentication (2FA) Routes
+# =============================================================================
+
+@app.route('/api/admin/2fa/status', methods=['GET'])
+def admin_2fa_status():
+    """Check 2FA status for authenticated admin"""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer admin_token_'):
+        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+
+    if not TOTP_AVAILABLE:
+        return jsonify({'success': True, 'enabled': False, 'available': False})
+
+    try:
+        admin_id = int(auth_header.split('admin_token_')[1])
+
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+        cursor.execute('SELECT totp_enabled FROM admins WHERE id = %s', (admin_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        totp_enabled = row[0] if row else False
+
+        return jsonify({
+            'success': True,
+            'enabled': bool(totp_enabled),
+            'available': True
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error checking 2FA status: {e}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/2fa/setup', methods=['POST'])
+def admin_2fa_setup():
+    """Generate 2FA secret and QR code for admin"""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer admin_token_'):
+        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+
+    if not TOTP_AVAILABLE:
+        return jsonify({'success': False, 'error': '2FA is not available on this server'}), 400
+
+    try:
+        admin_id = int(auth_header.split('admin_token_')[1])
+
+        # Get admin email and check existing 2FA status
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+        cursor.execute('SELECT email, totp_secret, totp_enabled FROM admins WHERE id = %s', (admin_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Admin not found'}), 404
+
+        email = row[0]
+        existing_secret = row[1]
+        totp_enabled = bool(row[2])
+
+        # If 2FA is already enabled, don't allow re-setup without disabling first
+        if totp_enabled and existing_secret:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': '2FA is already enabled. Disable it first to set up again.'
+            }), 400
+
+        # Generate a new secret
+        secret = pyotp.random_base32()
+
+        # Save the secret (but don't enable 2FA yet - that happens after verification)
+        cursor.execute('UPDATE admins SET totp_secret = %s WHERE id = %s', (secret, admin_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Generate TOTP URI and QR code
+        totp = pyotp.TOTP(secret)
+        provisioning_uri = totp.provisioning_uri(name=email, issuer_name='Kamioi Admin')
+
+        # Generate QR code as base64 image
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(provisioning_uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color='black', back_color='white')
+
+        # Convert to base64
+        buffer = qr_io.BytesIO()
+        img.save(buffer, format='PNG')
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+        return jsonify({
+            'success': True,
+            'secret': secret,
+            'qr_code': f'data:image/png;base64,{qr_base64}',
+            'provisioning_uri': provisioning_uri
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error setting up 2FA: {e}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/2fa/verify', methods=['POST'])
+def admin_2fa_verify():
+    """Verify 2FA code and enable 2FA for admin"""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer admin_token_'):
+        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+
+    if not TOTP_AVAILABLE:
+        return jsonify({'success': False, 'error': '2FA is not available on this server'}), 400
+
+    data = request.get_json() or {}
+    code = data.get('code', '').strip()
+
+    if not code:
+        return jsonify({'success': False, 'error': 'Verification code is required'}), 400
+
+    try:
+        admin_id = int(auth_header.split('admin_token_')[1])
+
+        # Get the stored secret
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+        cursor.execute('SELECT totp_secret FROM admins WHERE id = %s', (admin_id,))
+        row = cursor.fetchone()
+        secret = row[0] if row else None
+
+        if not secret:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'No 2FA setup in progress. Please start setup first.'}), 400
+
+        # Verify the code
+        totp = pyotp.TOTP(secret)
+        if not totp.verify(code, valid_window=1):
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Invalid verification code'}), 400
+
+        # Enable 2FA
+        cursor.execute('UPDATE admins SET totp_enabled = true WHERE id = %s', (admin_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Two-factor authentication has been enabled'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error verifying 2FA: {e}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/2fa/disable', methods=['POST'])
+def admin_2fa_disable():
+    """Disable 2FA for admin (requires current password)"""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer admin_token_'):
+        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    code = data.get('code', '').strip()  # Current 2FA code for additional verification
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Password is required to disable 2FA'}), 400
+
+    try:
+        admin_id = int(auth_header.split('admin_token_')[1])
+
+        # Verify password and get 2FA status
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn)
+        cursor.execute('SELECT password, totp_secret, totp_enabled FROM admins WHERE id = %s', (admin_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Admin not found'}), 404
+
+        stored_password = row[0]
+        totp_secret = row[1]
+        totp_enabled = row[2]
+
+        # Verify password
+        from werkzeug.security import check_password_hash
+        password_valid = False
+        if stored_password and (stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:')):
+            password_valid = check_password_hash(stored_password, password)
+        else:
+            password_valid = (stored_password == password)
+
+        if not password_valid:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'Invalid password'}), 401
+
+        # If 2FA is enabled, also verify the current 2FA code
+        if totp_enabled and totp_secret and TOTP_AVAILABLE:
+            if not code:
+                cursor.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'Current 2FA code is required'}), 400
+
+            totp = pyotp.TOTP(totp_secret)
+            if not totp.verify(code, valid_window=1):
+                cursor.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'Invalid 2FA code'}), 401
+
+        # Disable 2FA
+        cursor.execute('UPDATE admins SET totp_enabled = false, totp_secret = NULL WHERE id = %s', (admin_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Two-factor authentication has been disabled'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error disabling 2FA: {e}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # Admin Analytics Metrics Endpoint
 @app.route('/api/admin/analytics/metrics', methods=['GET'])
