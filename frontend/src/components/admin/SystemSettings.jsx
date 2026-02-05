@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react'
-import { Settings, Save, Users, Building2, AlertTriangle, CheckCircle, RefreshCw, Phone, Info, Lock, User, Briefcase } from 'lucide-react'
+import { Settings, Save, Users, Building2, AlertTriangle, CheckCircle, RefreshCw, Phone, Info, Lock, User, Briefcase, Shield, ShieldCheck, ShieldOff, Eye, EyeOff, Key } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const SystemSettings = ({ user }) => {
@@ -9,6 +9,17 @@ const SystemSettings = ({ user }) => {
   const [saveStatus, setSaveStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // 2FA state
+  const [twoFAStatus, setTwoFAStatus] = useState({ enabled: false, available: false })
+  const [twoFASetup, setTwoFASetup] = useState(null) // { qr_code, secret }
+  const [twoFAVerifyCode, setTwoFAVerifyCode] = useState('')
+  const [twoFADisablePassword, setTwoFADisablePassword] = useState('')
+  const [twoFADisableCode, setTwoFADisableCode] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
+  const [twoFALoading, setTwoFALoading] = useState(false)
+  const [twoFAError, setTwoFAError] = useState(null)
+  const [twoFASuccess, setTwoFASuccess] = useState(null)
   
   // System configuration state
   const [systemConfig, setSystemConfig] = useState({
@@ -250,10 +261,137 @@ const SystemSettings = ({ user }) => {
     })
   }
 
+  // 2FA Functions
+  const fetch2FAStatus = async () => {
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const response = await fetch(`${apiBaseUrl}/api/admin/2fa/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setTwoFAStatus({ enabled: result.enabled, available: result.available })
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching 2FA status:', err)
+    }
+  }
+
+  const setup2FA = async () => {
+    setTwoFALoading(true)
+    setTwoFAError(null)
+    setTwoFASuccess(null)
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const response = await fetch(`${apiBaseUrl}/api/admin/2fa/setup`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      const result = await response.json()
+      if (result.success) {
+        setTwoFASetup({ qr_code: result.qr_code, secret: result.secret })
+      } else {
+        setTwoFAError(result.error || 'Failed to setup 2FA')
+      }
+    } catch (err) {
+      setTwoFAError('Failed to connect to server')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const verify2FA = async () => {
+    if (!twoFAVerifyCode || twoFAVerifyCode.length !== 6) {
+      setTwoFAError('Please enter a 6-digit verification code')
+      return
+    }
+    setTwoFALoading(true)
+    setTwoFAError(null)
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const response = await fetch(`${apiBaseUrl}/api/admin/2fa/verify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code: twoFAVerifyCode })
+      })
+      const result = await response.json()
+      if (result.success) {
+        setTwoFASuccess('Two-factor authentication has been enabled!')
+        setTwoFAStatus({ ...twoFAStatus, enabled: true })
+        setTwoFASetup(null)
+        setTwoFAVerifyCode('')
+        setTimeout(() => setTwoFASuccess(null), 5000)
+      } else {
+        setTwoFAError(result.error || 'Invalid verification code')
+      }
+    } catch (err) {
+      setTwoFAError('Failed to verify code')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const disable2FA = async () => {
+    if (!twoFADisablePassword) {
+      setTwoFAError('Please enter your password')
+      return
+    }
+    if (twoFAStatus.enabled && !twoFADisableCode) {
+      setTwoFAError('Please enter your current 2FA code')
+      return
+    }
+    setTwoFALoading(true)
+    setTwoFAError(null)
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const response = await fetch(`${apiBaseUrl}/api/admin/2fa/disable`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: twoFADisablePassword, code: twoFADisableCode })
+      })
+      const result = await response.json()
+      if (result.success) {
+        setTwoFASuccess('Two-factor authentication has been disabled')
+        setTwoFAStatus({ ...twoFAStatus, enabled: false })
+        setTwoFADisablePassword('')
+        setTwoFADisableCode('')
+        setTimeout(() => setTwoFASuccess(null), 5000)
+      } else {
+        setTwoFAError(result.error || 'Failed to disable 2FA')
+      }
+    } catch (err) {
+      setTwoFAError('Failed to connect to server')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const cancelSetup = () => {
+    setTwoFASetup(null)
+    setTwoFAVerifyCode('')
+    setTwoFAError(null)
+  }
+
   useEffect(() => {
     const abortController = new AbortController()
     fetchSystemSettings(abortController.signal)
-    
+    fetch2FAStatus()
+
     return () => {
       abortController.abort()
     }
@@ -669,6 +807,220 @@ const SystemSettings = ({ user }) => {
     </div>
   )
 
+  const renderSecurityTab = () => (
+    <div className="space-y-6">
+      <div className={getCardClass()}>
+        <h3 className={`text-lg font-semibold ${getTextColor()} mb-4 flex items-center space-x-2`}>
+          <Shield className="w-5 h-5" />
+          <span>Two-Factor Authentication (2FA)</span>
+        </h3>
+        <p className={`${getSubtextClass()} mb-6`}>
+          Add an extra layer of security to your admin account using a Time-based One-Time Password (TOTP) authenticator app.
+        </p>
+
+        {/* Error/Success Messages */}
+        {twoFAError && (
+          <div className="mb-4 p-4 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center space-x-2">
+            <AlertTriangle className="w-5 h-5 text-red-400" />
+            <span className="text-red-300">{twoFAError}</span>
+          </div>
+        )}
+        {twoFASuccess && (
+          <div className="mb-4 p-4 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center space-x-2">
+            <CheckCircle className="w-5 h-5 text-green-400" />
+            <span className="text-green-300">{twoFASuccess}</span>
+          </div>
+        )}
+
+        {/* 2FA Status */}
+        <div className="mb-6 p-4 bg-white/5 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              {twoFAStatus.enabled ? (
+                <ShieldCheck className="w-8 h-8 text-green-400" />
+              ) : (
+                <ShieldOff className="w-8 h-8 text-gray-400" />
+              )}
+              <div>
+                <p className={`font-medium ${getTextColor()}`}>
+                  {twoFAStatus.enabled ? 'Two-Factor Authentication Enabled' : 'Two-Factor Authentication Disabled'}
+                </p>
+                <p className={`text-sm ${getSubtextClass()}`}>
+                  {twoFAStatus.enabled
+                    ? 'Your account is protected with 2FA'
+                    : 'Enable 2FA to add extra security to your account'}
+                </p>
+              </div>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              twoFAStatus.enabled
+                ? 'bg-green-500/20 text-green-400'
+                : 'bg-gray-500/20 text-gray-400'
+            }`}>
+              {twoFAStatus.enabled ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+        </div>
+
+        {!twoFAStatus.available ? (
+          <div className="p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
+            <p className="text-yellow-300">2FA is not available on this server. Please contact your administrator.</p>
+          </div>
+        ) : twoFAStatus.enabled ? (
+          /* Disable 2FA Form */
+          <div className="space-y-4">
+            <h4 className={`text-sm font-semibold ${getTextColor()}`}>Disable Two-Factor Authentication</h4>
+            <p className={`text-sm ${getSubtextClass()}`}>
+              To disable 2FA, enter your password and current 2FA code for verification.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-sm font-medium ${getTextColor()} mb-2`}>Password</label>
+                <input
+                  type="password"
+                  value={twoFADisablePassword}
+                  onChange={(e) => setTwoFADisablePassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full px-3 py-2 bg-white/10 border border-gray-500/30 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium ${getTextColor()} mb-2`}>Current 2FA Code</label>
+                <input
+                  type="text"
+                  value={twoFADisableCode}
+                  onChange={(e) => setTwoFADisableCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  maxLength={6}
+                  className="w-full px-3 py-2 bg-white/10 border border-gray-500/30 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-center text-lg tracking-widest"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={disable2FA}
+              disabled={twoFALoading}
+              className="px-6 py-2 bg-red-500 hover:bg-red-600 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+            >
+              {twoFALoading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <ShieldOff className="w-4 h-4" />
+              )}
+              <span>{twoFALoading ? 'Disabling...' : 'Disable 2FA'}</span>
+            </button>
+          </div>
+        ) : twoFASetup ? (
+          /* 2FA Setup In Progress */
+          <div className="space-y-6">
+            <h4 className={`text-sm font-semibold ${getTextColor()}`}>Setup Two-Factor Authentication</h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* QR Code */}
+              <div className="text-center">
+                <p className={`text-sm ${getSubtextClass()} mb-4`}>
+                  Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                </p>
+                <div className="bg-white p-4 rounded-lg inline-block">
+                  <img src={twoFASetup.qr_code} alt="2FA QR Code" className="w-48 h-48" />
+                </div>
+              </div>
+
+              {/* Manual Entry */}
+              <div>
+                <p className={`text-sm ${getSubtextClass()} mb-4`}>
+                  Or manually enter this secret key in your authenticator app:
+                </p>
+                <div className="bg-white/10 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className={`text-sm font-medium ${getTextColor()}`}>Secret Key</label>
+                    <button
+                      onClick={() => setShowSecret(!showSecret)}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <code className={`block text-sm ${showSecret ? 'text-green-400' : 'blur-sm'} bg-black/30 p-2 rounded font-mono break-all`}>
+                    {twoFASetup.secret}
+                  </code>
+                  {showSecret && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(twoFASetup.secret)
+                        setTwoFASuccess('Secret key copied to clipboard')
+                        setTimeout(() => setTwoFASuccess(null), 2000)
+                      }}
+                      className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      Click to copy
+                    </button>
+                  )}
+                </div>
+
+                {/* Verification Input */}
+                <div className="mt-6">
+                  <label className={`block text-sm font-medium ${getTextColor()} mb-2`}>
+                    Enter the 6-digit code from your app to verify
+                  </label>
+                  <input
+                    type="text"
+                    value={twoFAVerifyCode}
+                    onChange={(e) => setTwoFAVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    maxLength={6}
+                    className="w-full px-4 py-3 bg-white/10 border border-gray-500/30 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 text-center text-2xl tracking-widest font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={cancelSetup}
+                className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={verify2FA}
+                disabled={twoFALoading || twoFAVerifyCode.length !== 6}
+                className="px-6 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+              >
+                {twoFALoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4" />
+                )}
+                <span>{twoFALoading ? 'Verifying...' : 'Enable 2FA'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Enable 2FA Button */
+          <div>
+            <button
+              onClick={setup2FA}
+              disabled={twoFALoading}
+              className="px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+            >
+              {twoFALoading ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <Key className="w-5 h-5" />
+              )}
+              <span>{twoFALoading ? 'Setting up...' : 'Set Up Two-Factor Authentication'}</span>
+            </button>
+            <p className={`text-sm ${getSubtextClass()} mt-2`}>
+              You will need an authenticator app like Google Authenticator, Authy, or Microsoft Authenticator.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -712,8 +1064,8 @@ const SystemSettings = ({ user }) => {
         <button
           onClick={() => setActiveTab('system')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'system' 
-              ? 'bg-blue-500 text-white' 
+            activeTab === 'system'
+              ? 'bg-blue-500 text-white'
               : 'text-gray-400 hover:text-white'
           }`}
         >
@@ -739,12 +1091,23 @@ const SystemSettings = ({ user }) => {
         >
           Access Controls
         </button>
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'security'
+              ? 'bg-green-500 text-white'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Security
+        </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'system' && renderSystemConfigTab()}
       {activeTab === 'business' && renderBusinessInfoTab()}
       {activeTab === 'access' && renderAccessControlsTab()}
+      {activeTab === 'security' && renderSecurityTab()}
 
       {/* Save Status */}
       {saveStatus && (

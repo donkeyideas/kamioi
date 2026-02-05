@@ -336,25 +336,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loginAdmin = async (email, password) => {
+  const loginAdmin = async (email, password, totpCode = null) => {
     try {
-      const { data } = await AuthAPI.loginAdmin(email, password);
-      console.log('?? AuthContext - Admin login response:', data);
+      const { data } = await AuthAPI.loginAdmin(email, password, totpCode);
+      console.log('🔐 AuthContext - Admin login response:', data);
+
+      // Check if 2FA is required
+      if (data.requires_2fa) {
+        console.log('🔐 AuthContext - 2FA required for admin');
+        return { success: false, requires_2fa: true, admin_id: data.admin_id };
+      }
+
       if (data.success) {
         setToken(ROLES.ADMIN, data.token);
-        
+
         // Try to get admin details, but don't fail if it doesn't work
         try {
           const me = await AuthAPI.meAdmin();
-          console.log('?? AuthContext - Admin /me after login:', me.data);
+          console.log('🔐 AuthContext - Admin /me after login:', me.data);
           if (me.data && me.data.user) {
             setAdmin(me.data.user);
             return { success: true, user: me.data.user };
           }
         } catch (meError) {
-          console.warn('?? AuthContext - Admin /me failed, using login response data:', meError);
+          console.warn('🔐 AuthContext - Admin /me failed, using login response data:', meError);
         }
-        
+
         // Fall back to user data from login response
         let adminUser = null;
         if (data.user) {
@@ -370,20 +377,20 @@ export const AuthProvider = ({ children }) => {
             dashboard: 'admin'
           };
         }
-        
+
         // Set admin state
         setAdmin(adminUser);
-        
+
         // Also store in localStorage for AdminRoute compatibility
         localStorage.setItem('kamioi_admin_user', JSON.stringify(adminUser));
-        
+
         return { success: true, user: adminUser };
       } else {
-        throw new Error(data.error || 'Login failed');
+        return { success: false, error: data.error || 'Login failed' };
       }
     } catch (error) {
-      console.error('?? AuthContext - Admin login error:', error);
-      throw error;
+      console.error('🔐 AuthContext - Admin login error:', error);
+      return { success: false, error: error.response?.data?.error || error.message || 'Login failed' };
     }
   };
 

@@ -50,8 +50,8 @@ client.interceptors.response.use((res) => res, (err) => Promise.reject(err));
 export const AuthAPI = {
   loginUser: (email, password) =>
     client.post("/api/user/auth/login", { email, password }, { meta: { role: ROLES.USER } }),
-  loginAdmin: (email, password) =>
-    client.post("/api/admin/auth/login", { email, password }, { meta: { role: ROLES.ADMIN } }),
+  loginAdmin: (email, password, totp_code = null) =>
+    client.post("/api/admin/auth/login", { email, password, totp_code }, { meta: { role: ROLES.ADMIN } }),
   meUser: () => client.get("/api/user/auth/me", { meta: { role: ROLES.USER } }),
   meAdmin: () => client.get("/api/admin/auth/me", { meta: { role: ROLES.ADMIN } }),
 };
