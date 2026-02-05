@@ -838,7 +838,7 @@ const Pricing = () => {
         {/* Footer */}
         <footer className="py-12 px-4 sm:px-6 lg:px-8 bg-black/20 backdrop-blur-lg border-t border-white/10 text-white">
           <div className="max-w-7xl mx-auto text-center text-white/70">
-            <p>© 2025 Kamioi. Making investing effortless for the next generation.</p>
+            <p>© 2026 Kamioi. Making investing effortless for the next generation.</p>
           </div>
         </footer>
 

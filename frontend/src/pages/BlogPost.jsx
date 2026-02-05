@@ -597,7 +597,7 @@ const BlogPost = () => {
               </button>
             </div>
             <div className="text-center text-white/70">
-              <p>© 2025 Kamioi. Making investing effortless for the next generation.</p>
+              <p>© 2026 Kamioi. Making investing effortless for the next generation.</p>
             </div>
           </div>
         </footer>
