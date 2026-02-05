@@ -1561,11 +1561,29 @@ const Login = ({ initialMode = 'login' }) => {
                     const data = await response.json()
 
                     if (data.success && data.session) {
+                      // CRITICAL: Clear any existing auth tokens that would block demo mode
+                      localStorage.removeItem('kamioi_user_token')
+                      localStorage.removeItem('kamioi_business_token')
+                      localStorage.removeItem('kamioi_family_token')
+                      localStorage.removeItem('kamioi_admin_token')
+                      localStorage.removeItem('kamioi_user')
+                      localStorage.removeItem('kamioi_business_user')
+                      localStorage.removeItem('kamioi_family_user')
+
                       localStorage.setItem('kamioi_demo_token', data.session.token)
                       localStorage.setItem('kamioi_demo_expires', data.session.expiresAt)
                       localStorage.setItem('kamioi_demo_session', JSON.stringify(data.session))
-                      // Navigate to the appropriate demo dashboard based on access level
+
+                      // CRITICAL: Set demo mode flags so DataContext uses demo data
                       const dashboard = data.session.dashboard || 'user'
+                      const accountType = dashboard === 'business' ? 'business' : dashboard === 'family' ? 'family' : 'individual'
+                      localStorage.setItem('kamioi_demo_mode', 'true')
+                      localStorage.setItem('kamioi_demo_account_type', accountType)
+
+                      // Dispatch event so DataContext can reload with demo data
+                      window.dispatchEvent(new CustomEvent('demoModeChanged'))
+
+                      // Navigate to the appropriate demo dashboard based on access level
                       navigate(`/demo/${dashboard === 'all' ? 'user' : dashboard}`)
                     } else {
                       setDemoError(data.error || 'Invalid demo code. Please check and try again.')

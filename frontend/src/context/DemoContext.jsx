@@ -176,6 +176,16 @@ export const DemoProvider = ({ children }) => {
   }, [demoAccountType, isDemoMode]);
 
   const enableDemoMode = (accountType = 'individual') => {
+    // CRITICAL: Clear any real auth tokens first to prevent DataContext
+    // from thinking there's a real user logged in and disabling demo mode
+    localStorage.removeItem('kamioi_user_token');
+    localStorage.removeItem('kamioi_business_token');
+    localStorage.removeItem('kamioi_family_token');
+    localStorage.removeItem('kamioi_admin_token');
+    localStorage.removeItem('kamioi_user');
+    localStorage.removeItem('kamioi_business_user');
+    localStorage.removeItem('kamioi_family_user');
+
     setDemoAccountType(accountType);
     setIsDemoMode(true);
     // Dispatch event so DataContext can reload with demo data
