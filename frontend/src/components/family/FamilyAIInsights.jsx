@@ -4,6 +4,137 @@ import { useTheme } from '../../context/ThemeContext'
 import { useData } from '../../context/DataContext'
 import CompanyLogo from '../common/CompanyLogo'
 
+// Check if in demo mode
+const isDemoMode = localStorage.getItem('kamioi_demo_mode') === 'true'
+
+// Demo AI recommendations for demo mode
+const DEMO_AI_RECOMMENDATIONS = {
+  recommendations: [
+    {
+      type: 'brand_education',
+      title: 'Family Shopping Investment',
+      description: 'Your family frequently shops at Target. TGT stock has shown steady growth of 8% this year. Round-ups from Target purchases build family wealth!',
+      merchant: 'Target',
+      brand_stock: 'TGT',
+      priority: 'high'
+    },
+    {
+      type: 'roundup_nudge',
+      title: 'Boost Family Savings',
+      description: 'Increasing your round-up from $1 to $1.50 could add $45 more per month to your family portfolio based on current spending.',
+      priority: 'medium'
+    },
+    {
+      type: 'category_education',
+      title: 'Entertainment Diversification',
+      description: 'Your family enjoys Netflix and Disney+. Consider how streaming investments (DIS, NFLX) align with your viewing habits!',
+      category: 'Entertainment',
+      priority: 'low'
+    }
+  ],
+  insights: [
+    'Your family has invested $120 through round-ups this month',
+    'Top family investment: SBUX (+8.5%)',
+    'All 4 family members are contributing regularly'
+  ],
+  disclaimer: "Kamioi's insights are for educational purposes only and are not financial advice or recommendations."
+}
+
+// Demo mapping history for demo mode
+const DEMO_MAPPING_HISTORY = [
+  {
+    id: 'demo-map-1',
+    merchant_name: 'Starbucks',
+    ticker: 'SBUX',
+    company_name: 'Starbucks Corporation',
+    category: 'Food & Dining',
+    confidence: 0.95,
+    status: 'approved',
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'demo-map-2',
+    merchant_name: 'Target',
+    ticker: 'TGT',
+    company_name: 'Target Corporation',
+    category: 'Shopping',
+    confidence: 0.92,
+    status: 'approved',
+    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'demo-map-3',
+    merchant_name: 'Netflix',
+    ticker: 'NFLX',
+    company_name: 'Netflix Inc',
+    category: 'Entertainment',
+    confidence: 0.98,
+    status: 'auto-approved',
+    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'demo-map-4',
+    merchant_name: 'Amazon',
+    ticker: 'AMZN',
+    company_name: 'Amazon.com Inc',
+    category: 'Shopping',
+    confidence: 0.97,
+    status: 'approved',
+    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+  }
+]
+
+// Demo rewards for demo mode
+const DEMO_REWARDS = [
+  {
+    id: 'reward-1',
+    type: 'mapping_milestone',
+    title: 'First 10 Mappings',
+    description: 'Your family approved 10 AI mappings!',
+    points: 50,
+    earned_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+    icon: 'trophy'
+  },
+  {
+    id: 'reward-2',
+    type: 'accuracy_bonus',
+    title: 'High Accuracy',
+    description: 'Maintained 90%+ mapping accuracy',
+    points: 25,
+    earned_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    icon: 'target'
+  },
+  {
+    id: 'reward-3',
+    type: 'streak',
+    title: 'Weekly Streak',
+    description: 'Family contributed for 7 days straight!',
+    points: 30,
+    earned_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    icon: 'zap'
+  }
+]
+
+// Demo leaderboard for demo mode
+const DEMO_LEADERBOARD = [
+  { rank: 1, name: 'Sarah Johnson', points: 245, mappings: 28, avatar: 'S' },
+  { rank: 2, name: 'Michael Johnson', points: 180, mappings: 22, avatar: 'M' },
+  { rank: 3, name: 'Emma Johnson', points: 125, mappings: 15, avatar: 'E' },
+  { rank: 4, name: 'Jake Johnson', points: 95, mappings: 12, avatar: 'J' }
+]
+
+// Demo AI performance stats
+const DEMO_AI_PERFORMANCE = {
+  total_mappings: 77,
+  auto_approved: 45,
+  manual_approved: 28,
+  pending: 4,
+  accuracy_rate: 94.8,
+  avg_confidence: 0.89,
+  top_categories: ['Shopping', 'Food & Dining', 'Entertainment'],
+  improvement_trend: '+5.2%'
+}
+
 const FamilyAIInsights = ({ user }) => {
   const { isLightMode } = useTheme()
   const [activeTab, setActiveTab] = useState('ai-recommendations')
@@ -41,6 +172,35 @@ const FamilyAIInsights = ({ user }) => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
+
+      // Use demo data in demo mode
+      if (isDemoMode) {
+        console.log('🎭 [FamilyAIInsights] Using demo mode data')
+        setMappingHistory(DEMO_MAPPING_HISTORY)
+        setRewards(DEMO_REWARDS)
+        setLeaderboard(DEMO_LEADERBOARD)
+        setAiPerformance(DEMO_AI_PERFORMANCE)
+
+        const points = 105 // Demo points
+        const tierInfo = calculateTier(points)
+        setUserStats({
+          totalMappings: 12,
+          approvedMappings: 10,
+          pendingMappings: 2,
+          rejectedMappings: 0,
+          accuracyRate: 83.3,
+          pointsEarned: points,
+          currentTier: tierInfo.tier,
+          nextTierPoints: tierInfo.nextTierPoints,
+          tierProgress: tierInfo.progress,
+          nextTier: tierInfo.nextTier,
+          rank: 2,
+          totalUsers: 4
+        })
+        setLoading(false)
+        return
+      }
+
       try {
         // Get token with fallback
         const token = localStorage.getItem('kamioi_user_token') || localStorage.getItem('authToken')
@@ -202,7 +362,17 @@ const FamilyAIInsights = ({ user }) => {
   // Fetch AI Recommendations with caching - only call API when needed
   const fetchAIRecommendations = useCallback(async (forceRefresh = false) => {
     if (recommendationsLoading) return
-    
+
+    // Use demo data in demo mode
+    if (isDemoMode) {
+      setRecommendationsLoading(true)
+      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate loading
+      console.log('🎭 [FamilyAIInsights] Using demo AI recommendations')
+      setAiRecommendations(DEMO_AI_RECOMMENDATIONS)
+      setRecommendationsLoading(false)
+      return
+    }
+
     let authToken = localStorage.getItem('kamioi_user_token') || localStorage.getItem('kamioi_token') || localStorage.getItem('authToken')
     if (authToken === 'null' || authToken === 'undefined' || !authToken) {
       authToken = null

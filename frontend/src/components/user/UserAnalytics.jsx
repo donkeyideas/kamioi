@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
-import { 
-  TrendingUp, 
-  DollarSign, 
-  ShoppingBag, 
-  Target, 
-  Brain, 
+import React, { useState, useMemo } from 'react'
+import {
+  TrendingUp,
+  DollarSign,
+  ShoppingBag,
+  Target,
+  Brain,
   Download,
   ArrowLeft,
   BarChart3,
@@ -28,16 +28,50 @@ const UserAnalytics = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState('overview')
   const [lastUpdated, setLastUpdated] = useState(new Date())
 
-  // Calculate analytics data from DataContext
-  const analyticsData = {
+  // Filter transactions based on selected timeframe
+  const filteredTransactions = useMemo(() => {
+    if (!transactions || transactions.length === 0) return []
+
+    const now = new Date()
+    let cutoffDate = new Date()
+
+    switch (selectedTimeframe) {
+      case '7d':
+        cutoffDate.setDate(now.getDate() - 7)
+        break
+      case '30d':
+        cutoffDate.setDate(now.getDate() - 30)
+        break
+      case '3m':
+        cutoffDate.setMonth(now.getMonth() - 3)
+        break
+      case '6m':
+        cutoffDate.setMonth(now.getMonth() - 6)
+        break
+      case '1y':
+        cutoffDate.setFullYear(now.getFullYear() - 1)
+        break
+      default:
+        cutoffDate = new Date(0) // All time
+        break
+    }
+
+    return transactions.filter(tx => {
+      const txDate = new Date(tx.date)
+      return txDate >= cutoffDate
+    })
+  }, [transactions, selectedTimeframe])
+
+  // Calculate analytics data from filtered transactions
+  const analyticsData = useMemo(() => ({
     spending: {
-      total: transactions.reduce((sum, t) => sum + (t.amount || 0), 0),
-      categories: transactions.reduce((acc, t) => {
+      total: filteredTransactions.reduce((sum, t) => sum + (t.amount || 0), 0),
+      categories: filteredTransactions.reduce((acc, t) => {
         const category = t.category || 'Other'
         acc[category] = (acc[category] || 0) + (t.amount || 0)
         return acc
       }, {}),
-      monthly: transactions.reduce((acc, t) => {
+      monthly: filteredTransactions.reduce((acc, t) => {
         const month = t.date ? t.date.split('/')[0] : 'Unknown'
         acc[month] = (acc[month] || 0) + (t.amount || 0)
         return acc
@@ -46,13 +80,13 @@ const UserAnalytics = ({ onBack }) => {
     investments: {
       total: portfolioValue,
       holdings: holdings.length,
-      roundUps: totalRoundUps
+      roundUps: filteredTransactions.reduce((sum, t) => sum + (t.roundUp || 0), 0)
     },
     trends: {
-      spending: transactions.length > 0 ? 'increasing' : 'stable',
+      spending: filteredTransactions.length > 0 ? 'increasing' : 'stable',
       investments: holdings.length > 0 ? 'growing' : 'stable'
     }
-  }
+  }), [filteredTransactions, portfolioValue, holdings])
 
   const refreshData = () => {
     setLastUpdated(new Date())
@@ -182,7 +216,7 @@ const UserAnalytics = ({ onBack }) => {
                     ${analyticsData.spending.total.toLocaleString()}
                   </p>
                   <p className={`text-sm ${getSubtextClass()}`}>
-                    {transactions.length} transactions
+                    {filteredTransactions.length} transactions
                   </p>
                 </div>
               </div>
@@ -196,7 +230,7 @@ const UserAnalytics = ({ onBack }) => {
                 </div>
                 <div className="space-y-1">
                   <p className={`text-2xl font-bold ${getTextClass()}`}>
-                    ${transactions.length > 0 ? (analyticsData.spending.total / transactions.length).toFixed(2) : '0.00'}
+                    ${filteredTransactions.length > 0 ? (analyticsData.spending.total / filteredTransactions.length).toFixed(2) : '0.00'}
                   </p>
                   <p className={`text-sm ${getSubtextClass()}`}>Per transaction</p>
                 </div>
@@ -226,7 +260,7 @@ const UserAnalytics = ({ onBack }) => {
                 </div>
                 <div className="space-y-1">
                   <p className={`text-2xl font-bold ${getTextClass()}`}>
-                    {transactions.filter(t => t.ticker).length}
+                    {filteredTransactions.filter(t => t.ticker).length}
                   </p>
                   <p className={`text-sm ${getSubtextClass()}`}>Mapped transactions</p>
                 </div>
@@ -260,17 +294,17 @@ const UserAnalytics = ({ onBack }) => {
               {/* Top Merchants */}
               <div className={getCardClass()}>
                 <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>Top Merchants</h3>
-                {transactions.length > 0 ? (
-                  <RechartsChart 
-                    type="bar" 
+                {filteredTransactions.length > 0 ? (
+                  <RechartsChart
+                    type="bar"
                     height={300}
-                    data={Object.entries(transactions.reduce((acc, t) => {
+                    data={Object.entries(filteredTransactions.reduce((acc, t) => {
                       const merchant = t.merchant || 'Unknown'
                       acc[merchant] = (acc[merchant] || 0) + 1
                       return acc
-                    }, {})).map(([merchant, count]) => ({ 
-                      name: merchant, 
-                      value: count 
+                    }, {})).map(([merchant, count]) => ({
+                      name: merchant,
+                      value: count
                     }))}
                     series={[{ dataKey: 'value', name: 'Visits' }]}
                   />
@@ -289,15 +323,15 @@ const UserAnalytics = ({ onBack }) => {
             <div className={getCardClass()}>
               <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>Round-Up Impact by Category</h3>
               {Object.keys(analyticsData.spending.categories).length > 0 ? (
-                <RechartsChart 
-                  type="bar" 
+                <RechartsChart
+                  type="bar"
                   height={300}
                   data={Object.entries(analyticsData.spending.categories).map(([category]) => {
                     // Calculate actual round-ups for this category
-                    const categoryTransactions = transactions.filter(t => (t.category || 'Other') === category)
+                    const categoryTransactions = filteredTransactions.filter(t => (t.category || 'Other') === category)
                     const categoryRoundUps = categoryTransactions.reduce((sum, t) => sum + (t.roundUp || 0), 0)
-                    return { 
-                      name: category, 
+                    return {
+                      name: category,
                       value: categoryRoundUps
                     }
                   })}
@@ -519,7 +553,7 @@ const UserAnalytics = ({ onBack }) => {
                 </div>
                 <div className="space-y-1">
                   <p className={`text-2xl font-bold ${getTextClass()}`}>
-                    {transactions.filter(t => t.ticker).length}
+                    {filteredTransactions.filter(t => t.ticker).length}
                   </p>
                   <p className={`text-sm ${getSubtextClass()}`}>Successfully mapped</p>
                 </div>
@@ -549,7 +583,7 @@ const UserAnalytics = ({ onBack }) => {
                 </div>
                 <div className="space-y-1">
                   <p className={`text-2xl font-bold ${getTextClass()}`}>
-                    {transactions.filter(t => t.ticker).length > 0 ? '100%' : '0%'}
+                    {filteredTransactions.filter(t => t.ticker).length > 0 ? '100%' : '0%'}
                   </p>
                   <p className={`text-sm ${getSubtextClass()}`}>Mapping success</p>
                 </div>
@@ -559,7 +593,7 @@ const UserAnalytics = ({ onBack }) => {
             {/* AI Recommendations */}
             <div className={getCardClass()}>
               <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>AI Recommendations</h3>
-              {transactions.length > 0 ? (
+              {filteredTransactions.length > 0 ? (
                 <div className="space-y-4">
                   <div className="flex items-start space-x-3 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
                     <Lightbulb className="w-5 h-5 text-blue-400 mt-1 flex-shrink-0" />

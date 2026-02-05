@@ -13,6 +13,40 @@ const BusinessAnalytics = ({ user }) => {
   const [activeTab, setActiveTab] = useState('overview')
   const [lastUpdated, setLastUpdated] = useState(new Date())
 
+  // Filter transactions based on selected timeframe
+  const filteredTransactions = useMemo(() => {
+    if (!transactions || transactions.length === 0) return []
+
+    const now = new Date()
+    let cutoffDate = new Date()
+
+    switch (selectedTimeframe) {
+      case '7d':
+        cutoffDate.setDate(now.getDate() - 7)
+        break
+      case '30d':
+        cutoffDate.setDate(now.getDate() - 30)
+        break
+      case '3m':
+        cutoffDate.setMonth(now.getMonth() - 3)
+        break
+      case '6m':
+        cutoffDate.setMonth(now.getMonth() - 6)
+        break
+      case '1y':
+        cutoffDate.setFullYear(now.getFullYear() - 1)
+        break
+      default:
+        cutoffDate = new Date(0) // All time
+        break
+    }
+
+    return transactions.filter(tx => {
+      const txDate = new Date(tx.date || tx.created_at)
+      return txDate >= cutoffDate
+    })
+  }, [transactions, selectedTimeframe])
+
   // Helper function to get display round-up amount (same logic as BusinessTransactions)
   const getDisplayRoundUp = (transaction) => {
     const roundUpAmount = transaction.round_up_amount || transaction.round_up || 0
@@ -75,10 +109,10 @@ const BusinessAnalytics = ({ user }) => {
 
   // Get all investments (transactions with tickers or allocations) - only completed and confirmed
   const investments = useMemo(() => {
-    if (!transactions || !Array.isArray(transactions)) return []
-    
+    if (!filteredTransactions || !Array.isArray(filteredTransactions)) return []
+
     // Filter for completed and confirmed investments only
-    const completedInvestments = transactions
+    const completedInvestments = filteredTransactions
       .filter(t => {
         const hasTicker = getTransactionTicker(t)
         const hasAllocations = t.allocations && Array.isArray(t.allocations) && t.allocations.length > 0
@@ -196,9 +230,9 @@ const BusinessAnalytics = ({ user }) => {
       }))
       .sort((a, b) => new Date(b.transactions[0]?.date || 0) - new Date(a.transactions[0]?.date || 0))
       .slice(0, 5) // Limit to 5 investments
-    
+
     return investmentArray
-  }, [transactions])
+  }, [filteredTransactions])
 
   // Calculate portfolio value from investments (calculated, not from context)
   const calculatedPortfolioValue = useMemo(() => {
@@ -232,9 +266,9 @@ const BusinessAnalytics = ({ user }) => {
     return companyMap[ticker] || ticker
   }
 
-  // Calculate analytics data from transactions (same as UserAnalytics)
+  // Calculate analytics data from filtered transactions (same as UserAnalytics)
   const analyticsData = useMemo(() => {
-    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+    if (!filteredTransactions || !Array.isArray(filteredTransactions) || filteredTransactions.length === 0) {
       return {
         spending: {
           total: 0,
@@ -253,17 +287,17 @@ const BusinessAnalytics = ({ user }) => {
     }
 
     // Calculate total round-ups using display logic (includes $1.00 default)
-    const calculatedRoundUps = transactions.reduce((sum, t) => sum + getDisplayRoundUp(t), 0)
+    const calculatedRoundUps = filteredTransactions.reduce((sum, t) => sum + getDisplayRoundUp(t), 0)
 
     return {
       spending: {
-        total: transactions.reduce((sum, t) => sum + Math.abs(t.amount || t.total_debit || 0), 0),
-        categories: transactions.reduce((acc, t) => {
+        total: filteredTransactions.reduce((sum, t) => sum + Math.abs(t.amount || t.total_debit || 0), 0),
+        categories: filteredTransactions.reduce((acc, t) => {
           const category = t.category || 'Other'
           acc[category] = (acc[category] || 0) + Math.abs(t.amount || t.total_debit || 0)
           return acc
         }, {}),
-        monthly: transactions.reduce((acc, t) => {
+        monthly: filteredTransactions.reduce((acc, t) => {
           const date = t.date || t.created_at
           if (date) {
             const month = new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
@@ -277,11 +311,11 @@ const BusinessAnalytics = ({ user }) => {
         roundUps: calculatedRoundUps || totalRoundUps || 0
       },
       trends: {
-        spending: transactions.length > 0 ? 'increasing' : 'stable',
+        spending: filteredTransactions.length > 0 ? 'increasing' : 'stable',
         investments: (portfolioValue || 0) > 0 ? 'growing' : 'stable'
       }
     }
-  }, [transactions, portfolioValue, totalRoundUps])
+  }, [filteredTransactions, portfolioValue, totalRoundUps])
 
   const handleRefresh = () => {
     setLastUpdated(new Date())
@@ -379,7 +413,7 @@ const BusinessAnalytics = ({ user }) => {
                   ${analyticsData.spending.total.toLocaleString()}
                 </p>
                 <p className={`text-sm ${getSubtextClass()}`}>
-                  {transactions?.length || 0} transactions
+                  {filteredTransactions?.length || 0} transactions
                 </p>
               </div>
             </div>
@@ -393,7 +427,7 @@ const BusinessAnalytics = ({ user }) => {
               </div>
               <div className="space-y-1">
                 <p className={`text-2xl font-bold ${getTextClass()}`}>
-                  ${(transactions?.length || 0) > 0 ? (analyticsData.spending.total / transactions.length).toFixed(2) : '0.00'}
+                  ${(filteredTransactions?.length || 0) > 0 ? (analyticsData.spending.total / filteredTransactions.length).toFixed(2) : '0.00'}
                 </p>
                 <p className={`text-sm ${getSubtextClass()}`}>Per transaction</p>
               </div>
@@ -423,7 +457,7 @@ const BusinessAnalytics = ({ user }) => {
               </div>
               <div className="space-y-1">
                 <p className={`text-2xl font-bold ${getTextClass()}`}>
-                  {(transactions || []).filter(t => t.ticker || (t.allocations && t.allocations.length > 0)).length}
+                  {(filteredTransactions || []).filter(t => t.ticker || (t.allocations && t.allocations.length > 0)).length}
                 </p>
                 <p className={`text-sm ${getSubtextClass()}`}>Mapped transactions</p>
               </div>
@@ -457,10 +491,10 @@ const BusinessAnalytics = ({ user }) => {
             {/* Top Merchants */}
             <div className={`${getCardClass()} p-6`}>
               <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>Top Merchants</h3>
-              {(transactions || []).length > 0 ? (
+              {(filteredTransactions || []).length > 0 ? (
                 (() => {
                   // Count transactions per merchant
-                  const merchantCounts = (transactions || []).reduce((acc, t) => {
+                  const merchantCounts = (filteredTransactions || []).reduce((acc, t) => {
                     const merchant = t.merchant || t.description || 'Unknown'
                     acc[merchant] = (acc[merchant] || 0) + 1
                     return acc
@@ -507,15 +541,15 @@ const BusinessAnalytics = ({ user }) => {
           <div className={`${getCardClass()} p-6`}>
             <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>Round-Up Impact by Category</h3>
             {Object.keys(analyticsData.spending.categories).length > 0 ? (
-              <RechartsChart 
-                type="bar" 
+              <RechartsChart
+                type="bar"
                 height={300}
                 data={Object.entries(analyticsData.spending.categories).map(([category, amount]) => {
                   // Calculate actual round-ups for this category using display logic
-                  const categoryTransactions = (transactions || []).filter(t => (t.category || 'Other') === category)
+                  const categoryTransactions = (filteredTransactions || []).filter(t => (t.category || 'Other') === category)
                   const categoryRoundUps = categoryTransactions.reduce((sum, t) => sum + getDisplayRoundUp(t), 0)
-                  return { 
-                    name: category, 
+                  return {
+                    name: category,
                     value: categoryRoundUps
                   }
                 })}
@@ -722,7 +756,7 @@ const BusinessAnalytics = ({ user }) => {
               </div>
               <div className="space-y-1">
                 <p className={`text-2xl font-bold ${getTextClass()}`}>
-                  {(transactions || []).filter(t => t.ticker || (t.allocations && t.allocations.length > 0)).length}
+                  {(filteredTransactions || []).filter(t => t.ticker || (t.allocations && t.allocations.length > 0)).length}
                 </p>
                 <p className={`text-sm ${getSubtextClass()}`}>Successfully mapped</p>
               </div>
@@ -752,7 +786,7 @@ const BusinessAnalytics = ({ user }) => {
               </div>
               <div className="space-y-1">
                 <p className={`text-2xl font-bold ${getTextClass()}`}>
-                  {(transactions || []).filter(t => t.ticker || (t.allocations && t.allocations.length > 0)).length > 0 ? '100%' : '0%'}
+                  {(filteredTransactions || []).filter(t => t.ticker || (t.allocations && t.allocations.length > 0)).length > 0 ? '100%' : '0%'}
                 </p>
                 <p className={`text-sm ${getSubtextClass()}`}>Mapping success</p>
               </div>
@@ -762,7 +796,7 @@ const BusinessAnalytics = ({ user }) => {
       )}
 
       {/* Fallback if no data */}
-      {(!transactions || transactions.length === 0) && (
+      {(!filteredTransactions || filteredTransactions.length === 0) && (
         <div className={`${getCardClass()} rounded-xl p-12 text-center`}>
           <BarChart3 className={`w-16 h-16 mx-auto mb-4 ${getSubtextClass()}`} />
           <h3 className={`text-xl font-semibold ${getTextClass()} mb-2`}>No Analytics Data</h3>

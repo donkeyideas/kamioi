@@ -472,7 +472,7 @@ const FamilyGoals = ({ user }) => {
             {/* Progress Bar */}
             <div className="mb-4">
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-400">
+                <span className="text-white font-semibold">
                   {goal.type === 'amount' && `$${goal.current.toLocaleString()}`}
                   {goal.type === 'company' && `$${goal.current.toLocaleString()}`}
                   {goal.type === 'count' && `${goal.current} family transactions`}

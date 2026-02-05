@@ -535,7 +535,7 @@ const FamilySettings = ({ user }) => {
             country: 'US'
           },
           familySize: 4,
-          last4SSN: '',
+          last4SSN: '1234',
           pepStatus: false,
           roundUpPreference: 1,
           investmentGoal: 'Build family wealth and save for education',
@@ -1705,11 +1705,52 @@ startxref
 
           <div className="glass-card p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Family Connected Devices</h3>
-            <div className="text-center py-8">
-              <Shield className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-              <p className="text-gray-400">No devices currently connected</p>
-              <p className="text-gray-500 text-sm mt-2">Device tracking will be available in a future update</p>
-            </div>
+            {isDemoMode ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">iPhone 15 Pro</p>
+                      <p className="text-gray-400 text-sm">Last active: Today at 2:45 PM</p>
+                    </div>
+                  </div>
+                  <span className="text-green-400 text-sm">Active</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">MacBook Pro</p>
+                      <p className="text-gray-400 text-sm">Last active: Today at 11:30 AM</p>
+                    </div>
+                  </div>
+                  <span className="text-green-400 text-sm">Active</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gray-500/20 rounded-full flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">iPad Air</p>
+                      <p className="text-gray-400 text-sm">Last active: Yesterday at 8:15 PM</p>
+                    </div>
+                  </div>
+                  <span className="text-gray-400 text-sm">Inactive</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Shield className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                <p className="text-gray-400">No devices currently connected</p>
+                <p className="text-gray-500 text-sm mt-2">Device tracking will be available in a future update</p>
+              </div>
+            )}
           </div>
 
           <div className="glass-card p-6">
@@ -2116,7 +2157,7 @@ startxref
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white font-medium">Theme</p>
-                <p className="text-gray-400 text-sm">Choose between dark, light, and cloud mode for your family dashboard - UPDATED</p>
+                <p className="text-gray-400 text-sm">Choose between dark, light, and cloud mode for your family dashboard</p>
               </div>
               <button
                 onClick={toggleTheme}
