@@ -385,10 +385,15 @@ const Learn = () => {
 
   return (
     <>
-      <SEO 
+      <SEO
         title={getContent('meta_title', learnData.meta_title)}
         description={getContent('meta_description', learnData.meta_description)}
         keywords="learn to invest, investing education, investment resources, beginner investing"
+        faq={learnData.faqs ? learnData.faqs.flatMap(category => category.questions) : []}
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Learn", url: "https://kamioi.com/learn" }
+        ]}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}

@@ -61,10 +61,25 @@ const BlogListing = () => {
 
   return (
     <>
-      <SEO 
-        title="Blog - Kamioi"
-        description="Stay informed with expert insights on investing, financial literacy, and building wealth for the future."
-        keywords="investing blog, financial literacy, wealth building, fractional shares"
+      <SEO
+        title="Investing Blog & Financial Insights | Kamioi"
+        description="Stay informed with expert insights on investing, financial literacy, and building wealth for the future. Free articles on automatic investing, fractional shares, and more."
+        keywords="investing blog, financial literacy, wealth building, fractional shares, automatic investing articles"
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Blog", url: "https://kamioi.com/blog" }
+        ]}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": "Kamioi Blog",
+          "description": "Expert insights on investing, financial literacy, and building wealth for the future.",
+          "url": "https://kamioi.com/blog",
+          "isPartOf": {
+            "@type": "WebSite",
+            "@id": "https://kamioi.com/#website"
+          }
+        }}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}

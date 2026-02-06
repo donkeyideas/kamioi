@@ -846,6 +846,46 @@ Passive investing is perfect for busy people who want to build wealth without be
                   "text": faq.answer
                 }
               }))
+            },
+            {
+              "@type": "FinancialService",
+              "@id": "https://kamioi.com/#financialservice",
+              "name": "Kamioi Automatic Investing",
+              "description": "AI-powered micro-investing platform that automatically invests your spare change from everyday purchases into fractional shares of stocks",
+              "url": "https://kamioi.com",
+              "serviceType": "Automatic Investing",
+              "areaServed": "US",
+              "provider": {
+                "@type": "Organization",
+                "@id": "https://kamioi.com/#organization"
+              },
+              "hasOfferCatalog": {
+                "@type": "OfferCatalog",
+                "name": "Kamioi Plans",
+                "itemListElement": [
+                  {
+                    "@type": "Offer",
+                    "name": "Individual Plan",
+                    "price": "9.00",
+                    "priceCurrency": "USD",
+                    "description": "Unlimited automatic investments, AI-powered stock matching, fractional shares"
+                  },
+                  {
+                    "@type": "Offer",
+                    "name": "Family Plan",
+                    "price": "19.00",
+                    "priceCurrency": "USD",
+                    "description": "Up to 5 family members with shared dashboard and individual portfolios"
+                  },
+                  {
+                    "@type": "Offer",
+                    "name": "Business Plan",
+                    "price": "49.00",
+                    "priceCurrency": "USD",
+                    "description": "Up to 20 users with admin dashboard and enterprise features"
+                  }
+                ]
+              }
             }
           ]
         }}

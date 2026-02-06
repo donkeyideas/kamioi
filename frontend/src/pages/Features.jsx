@@ -300,10 +300,15 @@ const Features = () => {
 
   return (
     <>
-      <SEO 
+      <SEO
         title={getContent('meta_title', featuresData.meta_title)}
         description={getContent('meta_description', featuresData.meta_description)}
         keywords="automatic investing features, investing app features, AI investing platform"
+        faq={featuresData.faqs}
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Features", url: "https://kamioi.com/features" }
+        ]}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}

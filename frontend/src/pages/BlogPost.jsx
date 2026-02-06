@@ -248,10 +248,26 @@ const BlogPost = () => {
 
   return (
     <>
-      <SEO 
+      <SEO
         title={`${blog.title} - Kamioi Blog`}
         description={blog.excerpt}
         keywords={blog.seo_keywords}
+        type="article"
+        url={`https://kamioi.com/blog/${slug}`}
+        image={blog.featured_image || "https://kamioi.com/favicon.png"}
+        article={{
+          title: blog.title,
+          description: blog.excerpt,
+          author: "Kamioi Team",
+          publishedDate: blog.published_at,
+          modifiedDate: blog.updated_at || blog.published_at,
+          image: blog.featured_image || "https://kamioi.com/favicon.png"
+        }}
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Blog", url: "https://kamioi.com/blog" },
+          { name: blog.title, url: `https://kamioi.com/blog/${slug}` }
+        ]}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}

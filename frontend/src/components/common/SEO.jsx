@@ -6,7 +6,7 @@ const SEO = ({
   description = "Invest your spare change automatically with AI-powered insights. Build wealth effortlessly with round-up investments.",
   keywords = "investing, round-ups, AI, wealth building, family investing, smart investing, automatic investing",
   image = "https://kamioi.com/favicon.png",
-  url = "https://kamioi.com",
+  url = null,
   type = "website",
   structuredData = null,
   breadcrumbs = null,
@@ -15,7 +15,8 @@ const SEO = ({
   noindex = false
 }) => {
   const fullTitle = title.includes('Kamioi') ? title : `${title} | Kamioi`
-  
+  const canonicalUrl = url || `https://kamioi.com${typeof window !== 'undefined' ? window.location.pathname : '/'}`
+
   return (
     <Helmet>
       {/* Basic Meta Tags */}
@@ -30,7 +31,7 @@ const SEO = ({
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={description} />
       <meta property="og:image" content={image} />
-      <meta property="og:url" content={url} />
+      <meta property="og:url" content={canonicalUrl} />
       <meta property="og:type" content={type} />
       <meta property="og:site_name" content="Kamioi" />
       <meta property="og:locale" content="en_US" />
@@ -51,7 +52,7 @@ const SEO = ({
       <meta name="apple-mobile-web-app-title" content="Kamioi" />
       
       {/* Canonical URL */}
-      <link rel="canonical" href={url} />
+      <link rel="canonical" href={canonicalUrl} />
       
       {/* Favicon */}
       <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -126,7 +127,7 @@ const SEO = ({
             "dateModified": article.modifiedDate || article.publishedDate,
             "mainEntityOfPage": {
               "@type": "WebPage",
-              "@id": url
+              "@id": canonicalUrl
             }
           }, null, 2)}
         </script>

@@ -1,6 +1,89 @@
 # Kamioi Robots.txt
 # https://kamioi.com
 
+# AI Search Engine Crawlers - Explicitly Allowed
+User-agent: GPTBot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: Diffbot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /family/
+Disallow: /business/
+Disallow: /api/
+Disallow: /demo/
+
+# All Other Crawlers
 User-agent: *
 Allow: /
 
@@ -9,6 +92,7 @@ Disallow: /admin/
 Disallow: /dashboard/
 Disallow: /family/
 Disallow: /business/
+Disallow: /demo/
 
 # Disallow API endpoints
 Disallow: /api/

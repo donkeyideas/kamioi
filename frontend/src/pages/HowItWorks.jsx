@@ -251,10 +251,29 @@ const HowItWorks = () => {
 
   return (
     <>
-      <SEO 
+      <SEO
         title={getContent('meta_title', howItWorksData.meta_title)}
         description={getContent('meta_description', howItWorksData.meta_description)}
         keywords="how automatic investing works, how does kamioi work, automatic stock investing"
+        faq={howItWorksData.faqs}
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "How It Works", url: "https://kamioi.com/how-it-works" }
+        ]}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Start Automatic Investing with Kamioi",
+          "description": "Learn how Kamioi turns everyday purchases into stock ownership in 3 simple steps.",
+          "totalTime": "PT10M",
+          "step": howItWorksData.steps.map((step, index) => ({
+            "@type": "HowToStep",
+            "position": index + 1,
+            "name": step.title,
+            "text": step.description,
+            "url": "https://kamioi.com/how-it-works"
+          }))
+        }}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}

@@ -320,10 +320,15 @@ const Pricing = () => {
 
   return (
     <>
-      <SEO 
+      <SEO
         title={getContent('meta_title', pricingData.meta_title)}
         description={getContent('meta_description', pricingData.meta_description)}
         keywords="kamioi pricing, automatic investing cost, investment app pricing"
+        faq={pricingData.faqs}
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Pricing", url: "https://kamioi.com/pricing" }
+        ]}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}
