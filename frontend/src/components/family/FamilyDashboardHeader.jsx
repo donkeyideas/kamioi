@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Sun, Moon, Link, Search, DollarSign, Cloud, Bell, Upload, Shield, User, ChevronDown, Users, Building2, LogOut } from 'lucide-react'
+import { Sun, Moon, Link, Search, DollarSign, Cloud, Bell, Upload, Shield, User, ChevronDown, Users, Building2, LogOut, Menu } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useData } from '../../context/DataContext'
@@ -11,7 +11,7 @@ import MXConnectWidget from '../common/MXConnectWidget'
 import notificationService from '../../services/notificationService'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 
-const FamilyDashboardHeader = ({ user, activeTab }) => {
+const FamilyDashboardHeader = ({ user, activeTab, onToggleMobileSidebar }) => {
   const { logoutUser } = useAuth()
   const { isBlackMode, isLightMode, toggleTheme } = useTheme()
   const { isDemoMode, demoAccountType, setDemoAccountType, disableDemoMode } = useDemo()
@@ -290,8 +290,14 @@ const FamilyDashboardHeader = ({ user, activeTab }) => {
   return (
     <header className={getHeaderClass()}>
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="relative">
+        <div className="flex items-center space-x-2 md:space-x-4">
+          <button
+            className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+            onClick={onToggleMobileSidebar}
+          >
+            <Menu className={`w-6 h-6 ${getTextClass()}`} />
+          </button>
+          <div className="relative hidden sm:block">
             <Search className={getSearchIconClass()} />
             <input
               type="text"
@@ -300,10 +306,10 @@ const FamilyDashboardHeader = ({ user, activeTab }) => {
             />
           </div>
         </div>
-        
-        <div className="flex items-center space-x-4">
-          {/* Round Up Amount Card */}
-          <div className={`px-4 py-2 rounded-full border flex items-center space-x-2 transition-colors ${
+
+        <div className="flex items-center space-x-2 md:space-x-4">
+          {/* Round Up Amount Card - hidden on mobile */}
+          <div className={`px-4 py-2 rounded-full border hidden md:flex items-center space-x-2 transition-colors ${
             isLightMode
               ? 'bg-white border-gray-300 text-gray-800'
               : 'bg-white/10 border-white/20 text-white'
@@ -346,8 +352,8 @@ const FamilyDashboardHeader = ({ user, activeTab }) => {
                 {demoAccountType === 'individual' && <User className="w-4 h-4" />}
                 {demoAccountType === 'family' && <Users className="w-4 h-4" />}
                 {demoAccountType === 'business' && <Building2 className="w-4 h-4" />}
-                <span className="capitalize">{demoAccountType} Demo</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${showDemoDropdown ? 'rotate-180' : ''}`} />
+                <span className="hidden md:inline capitalize">{demoAccountType} Demo</span>
+                <ChevronDown className={`hidden md:block w-4 h-4 transition-transform ${showDemoDropdown ? 'rotate-180' : ''}`} />
               </button>
 
               {showDemoDropdown && (
@@ -415,7 +421,7 @@ const FamilyDashboardHeader = ({ user, activeTab }) => {
             title="Sync transactions from connected bank account"
           >
             <Link className="w-4 h-4" />
-            <span>Auto Sync</span>
+            <span className="hidden md:inline">Auto Sync</span>
           </button>
 
           {/* Theme Toggle */}
@@ -450,7 +456,7 @@ const FamilyDashboardHeader = ({ user, activeTab }) => {
               title="Return to Admin Dashboard"
             >
               <Shield className="w-4 h-4" />
-              <span>Admin</span>
+              <span className="hidden md:inline">Admin</span>
             </RouterLink>
           )}
           
@@ -476,7 +482,7 @@ const FamilyDashboardHeader = ({ user, activeTab }) => {
                 }
               }}
             />
-            <span className={getUserNameClass()}>{user?.name || 'Family'}</span>
+            <span className={`hidden md:inline ${getUserNameClass()}`}>{user?.name || 'Family'}</span>
           </div>
         </div>
       </div>

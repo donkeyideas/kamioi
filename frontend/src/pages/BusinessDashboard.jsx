@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -24,7 +24,17 @@ const BusinessDashboard = () => {
   const { isDemoMode, getDemoUser, disableDemoMode } = useDemo()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showCommunication, setShowCommunication] = useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const aiInsightsRefreshRef = useRef(null)
+
+  useEffect(() => {
+    if (isMobileSidebarOpen) {
+      document.body.classList.add('mobile-sidebar-open')
+    } else {
+      document.body.classList.remove('mobile-sidebar-open')
+    }
+    return () => document.body.classList.remove('mobile-sidebar-open')
+  }, [isMobileSidebarOpen])
 
   // CRITICAL FIX: Clear demo mode when real authenticated user accesses this dashboard
   // This prevents demo data from bleeding into real user accounts
@@ -117,17 +127,17 @@ const BusinessDashboard = () => {
       initial="initial"
       animate="in"
     >
-      <motion.div variants={itemVariants} className="flex-shrink-0">
-        <BusinessSidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          user={effectiveUser}
-          onLogout={effectiveLogout}
-          onOpenCommunication={() => setShowCommunication(true)}
-        />
-      </motion.div>
-      
-      <motion.main 
+      <BusinessSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        user={effectiveUser}
+        onLogout={effectiveLogout}
+        onOpenCommunication={() => setShowCommunication(true)}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+      />
+
+      <motion.main
         className="flex-1 flex flex-col overflow-hidden admin-main border-0 outline-none h-full"
         variants={itemVariants}
         initial="initial"
@@ -136,6 +146,7 @@ const BusinessDashboard = () => {
         <BusinessDashboardHeader
           user={effectiveUser}
           activeTab={activeTab}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
           onReceiptProcessed={() => {
             // Refresh AI Insights receipt mappings when a new receipt is processed
             if (aiInsightsRefreshRef.current) {
@@ -146,7 +157,7 @@ const BusinessDashboard = () => {
         />
         
         <motion.div 
-          className="flex-1 overflow-y-auto overflow-x-hidden p-6 admin-content border-0 outline-none"
+          className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 admin-content border-0 outline-none"
           variants={itemVariants}
         >
           <AnimatePresence mode="wait">

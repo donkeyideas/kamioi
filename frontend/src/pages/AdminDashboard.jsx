@@ -41,12 +41,22 @@ const AdminDashboard = () => {
   const { isDemoMode, getDemoUser } = useDemo()
   const [activeTab, setActiveTab] = useState('overview')
   const [allTransactions, setAllTransactions] = useState([])
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const pageLoadStartTimeRef = useRef(null)
   const activeTabRef = useRef(activeTab) // Track current activeTab for event handler
 
   // Use demo user when in demo mode, otherwise use auth user
   const effectiveUser = isDemoMode ? getDemoUser() : user
-  
+
+  useEffect(() => {
+    if (isMobileSidebarOpen) {
+      document.body.classList.add('mobile-sidebar-open')
+    } else {
+      document.body.classList.remove('mobile-sidebar-open')
+    }
+    return () => document.body.classList.remove('mobile-sidebar-open')
+  }, [isMobileSidebarOpen])
+
   // Debug logging for transaction updates
   const handleTransactionsUpdate = (transactions) => {
     console.log('🔍 AdminDashboard - Received transactions update:', transactions.length)
@@ -328,29 +338,29 @@ const AdminDashboard = () => {
       initial="initial"
       animate="in"
     >
-      {/* Sidebar - Fixed height, no scroll */}
-      <motion.div variants={itemVariants} className="flex-shrink-0">
-        <AdminSidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          user={effectiveUser}
-          onLogout={handleLogout}
-        />
-      </motion.div>
+      {/* Sidebar */}
+      <AdminSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        user={effectiveUser}
+        onLogout={handleLogout}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+      />
 
       {/* Main Content - Scrollable */}
-      <motion.div 
+      <motion.div
         className="flex-1 flex flex-col overflow-hidden border-0 outline-none admin-main h-full"
         variants={itemVariants}
       >
         {/* Header */}
         <motion.div variants={itemVariants} className="flex-shrink-0">
-          <AdminHeader activeTab={activeTab} />
+          <AdminHeader activeTab={activeTab} onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} />
         </motion.div>
 
         {/* Content Area - Only this scrolls */}
-        <motion.main 
-          className="flex-1 overflow-y-auto overflow-x-hidden p-6 bg-transparent border-0 outline-none admin-content"
+        <motion.main
+          className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 bg-transparent border-0 outline-none admin-content"
           variants={containerVariants}
           initial="initial"
           animate="in"

@@ -1,20 +1,21 @@
 import React from 'react'
-import { 
-  LayoutDashboard, 
-  Users, 
-  PieChart, 
-  History, 
-  Target, 
-  Brain, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Users,
+  PieChart,
+  History,
+  Target,
+  Brain,
+  Bell,
   Settings,
   LogOut,
-  MessageSquare
+  MessageSquare,
+  X
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useData } from '../../context/DataContext'
 
-const FamilySidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunication }) => {
+const FamilySidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunication, isMobileSidebarOpen, onCloseMobileSidebar }) => {
   const { isBlackMode, isLightMode } = useTheme()
   const { portfolioValue, totalRoundUps } = useData()
   
@@ -62,76 +63,102 @@ const FamilySidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunic
   }
 
   return (
-    <aside className={`${getSidebarClass()} flex flex-col overflow-hidden`}>
-      <div className={`${getLogoClass()} flex-shrink-0`}>
-        <Users className={`w-8 h-8 ${getTextClass()}`} />
-        <h1 className={`text-xl font-bold ${getTextClass()}`}>Kamioi Family</h1>
-      </div>
-      
-      <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
-        {menuItems.map((item) => {
-          const IconComponent = item.icon;
-          const isActive = activeTab === item.id;
-          const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
-          
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={buttonClass}
-            >
-              <IconComponent className="w-5 h-5" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+    <>
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={onCloseMobileSidebar}
+        />
+      )}
 
-      {/* Quick Stats */}
-      <div className="flex-shrink-0 mb-4 p-4 rounded-lg bg-white/5 border border-white/10">
-        <h4 className={`font-semibold ${getTextClass()} mb-3`}>Family Quick Stats</h4>
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className={`text-sm ${getSubtextClass()}`}>Family Portfolio</span>
-            <span className={`text-sm font-semibold ${getTextClass()}`}>
-              ${portfolioValue.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className={`text-sm ${getSubtextClass()}`}>Total Round-ups</span>
-            <span className={`text-sm font-semibold ${getTextClass()}`}>
-              ${totalRoundUps.toLocaleString()}
-            </span>
+      <aside className={`${getSidebarClass()} flex flex-col overflow-hidden
+        fixed top-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+        ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:static md:translate-x-0 md:z-auto
+      `}>
+        <button
+          className="md:hidden absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors z-10"
+          onClick={onCloseMobileSidebar}
+        >
+          <X className={`w-5 h-5 ${getTextClass()}`} />
+        </button>
+
+        <div className={`${getLogoClass()} flex-shrink-0`}>
+          <Users className={`w-8 h-8 ${getTextClass()}`} />
+          <h1 className={`text-xl font-bold ${getTextClass()}`}>Kamioi Family</h1>
+        </div>
+
+        <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
+          {menuItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = activeTab === item.id;
+            const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id)
+                  if (onCloseMobileSidebar) onCloseMobileSidebar()
+                }}
+                className={buttonClass}
+              >
+                <IconComponent className="w-5 h-5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Quick Stats */}
+        <div className="flex-shrink-0 mb-4 p-4 rounded-lg bg-white/5 border border-white/10">
+          <h4 className={`font-semibold ${getTextClass()} mb-3`}>Family Quick Stats</h4>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className={`text-sm ${getSubtextClass()}`}>Family Portfolio</span>
+              <span className={`text-sm font-semibold ${getTextClass()}`}>
+                ${portfolioValue.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className={`text-sm ${getSubtextClass()}`}>Total Round-ups</span>
+              <span className={`text-sm font-semibold ${getTextClass()}`}>
+                ${totalRoundUps.toLocaleString()}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Cross-Dashboard Communication Button */}
-      <div className="flex-shrink-0">
-        <button
-          onClick={onOpenCommunication}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all mb-4 ${
-            isLightMode 
-              ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-              : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-          }`}
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span>Cross-Dashboard Chat</span>
-        </button>
-      </div>
+        {/* Cross-Dashboard Communication Button */}
+        <div className="flex-shrink-0">
+          <button
+            onClick={() => {
+              onOpenCommunication()
+              if (onCloseMobileSidebar) onCloseMobileSidebar()
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all mb-4 ${
+              isLightMode
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+            }`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span>Cross-Dashboard Chat</span>
+          </button>
+        </div>
 
-      {/* Logout Button - Fixed at bottom */}
-      <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
-        <button
-          onClick={onLogout}
-          className={getInactiveButtonClass()}
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Logout</span>
-        </button>
-      </div>
-    </aside>
+        {/* Logout Button - Fixed at bottom */}
+        <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
+          <button
+            onClick={onLogout}
+            className={getInactiveButtonClass()}
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+    </>
   )
 }
 

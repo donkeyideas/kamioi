@@ -364,3 +364,8 @@ select option {
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
 }
+
+/* Mobile sidebar open - prevent background scroll */
+body.mobile-sidebar-open {
+  overflow: hidden;
+}

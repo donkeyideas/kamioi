@@ -1,25 +1,26 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  BarChart3, 
-  Users, 
-  Target, 
-  CreditCard, 
-  TrendingUp, 
-  FileText, 
-  Server, 
+import {
+  BarChart3,
+  Users,
+  Target,
+  CreditCard,
+  TrendingUp,
+  FileText,
+  Server,
   Settings,
   Building2,
   LogOut,
   Bell,
   MessageSquare,
   Sparkles,
-  Brain
+  Brain,
+  X
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import V2Launcher from '../common/V2Launcher'
 
-const BusinessSidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunication }) => {
+const BusinessSidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunication, isMobileSidebarOpen, onCloseMobileSidebar }) => {
   const { isBlackMode, isLightMode } = useTheme()
   const { isBusinessAdmin, isBusinessManager, isBusinessEmployee, user: authUser } = useAuth()
   const [showV2Launcher, setShowV2Launcher] = useState(false)
@@ -137,89 +138,118 @@ const BusinessSidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommun
   })
 
   return (
-    <aside className={`${getSidebarClass()} flex flex-col overflow-hidden`}>
-      <div className={`${getLogoClass()} flex-shrink-0`}>
-        {companyLogo ? (
-          <img 
-            src={companyLogo} 
-            alt="Company Logo" 
-            className="w-12 h-12 object-contain"
-          />
-        ) : (
-          <Building2 className={`w-12 h-12 ${getTextClass()}`} />
-        )}
-        <div>
-          <h1 className={`text-xl font-bold ${getTextClass()}`}>
-            {companyName || user?.company_name || authUser?.company_name || user?.businessName || authUser?.businessName || 'Business'}
-          </h1>
-          <p className={`text-sm ${isLightMode ? 'text-gray-600' : 'text-white/60'}`}>Dashboard</p>
+    <>
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={onCloseMobileSidebar}
+        />
+      )}
+
+      <aside className={`${getSidebarClass()} flex flex-col overflow-hidden
+        fixed top-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+        ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:static md:translate-x-0 md:z-auto
+      `}>
+        <button
+          className="md:hidden absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors z-10"
+          onClick={onCloseMobileSidebar}
+        >
+          <X className={`w-5 h-5 ${getTextClass()}`} />
+        </button>
+
+        <div className={`${getLogoClass()} flex-shrink-0`}>
+          {companyLogo ? (
+            <img
+              src={companyLogo}
+              alt="Company Logo"
+              className="w-12 h-12 object-contain"
+            />
+          ) : (
+            <Building2 className={`w-12 h-12 ${getTextClass()}`} />
+          )}
+          <div>
+            <h1 className={`text-xl font-bold ${getTextClass()}`}>
+              {companyName || user?.company_name || authUser?.company_name || user?.businessName || authUser?.businessName || 'Business'}
+            </h1>
+            <p className={`text-sm ${isLightMode ? 'text-gray-600' : 'text-white/60'}`}>Dashboard</p>
+          </div>
         </div>
-      </div>
-      
-      <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
-        {filteredMenuItems.map((item) => {
-          const IconComponent = item.icon;
-          const isActive = activeTab === item.id;
-          const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
-          
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={buttonClass}
-            >
-              <IconComponent className="w-5 h-5" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
 
-      {/* Notifications Button - moved above Cross-Dashboard Chat */}
-      <div className="flex-shrink-0">
-        <button
-          onClick={() => setActiveTab('notifications')}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-300 mb-4 text-left ${
-            activeTab === 'notifications' 
-              ? (isLightMode ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400')
-              : (isLightMode ? 'text-gray-600 hover:text-gray-800 hover:bg-white/20 hover:backdrop-blur-sm hover:border hover:border-gray-300/30' : 'text-white/80 hover:text-white hover:bg-white/5 hover:backdrop-blur-sm hover:border hover:border-white/10')
-          }`}
-        >
-          <Bell className="w-5 h-5" />
-          <span>Notifications</span>
-        </button>
+        <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
+          {filteredMenuItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = activeTab === item.id;
+            const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
 
-        {/* Cross-Dashboard Communication Button */}
-        <button
-          onClick={onOpenCommunication}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-300 mb-4 text-left ${
-            isLightMode 
-              ? 'bg-white/20 backdrop-blur-sm border border-gray-300/50 text-gray-800 hover:bg-white/30' 
-              : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20'
-          }`}
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span>Cross-Dashboard Chat</span>
-        </button>
-      </div>
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id)
+                  if (onCloseMobileSidebar) onCloseMobileSidebar()
+                }}
+                className={buttonClass}
+              >
+                <IconComponent className="w-5 h-5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-      {/* Logout Button - Fixed at bottom */}
-      <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-300 text-left text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:backdrop-blur-sm hover:border hover:border-red-400/20"
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Logout</span>
-        </button>
-      </div>
+        {/* Notifications Button - moved above Cross-Dashboard Chat */}
+        <div className="flex-shrink-0">
+          <button
+            onClick={() => {
+              setActiveTab('notifications')
+              if (onCloseMobileSidebar) onCloseMobileSidebar()
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-300 mb-4 text-left ${
+              activeTab === 'notifications'
+                ? (isLightMode ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400')
+                : (isLightMode ? 'text-gray-600 hover:text-gray-800 hover:bg-white/20 hover:backdrop-blur-sm hover:border hover:border-gray-300/30' : 'text-white/80 hover:text-white hover:bg-white/5 hover:backdrop-blur-sm hover:border hover:border-white/10')
+            }`}
+          >
+            <Bell className="w-5 h-5" />
+            <span>Notifications</span>
+          </button>
 
-      {/* V2 Launcher Modal */}
-      <V2Launcher 
-        isOpen={showV2Launcher}
-        onClose={() => setShowV2Launcher(false)}
-      />
-    </aside>
+          {/* Cross-Dashboard Communication Button */}
+          <button
+            onClick={() => {
+              onOpenCommunication()
+              if (onCloseMobileSidebar) onCloseMobileSidebar()
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-300 mb-4 text-left ${
+              isLightMode
+                ? 'bg-white/20 backdrop-blur-sm border border-gray-300/50 text-gray-800 hover:bg-white/30'
+                : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20'
+            }`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span>Cross-Dashboard Chat</span>
+          </button>
+        </div>
+
+        {/* Logout Button - Fixed at bottom */}
+        <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-300 text-left text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:backdrop-blur-sm hover:border hover:border-red-400/20"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
+
+        {/* V2 Launcher Modal */}
+        <V2Launcher
+          isOpen={showV2Launcher}
+          onClose={() => setShowV2Launcher(false)}
+        />
+      </aside>
+    </>
   )
 }
 

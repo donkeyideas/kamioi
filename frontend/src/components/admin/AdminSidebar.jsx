@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { LayoutDashboard, DollarSign, FileText, Brain, Users, Settings, Bell, Award, Megaphone, Globe, CreditCard, Zap, MessageSquare, Database, LogOut, Home, Building2, UserCog, TrendingUp, Cog, GripVertical, BookOpen, Activity, User, Bug, UserPlus } from 'lucide-react'
+import { LayoutDashboard, DollarSign, FileText, Brain, Users, Settings, Bell, Award, Megaphone, Globe, CreditCard, Zap, MessageSquare, Database, LogOut, Home, Building2, UserCog, TrendingUp, Cog, GripVertical, BookOpen, Activity, User, Bug, UserPlus, X } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import prefetchRegistry from '../../services/prefetchRegistry'
 
-const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout }) => {
+const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout, isMobileSidebarOpen, onCloseMobileSidebar }) => {
   const { isBlackMode, isLightMode, isCloudMode } = useTheme()
   
   // Default order according to user specification
@@ -207,14 +207,33 @@ const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout }) => {
   }
 
   return (
-    <aside className={`${getSidebarClass()} flex flex-col overflow-hidden`}>
-      <div className={`${getLogoClass()} flex-shrink-0`}>
-        <Settings className={`w-8 h-8 ${getTextClass()}`} />
-        <h1 className={`text-xl font-bold ${getTextClass()}`}>Kamioi Admin</h1>
-      </div>
-      
-      <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
-        {menuItems.map((item, index) => {
+    <>
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={onCloseMobileSidebar}
+        />
+      )}
+
+      <aside className={`${getSidebarClass()} flex flex-col overflow-hidden
+        fixed top-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+        ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:static md:translate-x-0 md:z-auto
+      `}>
+        <button
+          className="md:hidden absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors z-10"
+          onClick={onCloseMobileSidebar}
+        >
+          <X className={`w-5 h-5 ${getTextClass()}`} />
+        </button>
+
+        <div className={`${getLogoClass()} flex-shrink-0`}>
+          <Settings className={`w-8 h-8 ${getTextClass()}`} />
+          <h1 className={`text-xl font-bold ${getTextClass()}`}>Kamioi Admin</h1>
+        </div>
+
+        <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
+          {menuItems.map((item, index) => {
           const IconComponent = item?.icon;
           const isActive = activeTab === item.id;
           const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
@@ -239,7 +258,10 @@ const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout }) => {
               className={`relative ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'mt-2 border-t-2 border-blue-500' : ''}`}
             >
               <button
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id)
+                  if (onCloseMobileSidebar) onCloseMobileSidebar()
+                }}
                 onMouseEnter={() => {
                   // Prefetch data when user hovers over menu item
                   // Check if we have a registered fetch function for this page
@@ -255,8 +277,8 @@ const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout }) => {
                 className={`${buttonClass} relative group`}
                 style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
               >
-                <GripVertical 
-                  className={`w-4 h-4 ${isActive ? 'text-white/60' : 'text-white/40'} group-hover:text-white/80 transition-opacity`} 
+                <GripVertical
+                  className={`hidden md:block w-4 h-4 ${isActive ? 'text-white/60' : 'text-white/40'} group-hover:text-white/80 transition-opacity`}
                   style={{ cursor: 'grab' }}
                 />
                 <SafeIcon className="w-5 h-5" />
@@ -267,16 +289,17 @@ const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout }) => {
         })}
       </nav>
 
-      <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
-        <button
-          onClick={onLogout}
-          className={getInactiveButtonClass()}
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Logout</span>
-        </button>
-      </div>
-    </aside>
+        <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
+          <button
+            onClick={onLogout}
+            className={getInactiveButtonClass()}
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+    </>
   )
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -23,6 +23,17 @@ const UserDashboard = () => {
   const { isDemoMode, getDemoUser, disableDemoMode } = useDemo()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showCommunication, setShowCommunication] = useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (isMobileSidebarOpen) {
+      document.body.classList.add('mobile-sidebar-open')
+    } else {
+      document.body.classList.remove('mobile-sidebar-open')
+    }
+    return () => document.body.classList.remove('mobile-sidebar-open')
+  }, [isMobileSidebarOpen])
 
   // CRITICAL FIX: Clear demo mode when real authenticated user accesses this dashboard
   // This prevents demo data from bleeding into real user accounts
@@ -138,25 +149,25 @@ const UserDashboard = () => {
       initial="initial"
       animate="in"
     >
-      <motion.div variants={itemVariants} className="flex-shrink-0">
-        <DashboardSidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          user={effectiveUser}
-          onLogout={effectiveLogout}
-          onOpenCommunication={() => setShowCommunication(true)}
-        />
-      </motion.div>
-      
-      <motion.div 
+      <DashboardSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        user={effectiveUser}
+        onLogout={effectiveLogout}
+        onOpenCommunication={() => setShowCommunication(true)}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+      />
+
+      <motion.div
         className="flex-1 flex flex-col overflow-hidden h-full"
         variants={itemVariants}
       >
         <motion.div variants={itemVariants} className="flex-shrink-0">
-          <DashboardHeader user={effectiveUser} />
+          <DashboardHeader user={effectiveUser} onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} />
         </motion.div>
-        
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6">
           <motion.div 
             className="max-w-7xl mx-auto"
             variants={containerVariants}

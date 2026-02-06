@@ -1,11 +1,11 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react'
-import { Sun, Moon, Cloud, Search, Bell, Settings, User, UserPlus } from 'lucide-react'
+import { Sun, Moon, Cloud, Search, Bell, Settings, User, UserPlus, Menu } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import { Link } from 'react-router-dom'
 
-const AdminHeader = ({ activeTab }) => {
+const AdminHeader = ({ activeTab, onToggleMobileSidebar }) => {
   const { isBlackMode, toggleTheme, isLightMode, isCloudMode, theme } = useTheme()
   const { unreadCount } = useNotifications()
   const [searchQuery, setSearchQuery] = useState('')
@@ -116,8 +116,14 @@ const AdminHeader = ({ activeTab }) => {
   return (
     <header className={`${getHeaderClass()} p-4`}>
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="relative">
+        <div className="flex items-center space-x-2 md:space-x-4">
+          <button
+            className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+            onClick={onToggleMobileSidebar}
+          >
+            <Menu className={`w-6 h-6 ${getTextClass()}`} />
+          </button>
+          <div className="relative hidden sm:block">
             <Search className={getSearchIconClass()} />
             <input
               type="text"
@@ -128,8 +134,8 @@ const AdminHeader = ({ activeTab }) => {
             />
           </div>
         </div>
-        
-        <div className="flex items-center space-x-4">
+
+        <div className="flex items-center space-x-2 md:space-x-4">
           {/* Theme Toggle */}
           <button 
             onClick={toggleTheme}
@@ -172,7 +178,7 @@ const AdminHeader = ({ activeTab }) => {
 
           {/* User Profile */}
           <div className="flex items-center space-x-3">
-            <span className={getUserNameClass()}>Admin User</span>
+            <span className={`hidden md:inline ${getUserNameClass()}`}>Admin User</span>
           </div>
         </div>
       </div>

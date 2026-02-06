@@ -1,20 +1,21 @@
 ﻿import React, { useState, useEffect } from 'react'
-import { 
-  LayoutDashboard, 
-  PieChart, 
-  History, 
-  Brain, 
-  Trophy, 
+import {
+  LayoutDashboard,
+  PieChart,
+  History,
+  Brain,
+  Trophy,
   Settings,
   TrendingUp,
   LogOut,
   BarChart3,
-  MessageSquare
+  MessageSquare,
+  X
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import V2Launcher from '../common/V2Launcher'
 
-const DashboardSidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunication }) => {
+const DashboardSidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommunication, isMobileSidebarOpen, onCloseMobileSidebar }) => {
   const { isBlackMode, isLightMode } = useTheme()
   const [showV2Launcher, setShowV2Launcher] = useState(false)
   const [activeAd, setActiveAd] = useState(null)
@@ -101,89 +102,117 @@ const DashboardSidebar = ({ activeTab, setActiveTab, user, onLogout, onOpenCommu
   }
 
   return (
-    <aside className={`${getSidebarClass()} flex flex-col overflow-hidden`}>
-      <div className={`${getLogoClass()} flex-shrink-0`}>
-        <TrendingUp className={`w-8 h-8 ${getTextClass()}`} />
-        <h1 className={`text-xl font-bold ${getTextClass()}`}>Kamioi</h1>
-      </div>
-      
-      <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
-        {menuItems.map((item) => {
-          const IconComponent = item.icon;
-          const isActive = activeTab === item.id;
-          const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
-          
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={buttonClass}
-            >
-              <IconComponent className="w-5 h-5" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Dynamic Advertisement Space - Only show if admin has activated an ad */}
-      {activeAd && (user?.role === 'user' || user?.role === 'family') && (
-        <div className={`${getAdSpaceClass()} flex-shrink-0`}>
-          <div className="mb-3">
-            <div className={`w-full h-20 bg-gradient-to-r ${activeAd.gradient || 'from-blue-600 to-purple-600'} rounded-lg mb-2 flex items-center justify-center`}>
-              <div className="text-center">
-                <div className="text-white font-bold text-lg">{activeAd.title}</div>
-                <div className="text-white/80 text-xs">{activeAd.subtitle}</div>
-              </div>
-            </div>
-          </div>
-          <p className={getAdTextClass()}>{activeAd.description}</p>
-          <p className={getAdSubtextClass()}>{activeAd.offer}</p>
-          <button 
-            onClick={() => window.open(activeAd.link, '_blank')}
-            className={`mt-2 px-3 py-1 rounded text-xs font-medium transition-colors ${
-              isLightMode 
-                ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-            }`}
-          >
-            {activeAd.buttonText || 'Learn More'}
-          </button>
-        </div>
+    <>
+      {/* Mobile backdrop overlay */}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={onCloseMobileSidebar}
+        />
       )}
 
-      {/* Cross-Dashboard Communication Button */}
-      <div className="flex-shrink-0">
+      <aside className={`${getSidebarClass()} flex flex-col overflow-hidden
+        fixed top-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+        ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:static md:translate-x-0 md:z-auto
+      `}>
+        {/* Mobile close button */}
         <button
-          onClick={onOpenCommunication}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all mb-4 ${
-            isLightMode 
-              ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-              : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-          }`}
+          className="md:hidden absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors z-10"
+          onClick={onCloseMobileSidebar}
         >
-          <MessageSquare className="w-5 h-5" />
-          <span>Cross-Dashboard Chat</span>
+          <X className={`w-5 h-5 ${getTextClass()}`} />
         </button>
-      </div>
 
-      {/* Logout Button - Fixed at bottom */}
-      <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
-        <button
-          onClick={onLogout}
-          className={getInactiveButtonClass()}
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Logout</span>
-        </button>
-      </div>
+        <div className={`${getLogoClass()} flex-shrink-0`}>
+          <TrendingUp className={`w-8 h-8 ${getTextClass()}`} />
+          <h1 className={`text-xl font-bold ${getTextClass()}`}>Kamioi</h1>
+        </div>
 
-      {/* V2 Launcher Modal */}
-      <V2Launcher 
-        isOpen={showV2Launcher}
-        onClose={() => setShowV2Launcher(false)}
-      />
-    </aside>
+        <nav className="space-y-2 flex-1 overflow-y-auto overflow-x-hidden pr-2">
+          {menuItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = activeTab === item.id;
+            const buttonClass = isActive ? getActiveButtonClass() : getInactiveButtonClass();
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id)
+                  if (onCloseMobileSidebar) onCloseMobileSidebar()
+                }}
+                className={buttonClass}
+              >
+                <IconComponent className="w-5 h-5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Dynamic Advertisement Space - Only show if admin has activated an ad */}
+        {activeAd && (user?.role === 'user' || user?.role === 'family') && (
+          <div className={`${getAdSpaceClass()} flex-shrink-0`}>
+            <div className="mb-3">
+              <div className={`w-full h-20 bg-gradient-to-r ${activeAd.gradient || 'from-blue-600 to-purple-600'} rounded-lg mb-2 flex items-center justify-center`}>
+                <div className="text-center">
+                  <div className="text-white font-bold text-lg">{activeAd.title}</div>
+                  <div className="text-white/80 text-xs">{activeAd.subtitle}</div>
+                </div>
+              </div>
+            </div>
+            <p className={getAdTextClass()}>{activeAd.description}</p>
+            <p className={getAdSubtextClass()}>{activeAd.offer}</p>
+            <button
+              onClick={() => window.open(activeAd.link, '_blank')}
+              className={`mt-2 px-3 py-1 rounded text-xs font-medium transition-colors ${
+                isLightMode
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-blue-500 text-white hover:bg-blue-600'
+              }`}
+            >
+              {activeAd.buttonText || 'Learn More'}
+            </button>
+          </div>
+        )}
+
+        {/* Cross-Dashboard Communication Button */}
+        <div className="flex-shrink-0">
+          <button
+            onClick={() => {
+              onOpenCommunication()
+              if (onCloseMobileSidebar) onCloseMobileSidebar()
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all mb-4 ${
+              isLightMode
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+            }`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span>Cross-Dashboard Chat</span>
+          </button>
+        </div>
+
+        {/* Logout Button - Fixed at bottom */}
+        <div className="flex-shrink-0 pt-4 border-t border-white/10 mt-4">
+          <button
+            onClick={onLogout}
+            className={getInactiveButtonClass()}
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
+
+        {/* V2 Launcher Modal */}
+        <V2Launcher
+          isOpen={showV2Launcher}
+          onClose={() => setShowV2Launcher(false)}
+        />
+      </aside>
+    </>
   )
 }
 
