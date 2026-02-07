@@ -25,6 +25,7 @@ import {
   CheckCircle,
   Lightbulb,
   Wand2,
+  Sparkles,
   List,
   PieChart
 } from 'lucide-react'
@@ -71,6 +72,7 @@ const BlogEditor = ({ post, onSave, onCancel, isEditing = false }) => {
   const [imageData, setImageData] = useState({ url: '', alt: '' })
   const [showChartModal, setShowChartModal] = useState(false)
   const [chartData, setChartData] = useState({ url: '', title: '' })
+  const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
     if (post) {
@@ -174,6 +176,59 @@ const BlogEditor = ({ post, onSave, onCancel, isEditing = false }) => {
       ...prev,
       tags: Array.isArray(prev.tags) ? prev.tags.filter(tag => tag !== tagToRemove) : []
     }))
+  }
+
+  // AI blog content generation via DeepSeek
+  const handleAIGenerate = async () => {
+    if (!formData.title.trim()) {
+      addNotification('Please enter a title first', 'error')
+      return
+    }
+    setIsGenerating(true)
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+      const res = await fetch(`${apiBaseUrl}/api/admin/blog/ai-generate`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: formData.title.trim() })
+      })
+      const json = await res.json()
+      if (json.success && json.generated) {
+        const g = json.generated
+        const schemaStr = typeof g.schema_markup === 'object' ? JSON.stringify(g.schema_markup, null, 2) : (g.schema_markup || '')
+        setFormData(prev => ({
+          ...prev,
+          content: g.content || prev.content,
+          excerpt: g.excerpt || prev.excerpt,
+          slug: g.slug || prev.slug,
+          category: g.category || prev.category,
+          tags: Array.isArray(g.tags) ? g.tags : prev.tags,
+          seo_title: g.seo_title || prev.seo_title,
+          seo_description: g.seo_description || prev.seo_description,
+          seo_keywords: g.seo_keywords || prev.seo_keywords,
+          og_title: g.og_title || prev.og_title,
+          og_description: g.og_description || prev.og_description,
+          twitter_title: g.og_title || prev.twitter_title,
+          twitter_description: g.og_description || prev.twitter_description,
+          schema_markup: schemaStr
+        }))
+        // Update content HTML for the editor
+        if (g.content) {
+          setContentHtml(markdownToHtml(g.content))
+        }
+        addNotification(`Blog content generated! (${json.tokens_used} tokens, ${(json.processing_time_ms / 1000).toFixed(1)}s)`, 'success')
+        // Trigger SEO analysis after a brief delay
+        setTimeout(() => runAISEOAnalysis(), 500)
+      } else {
+        addNotification(json.error || 'Failed to generate content', 'error')
+      }
+    } catch (err) {
+      addNotification('Failed to connect to AI service', 'error')
+      console.error('AI generation error:', err)
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   // Local SEO analysis - no backend API needed
@@ -989,13 +1044,40 @@ const BlogEditor = ({ post, onSave, onCancel, isEditing = false }) => {
                     <label className={`block text-sm font-medium ${getTextColor()} mb-2`}>
                       Title *
                     </label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => handleInputChange('title', e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${getInputClass()}`}
-                      placeholder="Enter blog post title"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.title}
+                        onChange={(e) => handleInputChange('title', e.target.value)}
+                        className={`flex-1 px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${getInputClass()}`}
+                        placeholder="Enter blog post title"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAIGenerate}
+                        disabled={isGenerating || !formData.title.trim()}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
+                          isGenerating
+                            ? 'bg-purple-500/30 text-purple-300 cursor-wait'
+                            : formData.title.trim()
+                              ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600 shadow-lg shadow-purple-500/25'
+                              : 'bg-gray-500/20 text-gray-500 cursor-not-allowed'
+                        }`}
+                        title="Generate full blog content with AI"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Sparkles className="w-4 h-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Generate with AI
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <div>

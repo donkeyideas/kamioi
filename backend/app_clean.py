@@ -22380,6 +22380,127 @@ def admin_ai_seo_optimize():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/admin/blog/ai-generate', methods=['POST'])
+def admin_blog_ai_generate():
+    """Generate blog content using DeepSeek AI optimized for high SEO scores"""
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        data = request.get_json()
+        title = data.get('title', '').strip()
+        if not title:
+            return jsonify({'success': False, 'error': 'Title is required'}), 400
+
+        import urllib.request
+        import socket
+        from datetime import datetime as dt
+
+        api_key = os.environ.get('DEEPSEEK_API_KEY', 'sk-20c74c5e5f2c425397645546b92d3ed2')
+        start_time = dt.now()
+
+        system_prompt = (
+            "You are an expert SEO content writer for Kamioi, an AI-powered micro-investing fintech platform "
+            "that turns everyday purchases into stock ownership through automatic round-up investing. "
+            "Write engaging, informative content optimized for search engines. "
+            "Always respond in valid JSON format only."
+        )
+
+        user_prompt = f"""Write a complete, SEO-optimized blog post with the title: "{title}"
+
+Return a JSON object with these exact keys:
+- "content": Full blog post in markdown format (1000+ words). Use ## for section headings, **bold** for key terms, bullet lists with - prefix, and include statistics/data points. Write 5-7 sections with clear headings. Make it educational and actionable.
+- "excerpt": A compelling 2-sentence summary (under 160 characters)
+- "slug": URL-friendly slug derived from the title (lowercase, hyphens, no special chars)
+- "category": One category from: Investing, Finance, Education, Technology, Lifestyle, Savings, Beginners
+- "tags": Array of 4-6 relevant tags as strings
+- "seo_title": SEO-optimized title (30-60 characters, include primary keyword)
+- "seo_description": Meta description (120-160 characters, include call-to-action)
+- "seo_keywords": Comma-separated focus keywords (5-8 keywords)
+- "og_title": Open Graph title (concise, engaging)
+- "og_description": Open Graph description (compelling, under 200 chars)
+- "schema_markup": Valid Article JSON-LD schema as a JSON string with @context, @type Article, headline, description, datePublished (use today's date), author object with @type Person and name Kamioi Team
+
+Important: The content should relate to personal finance, investing, micro-investing, round-ups, fractional shares, or wealth building. Make it valuable for beginners."""
+
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4000,
+            "response_format": {"type": "json_object"}
+        }
+
+        headers_api = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        socket.setdefaulttimeout(90)
+        try:
+            req = urllib.request.Request(
+                'https://api.deepseek.com/v1/chat/completions',
+                data=json.dumps(payload).encode('utf-8'),
+                headers=headers_api
+            )
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                response_text = resp.read().decode('utf-8')
+                api_response = json.loads(response_text)
+        finally:
+            socket.setdefaulttimeout(None)
+
+        # Parse response
+        content_raw = api_response.get('choices', [{}])[0].get('message', {}).get('content', '')
+        content_clean = content_raw.strip()
+        if content_clean.startswith('```json'):
+            content_clean = content_clean[7:]
+        if content_clean.startswith('```'):
+            content_clean = content_clean[3:]
+        if content_clean.endswith('```'):
+            content_clean = content_clean[:-3]
+        generated = json.loads(content_clean.strip())
+
+        # Track API usage
+        processing_time = int((dt.now() - start_time).total_seconds() * 1000)
+        usage = api_response.get('usage', {})
+        try:
+            from services.api_usage_tracker import APIUsageTracker
+            tracker = APIUsageTracker()
+            tracker.record_api_call(
+                endpoint='/api/admin/blog/ai-generate',
+                model='deepseek-chat',
+                prompt_tokens=usage.get('prompt_tokens', 0),
+                completion_tokens=usage.get('completion_tokens', 0),
+                total_tokens=usage.get('total_tokens', 0),
+                processing_time_ms=processing_time,
+                success=True,
+                user_id=1,
+                page_tab='Blog AI Generation',
+                request_data=json.dumps({'title': title}),
+                response_data=content_raw[:2000]
+            )
+        except Exception as track_err:
+            print(f"Warning: Could not track API usage: {track_err}")
+
+        return jsonify({
+            'success': True,
+            'generated': generated,
+            'processing_time_ms': processing_time,
+            'tokens_used': usage.get('total_tokens', 0)
+        })
+
+    except json.JSONDecodeError as e:
+        return jsonify({'success': False, 'error': f'Failed to parse AI response: {str(e)}'}), 500
+    except Exception as e:
+        error_msg = str(e)
+        if 'timed out' in error_msg.lower():
+            return jsonify({'success': False, 'error': 'AI generation timed out. Please try again.'}), 504
+        return jsonify({'success': False, 'error': error_msg}), 500
+
 # Public blog endpoints (no authentication required)
 @app.route('/api/blog/posts', methods=['GET'])
 def public_get_blog_posts():
