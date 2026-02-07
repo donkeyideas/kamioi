@@ -91,7 +91,7 @@ const CircularGauge = ({ score, label, size = 140, strokeWidth = 10 }) => {
         <span className="text-3xl font-bold text-white">{score}</span>
         <span className="text-[10px] uppercase tracking-wider text-gray-400 mt-0.5">/ 100</span>
       </div>
-      <span className="text-sm font-medium text-center leading-tight mt-1">{label}</span>
+      <span className="text-sm font-medium text-center leading-tight mt-1 text-white">{label}</span>
     </div>
   )
 }
@@ -175,6 +175,7 @@ const SeoOverviewDashboard = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [gscStatus, setGscStatus] = useState(null)
 
   // Theme helpers
   const getTextColor = () => (isLightMode ? 'text-gray-800' : 'text-white')
@@ -223,6 +224,15 @@ const SeoOverviewDashboard = () => {
 
   useEffect(() => {
     fetchData()
+    // Fetch GSC connection status
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+    const tkn = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+    fetch(`${apiBaseUrl}/api/admin/seo-geo/gsc-status`, {
+      headers: { 'Authorization': `Bearer ${tkn}`, 'Content-Type': 'application/json' }
+    })
+      .then(r => r.json())
+      .then(json => { if (json.success) setGscStatus(json.data) })
+      .catch(() => {})
   }, [fetchData])
 
   // Dispatch page load event
@@ -362,6 +372,24 @@ const SeoOverviewDashboard = () => {
           {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* GSC Connection Status                                             */}
+      {/* ----------------------------------------------------------------- */}
+      {gscStatus && (
+        <div className={`flex items-center gap-3 px-5 py-3 rounded-xl text-sm ${
+          gscStatus.connected
+            ? isLightMode ? 'bg-green-50 border border-green-200' : 'bg-green-500/10 border border-green-500/20'
+            : isLightMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-yellow-500/10 border border-yellow-500/20'
+        }`}>
+          <div className={`w-2.5 h-2.5 rounded-full ${gscStatus.connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
+          <span style={{ color: isLightMode ? '#374151' : '#d1d5db' }}>
+            {gscStatus.connected
+              ? <>Google Search Console connected — <strong>{gscStatus.site_url}</strong></>
+              : 'Google Search Console not connected — showing demo data'}
+          </span>
+        </div>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Circular Score Gauges                                             */}
