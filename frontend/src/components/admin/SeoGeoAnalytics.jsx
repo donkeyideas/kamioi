@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BarChart3, TrendingUp, Settings, FileText, Code, Brain, Lightbulb, RefreshCw } from 'lucide-react'
+import { BarChart3, TrendingUp, Settings, FileText, Code, Brain, Lightbulb, RefreshCw, Search, Activity } from 'lucide-react'
 
 // Sub-components
 import SeoOverviewDashboard from './seo-geo/SeoOverviewDashboard'
@@ -11,6 +11,8 @@ import StructuredDataPanel from './seo-geo/StructuredDataPanel'
 import GeoAiOptimization from './seo-geo/GeoAiOptimization'
 import RankingsTraffic from './seo-geo/RankingsTraffic'
 import SeoRecommendations from './seo-geo/SeoRecommendations'
+import GoogleSearchConsole from './seo-geo/GoogleSearchConsole'
+import GoogleAnalytics from './seo-geo/GoogleAnalytics'
 
 const SeoGeoAnalytics = () => {
   const { isDarkMode, isLightMode, isCloudMode } = useTheme()
@@ -31,6 +33,8 @@ const SeoGeoAnalytics = () => {
     { id: 'structured-data', label: 'Structured Data', icon: Code },
     { id: 'geo', label: 'GEO / AI Search', icon: Brain },
     { id: 'recommendations', label: 'Recommendations', icon: Lightbulb },
+    { id: 'gsc', label: 'Search Console', icon: Search },
+    { id: 'ga4', label: 'Analytics', icon: Activity },
   ]
 
   // Emit page load complete event
@@ -59,6 +63,10 @@ const SeoGeoAnalytics = () => {
         return <GeoAiOptimization />
       case 'recommendations':
         return <SeoRecommendations />
+      case 'gsc':
+        return <GoogleSearchConsole />
+      case 'ga4':
+        return <GoogleAnalytics />
       default:
         return <SeoOverviewDashboard />
     }

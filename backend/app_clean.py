@@ -25872,7 +25872,7 @@ class SeoAuditEngine:
         {'name': 'cohere-ai', 'user_agent': 'cohere-ai', 'owner': 'Cohere'},
     ]
 
-    SCHEMA_TYPES = ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'Article', 'HowTo']
+    SCHEMA_TYPES = ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'FinancialProduct', 'HowTo']
 
     def __init__(self):
         self._tables_ensured = False
@@ -26294,7 +26294,6 @@ class SeoAuditEngine:
                     'google_rich_results_eligible': st in ['FAQPage', 'HowTo', 'Article', 'BreadcrumbList'], 'warnings': []})
             validation.append({'page': page['url'], 'page_name': page['name'], 'schemas': page_schemas})
         opportunities = [
-            {'schema': 'FinancialProduct', 'page': '/pricing', 'reason': 'Pricing page would benefit from FinancialProduct schema for fintech search queries'},
             {'schema': 'Review', 'page': '/', 'reason': 'Adding Review/Rating schema to homepage could enable star ratings in search results'},
             {'schema': 'VideoObject', 'page': '/how-it-works', 'reason': 'If tutorial videos are added, VideoObject schema enables video rich results'}]
         return {'coverage_matrix': coverage_matrix, 'coverage_percentages': coverage_pcts,

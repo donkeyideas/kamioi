@@ -231,7 +231,7 @@ const SeoRecommendations = () => {
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={progressData()}>
             <CartesianGrid strokeDasharray="3 3" stroke={isLightMode ? '#e5e7eb' : '#374151'} />
-            <XAxis dataKey="date" tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
+            <XAxis dataKey="date" tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 10 }} tickFormatter={(v) => { const p = v.split('-'); return `${parseInt(p[1])}/${parseInt(p[2])}` }} />
             <YAxis tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 12 }} />
             <Tooltip contentStyle={{ backgroundColor: isLightMode ? '#fff' : '#1f2937', border: isLightMode ? '1px solid #e5e7eb' : '1px solid #374151', borderRadius: '8px', color: isLightMode ? '#111' : '#fff' }} />
             <Area type="monotone" dataKey="resolved" stackId="1" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} name="Resolved" />

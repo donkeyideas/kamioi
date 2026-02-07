@@ -40,7 +40,7 @@ const StructuredDataPanel = () => {
     }
   }
 
-  const schemaTypes = ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'Article', 'HowTo']
+  const schemaTypes = ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'FinancialProduct', 'HowTo']
 
   const getCoverageColor = (pct) => {
     if (pct >= 80) return 'text-green-400'

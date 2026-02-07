@@ -117,7 +117,7 @@ class SeoAuditEngine:
         {'name': 'cohere-ai', 'user_agent': 'cohere-ai', 'owner': 'Cohere'},
     ]
 
-    SCHEMA_TYPES = ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'Article', 'HowTo']
+    SCHEMA_TYPES = ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'FinancialProduct', 'HowTo']
 
     def __init__(self):
         self._ensure_tables()
@@ -818,11 +818,6 @@ class SeoAuditEngine:
             })
 
         opportunities = [
-            {
-                'schema': 'FinancialProduct',
-                'page': '/pricing',
-                'reason': 'Pricing page would benefit from FinancialProduct schema for fintech search queries'
-            },
             {
                 'schema': 'Review',
                 'page': '/',

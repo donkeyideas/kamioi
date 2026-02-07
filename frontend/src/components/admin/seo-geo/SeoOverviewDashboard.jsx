@@ -88,7 +88,7 @@ const CircularGauge = ({ score, label, size = 140, strokeWidth = 10 }) => {
         className="absolute flex flex-col items-center justify-center"
         style={{ width: size, height: size }}
       >
-        <span className={`text-3xl font-bold ${colors.text}`}>{score}</span>
+        <span className="text-3xl font-bold text-white">{score}</span>
         <span className="text-[10px] uppercase tracking-wider text-gray-400 mt-0.5">/ 100</span>
       </div>
       <span className="text-sm font-medium text-center leading-tight mt-1">{label}</span>
@@ -401,6 +401,10 @@ const SeoOverviewDashboard = () => {
                 tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
+                tickFormatter={(v) => {
+                  const d = new Date(v + 'T00:00:00')
+                  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                }}
               />
               <YAxis
                 domain={[0, 100]}

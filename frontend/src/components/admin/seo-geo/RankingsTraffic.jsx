@@ -108,7 +108,10 @@ const RankingsTraffic = () => {
               <XAxis
                 dataKey="date"
                 tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 10 }}
-                tickFormatter={(v) => v.slice(5)}
+                tickFormatter={(v) => {
+                  const parts = v.split('-')
+                  return `${parseInt(parts[1] || parts[0])}/${parseInt(parts[2] || parts[1])}`
+                }}
               />
               <YAxis yAxisId="left" tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 12 }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fill: isLightMode ? '#6b7280' : '#9ca3af', fontSize: 12 }} />
@@ -237,44 +240,6 @@ const RankingsTraffic = () => {
         </div>
       </div>
 
-      {/* Integration Settings */}
-      <div className={getCardClass()}>
-        <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>Integration Settings</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className={`${isLightMode ? 'bg-gray-50 rounded-xl p-4 border border-gray-100' : 'bg-white/5 rounded-xl p-4 border border-white/10'}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  <Search size={20} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className={`font-medium ${getTextColor()}`}>Google Search Console</p>
-                  <p className={`text-xs ${getSubtextClass()}`}>Keyword rankings & search performance</p>
-                </div>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${isLightMode ? 'bg-gray-200 text-gray-600' : 'bg-white/10 text-gray-400'}`}>
-                Not Connected
-              </span>
-            </div>
-          </div>
-          <div className={`${isLightMode ? 'bg-gray-50 rounded-xl p-4 border border-gray-100' : 'bg-white/5 rounded-xl p-4 border border-white/10'}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <BarChart3 size={20} className="text-green-400" />
-                </div>
-                <div>
-                  <p className={`font-medium ${getTextColor()}`}>Google Analytics 4</p>
-                  <p className={`text-xs ${getSubtextClass()}`}>Traffic data & user behavior</p>
-                </div>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${isLightMode ? 'bg-gray-200 text-gray-600' : 'bg-white/10 text-gray-400'}`}>
-                Not Connected
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
