@@ -10,7 +10,7 @@ const GoogleAnalyticsTracker = () => {
     const initGA = () => {
       // Replace with your actual GA4 Measurement ID
       // To find this: Go to Google Analytics → Admin → Data Streams → Web → Measurement ID
-      const GA_MEASUREMENT_ID = 'G-353505238' // Replace with your actual GA4 Measurement ID
+      const GA_MEASUREMENT_ID = 'G-SPF57B5KCR'
       
       // Load Google Analytics script
       const script = document.createElement('script')
@@ -32,7 +32,7 @@ const GoogleAnalyticsTracker = () => {
     // Track page views
     const trackPageView = () => {
       if (window.gtag) {
-        window.gtag('config', 'G-353505238', {
+        window.gtag('config', 'G-SPF57B5KCR', {
           page_title: document.title,
           page_location: window.location.href,
           page_path: location.pathname

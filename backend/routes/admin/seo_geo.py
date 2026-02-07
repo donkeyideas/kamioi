@@ -1078,6 +1078,153 @@ def _gsc_get_traffic():
 
 
 # ============================================================
+# Google Analytics 4 Data API Integration
+# ============================================================
+_ga4_client = None
+_ga4_property_id = None
+
+def _get_ga4_client():
+    global _ga4_client, _ga4_property_id
+    if _ga4_client is not None:
+        return _ga4_client, _ga4_property_id
+    _ga4_property_id = os.environ.get('GOOGLE_ANALYTICS_PROPERTY_ID')
+    gsc_json_b64 = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+    if not _ga4_property_id or not gsc_json_b64:
+        return None, None
+    try:
+        from google.oauth2 import service_account
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+        creds_json = json.loads(base64.b64decode(gsc_json_b64))
+        creds = service_account.Credentials.from_service_account_info(
+            creds_json, scopes=['https://www.googleapis.com/auth/analytics.readonly'])
+        _ga4_client = BetaAnalyticsDataClient(credentials=creds)
+        print(f"[GA4] Connected to Google Analytics 4 property {_ga4_property_id}")
+        return _ga4_client, _ga4_property_id
+    except Exception as e:
+        print(f"[GA4] Failed to initialize: {e}")
+        _ga4_client = None
+        return None, None
+
+
+def _ga4_get_overview():
+    client, prop_id = _get_ga4_client()
+    if not client:
+        return None
+    try:
+        from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric
+        request = RunReportRequest(
+            property=f"properties/{prop_id}",
+            date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+            metrics=[Metric(name="activeUsers"), Metric(name="sessions"), Metric(name="screenPageViews"),
+                     Metric(name="bounceRate"), Metric(name="averageSessionDuration"), Metric(name="newUsers")]
+        )
+        response = client.run_report(request)
+        row = response.rows[0] if response.rows else None
+        if not row:
+            return None
+        return {
+            'active_users': int(row.metric_values[0].value),
+            'sessions': int(row.metric_values[1].value),
+            'page_views': int(row.metric_values[2].value),
+            'bounce_rate': round(float(row.metric_values[3].value) * 100, 1),
+            'avg_session_duration': round(float(row.metric_values[4].value), 1),
+            'new_users': int(row.metric_values[5].value),
+        }
+    except Exception as e:
+        print(f"[GA4] Error fetching overview: {e}")
+        return None
+
+
+def _ga4_get_traffic_sources():
+    client, prop_id = _get_ga4_client()
+    if not client:
+        return None
+    try:
+        from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
+        request = RunReportRequest(
+            property=f"properties/{prop_id}",
+            date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+            dimensions=[Dimension(name="sessionDefaultChannelGroup")],
+            metrics=[Metric(name="sessions"), Metric(name="activeUsers")],
+            limit=10
+        )
+        response = client.run_report(request)
+        sources = []
+        total = sum(int(r.metric_values[0].value) for r in response.rows) or 1
+        for row in response.rows:
+            sessions = int(row.metric_values[0].value)
+            sources.append({
+                'source': row.dimension_values[0].value,
+                'sessions': sessions,
+                'users': int(row.metric_values[1].value),
+                'value': round(sessions / total * 100, 1)
+            })
+        return sources
+    except Exception as e:
+        print(f"[GA4] Error fetching traffic sources: {e}")
+        return None
+
+
+def _ga4_get_top_pages():
+    client, prop_id = _get_ga4_client()
+    if not client:
+        return None
+    try:
+        from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
+        request = RunReportRequest(
+            property=f"properties/{prop_id}",
+            date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+            dimensions=[Dimension(name="pagePath")],
+            metrics=[Metric(name="screenPageViews"), Metric(name="activeUsers"),
+                     Metric(name="bounceRate"), Metric(name="averageSessionDuration")],
+            limit=10
+        )
+        response = client.run_report(request)
+        pages = []
+        for row in response.rows:
+            pages.append({
+                'page': row.dimension_values[0].value,
+                'views': int(row.metric_values[0].value),
+                'users': int(row.metric_values[1].value),
+                'bounce_rate': round(float(row.metric_values[2].value) * 100, 1),
+                'avg_duration': f"{int(float(row.metric_values[3].value) // 60)}m {int(float(row.metric_values[3].value) % 60):02d}s"
+            })
+        return pages
+    except Exception as e:
+        print(f"[GA4] Error fetching top pages: {e}")
+        return None
+
+
+def _ga4_get_daily_traffic():
+    client, prop_id = _get_ga4_client()
+    if not client:
+        return None
+    try:
+        from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
+        request = RunReportRequest(
+            property=f"properties/{prop_id}",
+            date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+            dimensions=[Dimension(name="date")],
+            metrics=[Metric(name="activeUsers"), Metric(name="sessions"), Metric(name="screenPageViews")],
+            order_bys=[{"dimension": {"dimension_name": "date"}}]
+        )
+        response = client.run_report(request)
+        time_series = []
+        for row in response.rows:
+            d = row.dimension_values[0].value
+            time_series.append({
+                'date': f"{d[:4]}-{d[4:6]}-{d[6:8]}",
+                'users': int(row.metric_values[0].value),
+                'sessions': int(row.metric_values[1].value),
+                'page_views': int(row.metric_values[2].value),
+            })
+        return time_series
+    except Exception as e:
+        print(f"[GA4] Error fetching daily traffic: {e}")
+        return None
+
+
+# ============================================================
 # Demo Data for Rankings & Traffic
 # ============================================================
 
@@ -1249,6 +1396,43 @@ def get_seo_traffic():
         return jsonify({'success': True, 'data': data})
     except Exception as e:
         print(f"Error getting traffic data: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/seo-geo/ga4-status', methods=['GET'])
+def get_ga4_status():
+    """Check Google Analytics 4 connection status."""
+    try:
+        client, prop_id = _get_ga4_client()
+        connected = client is not None
+        return jsonify({'success': True, 'data': {
+            'connected': connected,
+            'property_id': prop_id if connected else None,
+            'measurement_id': 'G-SPF57B5KCR',
+            'source': 'live' if connected else 'demo'
+        }})
+    except Exception:
+        return jsonify({'success': True, 'data': {'connected': False, 'source': 'demo'}})
+
+
+@admin_bp.route('/seo-geo/ga4-data', methods=['GET'])
+def get_ga4_data():
+    """Get Google Analytics 4 data."""
+    try:
+        overview = _ga4_get_overview()
+        if not overview:
+            return jsonify({'success': True, 'data': None, 'source': 'demo'})
+        sources = _ga4_get_traffic_sources() or []
+        top_pages = _ga4_get_top_pages() or []
+        daily = _ga4_get_daily_traffic() or []
+        return jsonify({'success': True, 'data': {
+            'overview': overview,
+            'traffic_sources': sources,
+            'top_pages': top_pages,
+            'daily_traffic': daily,
+        }, 'source': 'ga4'})
+    except Exception as e:
+        print(f"Error getting GA4 data: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
