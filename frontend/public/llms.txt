@@ -1,0 +1,48 @@
+# Kamioi - AI-Powered Automatic Investing Platform
+
+## About
+Kamioi is an AI-powered micro-investing fintech platform that turns everyday purchases into stock ownership through automatic round-up investing. Users connect their bank account, and every purchase is rounded up to the nearest dollar with the spare change automatically invested in fractional shares.
+
+## Key Features
+- Automatic round-up investing from everyday purchases
+- AI-powered stock matching and portfolio optimization
+- Fractional share purchases starting from $1
+- Real-time portfolio tracking and performance analytics
+- Family investing with shared dashboards (up to 5 members)
+- Business plans for teams and investment clubs (up to 20 users)
+- Bank-level 256-bit encryption and SIPC insurance
+- Two-factor authentication for account security
+
+## Plans & Pricing
+- Individual Plan: $9/month - Personal automatic investing
+- Family Plan: $19/month - Up to 5 family members
+- Business Plan: $49/month - Up to 20 users with admin controls
+- All plans include unlimited automatic investments, no trading fees
+
+## Content Taxonomy
+
+### Main Pages
+- Homepage: https://kamioi.com/
+- Features: https://kamioi.com/features
+- How It Works: https://kamioi.com/how-it-works
+- Pricing: https://kamioi.com/pricing
+- Learn: https://kamioi.com/learn
+- Blog: https://kamioi.com/blog
+- Sign Up: https://kamioi.com/signup
+
+### Legal
+- Terms of Service: https://kamioi.com/terms-of-service
+- Privacy Policy: https://kamioi.com/privacy-policy
+
+## Topics Covered
+- Automatic investing and round-up investing
+- Fractional shares and micro-investing
+- AI-powered portfolio management
+- Family financial planning and investing
+- Financial literacy and education
+- Investment strategies for beginners
+- Passive wealth building
+
+## Contact
+- Website: https://kamioi.com
+- Support: Available through the platform

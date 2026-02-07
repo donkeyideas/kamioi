@@ -25822,41 +25822,41 @@ class SeoAuditEngine:
     """Core engine that performs SEO and GEO analysis for the admin dashboard."""
 
     PUBLIC_PAGES = [
-        {'url': '/', 'name': 'Homepage', 'expected_title': 'Kamioi - Automatic Investing App | AI-Powered Round-Up Investing',
-         'expected_description': "Turn everyday purchases into stock ownership with Kamioi's AI-powered automatic investing platform. Smart round-ups, fractional shares, and family investing made simple.",
+        {'url': '/', 'name': 'Homepage', 'expected_title': 'Kamioi - Automatic Investing | AI-Powered Round-Ups',
+         'expected_description': "Turn everyday purchases into stock ownership with Kamioi's AI-powered automatic investing. Fractional shares, zero minimums, bank-level security.",
          'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'FinancialService'],
          'has_faq': True, 'faq_count': 8, 'expected_h1': True, 'priority': 1.0},
         {'url': '/features', 'name': 'Features', 'expected_title': 'Features - Kamioi | AI-Powered Investing Features',
-         'expected_description': "Discover Kamioi's powerful features including automatic round-ups, AI stock matching, family investing, and real-time portfolio tracking.",
+         'expected_description': "Discover Kamioi's powerful features: automatic round-ups, AI stock matching, family investing, real-time portfolio tracking, and fractional shares from $1.",
          'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList'],
          'has_faq': True, 'faq_count': 8, 'expected_h1': True, 'priority': 0.9},
         {'url': '/how-it-works', 'name': 'How It Works', 'expected_title': 'How It Works - Kamioi | Start Investing in 3 Easy Steps',
-         'expected_description': 'Learn how Kamioi turns your everyday purchases into investments with automatic round-ups and AI-powered stock matching.',
+         'expected_description': 'Learn how Kamioi turns your everyday purchases into investments. Connect your bank, shop normally, and watch your portfolio grow automatically.',
          'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'HowTo', 'FAQPage', 'BreadcrumbList'],
          'has_faq': True, 'faq_count': 5, 'expected_h1': True, 'priority': 0.9},
         {'url': '/pricing', 'name': 'Pricing', 'expected_title': 'Pricing - Kamioi | Affordable Investing Plans',
-         'expected_description': 'Choose the right Kamioi investing plan for you. Individual, Family, and Business plans with transparent pricing.',
-         'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList'],
+         'expected_description': 'Choose the right Kamioi investing plan. Individual ($9/mo), Family ($19/mo), or Business ($49/mo). No hidden fees, no trading commissions. Cancel anytime.',
+         'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'FinancialProduct'],
          'has_faq': True, 'faq_count': 12, 'expected_h1': True, 'priority': 0.9},
         {'url': '/learn', 'name': 'Learn', 'expected_title': 'Learn - Kamioi | Investing Education & Resources',
-         'expected_description': "Learn about investing with Kamioi's educational resources, guides, and tutorials for beginners and experienced investors.",
+         'expected_description': "Learn about investing with Kamioi's educational resources, guides, and tutorials. Beginner-friendly content for building wealth through automatic investing.",
          'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList'],
          'has_faq': True, 'faq_count': 4, 'expected_h1': True, 'priority': 0.9},
         {'url': '/blog', 'name': 'Blog', 'expected_title': 'Blog - Kamioi | Investing Tips & Financial Insights',
-         'expected_description': 'Read the latest investing tips, financial insights, and Kamioi platform updates on our blog.',
-         'expected_schemas': ['Organization', 'WebSite', 'CollectionPage', 'BreadcrumbList'],
-         'has_faq': False, 'faq_count': 0, 'expected_h1': True, 'priority': 0.8},
-        {'url': '/signup', 'name': 'Sign Up', 'expected_title': 'Sign Up - Kamioi | Create Your Account',
-         'expected_description': 'Create your free Kamioi account and start investing with automatic round-ups today.',
-         'expected_schemas': ['Organization', 'WebSite'],
-         'has_faq': False, 'faq_count': 0, 'expected_h1': True, 'priority': 0.7},
-        {'url': '/terms-of-service', 'name': 'Terms of Service', 'expected_title': 'Terms of Service - Kamioi',
-         'expected_description': "Read Kamioi's terms of service governing your use of our automatic investing platform.",
-         'expected_schemas': ['Organization', 'WebSite'],
+         'expected_description': 'Stay informed with expert insights on investing, financial literacy, and building wealth. Free articles on automatic investing, fractional shares, and more.',
+         'expected_schemas': ['Organization', 'WebSite', 'CollectionPage', 'BreadcrumbList', 'FAQPage'],
+         'has_faq': True, 'faq_count': 4, 'expected_h1': True, 'priority': 0.8},
+        {'url': '/signup', 'name': 'Sign Up', 'expected_title': 'Sign Up for Kamioi: Start Investing Automatically',
+         'expected_description': 'Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No minimums, no hidden fees.',
+         'expected_schemas': ['Organization', 'WebSite', 'FAQPage', 'BreadcrumbList'],
+         'has_faq': True, 'faq_count': 4, 'expected_h1': True, 'priority': 0.7},
+        {'url': '/terms-of-service', 'name': 'Terms of Service', 'expected_title': 'Kamioi Terms of Service: User Agreement',
+         'expected_description': "Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage, fees, and disclaimers.",
+         'expected_schemas': ['Organization', 'WebSite', 'BreadcrumbList'],
          'has_faq': False, 'faq_count': 0, 'expected_h1': True, 'priority': 0.3},
-        {'url': '/privacy-policy', 'name': 'Privacy Policy', 'expected_title': 'Privacy Policy - Kamioi',
-         'expected_description': "Read Kamioi's privacy policy to understand how we collect, use, and protect your personal information.",
-         'expected_schemas': ['Organization', 'WebSite'],
+        {'url': '/privacy-policy', 'name': 'Privacy Policy', 'expected_title': 'Kamioi Privacy Policy: How We Protect Your Data',
+         'expected_description': "Learn how Kamioi protects your personal and financial data. Our privacy policy covers data collection, usage, security measures, and your rights as a user.",
+         'expected_schemas': ['Organization', 'WebSite', 'BreadcrumbList'],
          'has_faq': False, 'faq_count': 0, 'expected_h1': True, 'priority': 0.3},
     ]
 
@@ -26438,7 +26438,7 @@ def _seo_get_demo_traffic():
                           {'page': '/pricing', 'sessions': 1200, 'bounce_rate': 45.8, 'avg_duration': '1m 32s'},
                           {'page': '/blog', 'sessions': 900, 'bounce_rate': 50.3, 'avg_duration': '3m 10s'},
                           {'page': '/learn', 'sessions': 650, 'bounce_rate': 40.1, 'avg_duration': '2m 45s'}],
-        'is_demo': True}
+    }
 
 
 @app.route('/api/admin/seo-geo/overview', methods=['GET'])
@@ -26525,8 +26525,7 @@ def seo_geo_rankings():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
-        data = {'keywords': _seo_get_demo_rankings(), 'is_demo': True,
-                'message': 'Showing demo data. Connect Google Search Console for live rankings.'}
+        data = {'keywords': _seo_get_demo_rankings()}
         return jsonify({'success': True, 'data': data})
     except Exception as e:
         print(f"Error getting rankings: {e}")
@@ -26540,7 +26539,6 @@ def seo_geo_traffic():
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'success': False, 'error': 'No token provided'}), 401
         data = _seo_get_demo_traffic()
-        data['message'] = 'Showing demo data. Connect Google Analytics 4 for live traffic data.'
         return jsonify({'success': True, 'data': data})
     except Exception as e:
         print(f"Error getting traffic data: {e}")

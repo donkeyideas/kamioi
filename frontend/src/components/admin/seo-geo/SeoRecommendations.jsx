@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useTheme } from '../../../context/ThemeContext'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Lightbulb, CheckCircle, XCircle, AlertTriangle, AlertOctagon, Info, Filter, ArrowUpRight, Clock, Wrench, Code, Brain, Zap, ChevronDown, ChevronUp } from 'lucide-react'
+import { Lightbulb, CheckCircle, XCircle, AlertTriangle, AlertOctagon, Info, Filter, ArrowUpRight, Clock, Wrench, Code, Brain, Zap, ChevronDown, ChevronUp, Copy, Download, Check } from 'lucide-react'
 
 const SeoRecommendations = () => {
   const { isLightMode } = useTheme()
@@ -9,6 +9,7 @@ const SeoRecommendations = () => {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [expandedCategory, setExpandedCategory] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   const getTextColor = () => isLightMode ? 'text-gray-800' : 'text-white'
   const getSubtextClass = () => isLightMode ? 'text-gray-600' : 'text-gray-400'
@@ -126,6 +127,62 @@ const SeoRecommendations = () => {
     return days
   }
 
+  const formatRecommendationsText = () => {
+    const recs = filteredRecs()
+    const grouped = {}
+    recs.forEach(rec => {
+      if (!grouped[rec.category]) grouped[rec.category] = []
+      grouped[rec.category].push(rec)
+    })
+
+    let text = `SEO & GEO Recommendations Report\n`
+    text += `Generated: ${new Date().toLocaleDateString()}\n`
+    text += `Filter: ${filter === 'all' ? 'All' : filter}\n`
+    text += `Total Open: ${recs.length}\n`
+    text += `${'='.repeat(60)}\n\n`
+
+    Object.entries(grouped).forEach(([category, items]) => {
+      const catConfig = getCategoryConfig(category)
+      text += `${catConfig.label} (${items.length})\n`
+      text += `${'-'.repeat(40)}\n`
+      items.forEach(rec => {
+        const prioConfig = getPriorityConfig(rec.priority)
+        text += `  [${prioConfig.label}] [${rec.impact} impact] ${rec.title}\n`
+        text += `    ${rec.description}\n`
+        if (rec.affected_pages?.length > 0) {
+          text += `    Pages: ${rec.affected_pages.join(', ')}\n`
+        }
+        text += `\n`
+      })
+    })
+
+    return text
+  }
+
+  const handleCopyToClipboard = async () => {
+    const text = formatRecommendationsText()
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const handleExportFile = () => {
+    const text = formatRecommendationsText()
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `seo-recommendations-${new Date().toISOString().split('T')[0]}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const filterTabs = [
     { id: 'all', label: 'All' },
     { id: 'critical', label: 'Critical' },
@@ -183,30 +240,62 @@ const SeoRecommendations = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {filterTabs.map(tab => (
+      {/* Filter Tabs + Export Buttons */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-2 flex-wrap">
+          {filterTabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                filter === tab.id
+                  ? isLightMode
+                    ? 'bg-blue-500 text-white shadow-lg'
+                    : 'bg-blue-500/30 text-blue-300 border border-blue-400/30'
+                  : isLightMode
+                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              {tab.label}
+              {tab.id !== 'all' && (
+                <span className="ml-1 text-xs opacity-75">
+                  ({data.summary?.[tab.id] || 0})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
           <button
-            key={tab.id}
-            onClick={() => setFilter(tab.id)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              filter === tab.id
+            onClick={handleCopyToClipboard}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              copied
                 ? isLightMode
-                  ? 'bg-blue-500 text-white shadow-lg'
-                  : 'bg-blue-500/30 text-blue-300 border border-blue-400/30'
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-green-500/20 text-green-400 border border-green-500/30'
                 : isLightMode
-                  ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                  ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                  : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
             }`}
+            title="Copy all recommendations to clipboard"
           >
-            {tab.label}
-            {tab.id !== 'all' && (
-              <span className="ml-1 text-xs opacity-75">
-                ({data.summary?.[tab.id] || 0})
-              </span>
-            )}
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+            {copied ? 'Copied!' : 'Copy All'}
           </button>
-        ))}
+          <button
+            onClick={handleExportFile}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              isLightMode
+                ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
+            }`}
+            title="Export recommendations as text file"
+          >
+            <Download size={14} />
+            Export
+          </button>
+        </div>
       </div>
 
       {/* Recommendations by Category */}

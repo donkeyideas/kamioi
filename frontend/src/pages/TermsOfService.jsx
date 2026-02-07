@@ -8,9 +8,13 @@ const TermsOfService = () => {
 
   return (
     <div className="min-h-screen gradient-bg">
-      <SEO 
-        title="Terms of Service - Kamioi"
-        description="Terms of Service for Kamioi - Smart Investment Platform"
+      <SEO
+        title="Kamioi Terms of Service: User Agreement"
+        description="Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage, fees, and investment disclaimers."
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Terms of Service", url: "https://kamioi.com/terms-of-service" }
+        ]}
       />
       
       {/* Header */}

@@ -5,7 +5,7 @@
       "destination": "https://kamioi-backend.onrender.com/api/$1"
     },
     {
-      "source": "/((?!sitemap\\.xml|robots\\.txt|favicon\\.ico|favicon\\.png|apple-touch-icon\\.png|site\\.webmanifest|assets/).*)",
+      "source": "/((?!sitemap\\.xml|robots\\.txt|llms\\.txt|favicon\\.ico|favicon\\.png|apple-touch-icon\\.png|site\\.webmanifest|assets/).*)",
       "destination": "/index.html"
     }
   ],
@@ -25,6 +25,19 @@
     },
     {
       "source": "/robots.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    },
+    {
+      "source": "/llms.txt",
       "headers": [
         {
           "key": "Content-Type",

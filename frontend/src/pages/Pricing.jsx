@@ -70,7 +70,7 @@ const Pricing = () => {
     }
     return {
       meta_title: "Kamioi Pricing: Simple, Transparent Plans Starting at $9/Month",
-      meta_description: "Choose the perfect Kamioi plan for your investing needs. Individual ($9), Family ($19), or Business ($49). No hidden fees. Cancel anytime. Start your free 14-day trial.",
+      meta_description: "Choose the right Kamioi investing plan. Individual ($9/mo), Family ($19/mo), or Business ($49/mo). No hidden fees, no trading commissions. Cancel anytime.",
       h1_headline: "Simple, Transparent Pricing for Everyone",
       hero_subheading: "One flat monthly fee. No commissions. No trading fees. No hidden costs. Just straightforward pricing so you can focus on building wealth, not decoding your bill.",
       trust_badges: [
@@ -329,6 +329,45 @@ const Pricing = () => {
           { name: "Home", url: "https://kamioi.com/" },
           { name: "Pricing", url: "https://kamioi.com/pricing" }
         ]}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "FinancialProduct",
+          "name": "Kamioi Automatic Investing Platform",
+          "description": "AI-powered automatic investing platform with round-up investing, fractional shares, and portfolio management.",
+          "provider": {
+            "@type": "Organization",
+            "name": "Kamioi",
+            "url": "https://kamioi.com"
+          },
+          "url": "https://kamioi.com/pricing",
+          "category": "InvestmentProduct",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Individual Plan",
+              "price": "9.00",
+              "priceCurrency": "USD",
+              "description": "Personal automatic investing with AI-powered stock matching, fractional shares, and portfolio tracking.",
+              "url": "https://kamioi.com/pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "Family Plan",
+              "price": "19.00",
+              "priceCurrency": "USD",
+              "description": "Family investing with up to 5 members, shared dashboard, custodial accounts, and priority support.",
+              "url": "https://kamioi.com/pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "Business Plan",
+              "price": "49.00",
+              "priceCurrency": "USD",
+              "description": "Team investing with up to 20 users, admin dashboard, API access, and dedicated account manager.",
+              "url": "https://kamioi.com/pricing"
+            }
+          ]
+        }}
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         {/* Navigation */}

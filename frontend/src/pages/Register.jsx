@@ -5,6 +5,7 @@ import { User, Users, Building, ArrowLeft, Sparkles } from 'lucide-react';
 import IndividualOnboarding from '../components/onboarding/IndividualOnboarding';
 import FamilyOnboarding from '../components/onboarding/FamilyOnboarding';
 import BusinessOnboarding from '../components/onboarding/BusinessOnboarding';
+import SEO from '../components/common/SEO';
 
 const ACCOUNT_TYPES = [
   {
@@ -126,6 +127,22 @@ const Register = () => {
   };
 
   return (
+    <>
+    <SEO
+      title="Sign Up for Kamioi: Start Investing Automatically"
+      description="Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No minimums, no hidden fees, bank-level security."
+      keywords="sign up kamioi, create investing account, automatic investing signup, round-up investing registration"
+      breadcrumbs={[
+        { name: "Home", url: "https://kamioi.com/" },
+        { name: "Sign Up", url: "https://kamioi.com/signup" }
+      ]}
+      faq={[
+        { question: "How do I create a Kamioi account?", answer: "Choose your account type (Individual, Family, or Business), fill in your details, and start investing in minutes. No minimum deposit required." },
+        { question: "Is it free to sign up for Kamioi?", answer: "Signing up is free. Plans start at $9/month for Individual, $19/month for Family, and $49/month for Business. All plans include a free trial." },
+        { question: "What account types does Kamioi offer?", answer: "Kamioi offers Individual accounts for personal investing, Family accounts for up to 5 members with shared goals, and Business accounts for teams up to 20 users." },
+        { question: "Is my information secure when signing up?", answer: "Yes. Kamioi uses bank-level 256-bit encryption, two-factor authentication, and SIPC insurance up to $500,000 to protect your data and investments." }
+      ]}
+    />
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-12 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
@@ -262,6 +279,7 @@ const Register = () => {
         </AnimatePresence>
       </div>
     </div>
+    </>
   );
 };
 

@@ -85,7 +85,7 @@ const HowItWorks = () => {
     }
     return {
       meta_title: "How Kamioi Works: Automatic Investing in 3 Simple Steps",
-      meta_description: "Learn how Kamioi turns everyday purchases into stock ownership. Connect your bank, shop normally, and watch your portfolio grow automatically. Start in minutes.",
+      meta_description: "Learn how Kamioi turns everyday purchases into investments. Connect your bank, shop normally, and watch your portfolio grow automatically. Start in minutes.",
       h1_headline: "Automatic Investing in 3 Simple Steps",
       hero_subheading: "No stock research. No manual buying. No time commitment. Just connect your bank account and Kamioi does the rest—turning your everyday spending into a diversified investment portfolio.",
       quick_stats: [

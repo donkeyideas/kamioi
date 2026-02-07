@@ -100,5 +100,8 @@ Disallow: /api/
 # Sitemap location
 Sitemap: https://kamioi.com/sitemap.xml
 
+# LLMs.txt for AI crawlers
+# https://kamioi.com/llms.txt
+
 # Crawl delay (optional, respected by some bots)
 Crawl-delay: 1

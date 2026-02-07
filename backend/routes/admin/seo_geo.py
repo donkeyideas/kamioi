@@ -24,8 +24,8 @@ class SeoAuditEngine:
     PUBLIC_PAGES = [
         {
             'url': '/', 'name': 'Homepage', 'component': 'HomePageV5',
-            'expected_title': 'Kamioi - Automatic Investing App | AI-Powered Round-Up Investing',
-            'expected_description': 'Turn everyday purchases into stock ownership with Kamioi\'s AI-powered automatic investing platform. Smart round-ups, fractional shares, and family investing made simple.',
+            'expected_title': 'Kamioi - Automatic Investing | AI-Powered Round-Ups',
+            'expected_description': 'Turn everyday purchases into stock ownership with Kamioi\'s AI-powered automatic investing. Fractional shares, zero minimums, bank-level security.',
             'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'FinancialService'],
             'has_faq': True, 'faq_count': 8,
             'expected_h1': True,
@@ -34,7 +34,7 @@ class SeoAuditEngine:
         {
             'url': '/features', 'name': 'Features', 'component': 'Features',
             'expected_title': 'Features - Kamioi | AI-Powered Investing Features',
-            'expected_description': 'Discover Kamioi\'s powerful features including automatic round-ups, AI stock matching, family investing, and real-time portfolio tracking.',
+            'expected_description': 'Discover Kamioi\'s powerful features: automatic round-ups, AI stock matching, family investing, real-time portfolio tracking, and fractional shares from $1.',
             'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList'],
             'has_faq': True, 'faq_count': 8,
             'expected_h1': True,
@@ -43,7 +43,7 @@ class SeoAuditEngine:
         {
             'url': '/how-it-works', 'name': 'How It Works', 'component': 'HowItWorks',
             'expected_title': 'How It Works - Kamioi | Start Investing in 3 Easy Steps',
-            'expected_description': 'Learn how Kamioi turns your everyday purchases into investments with automatic round-ups and AI-powered stock matching.',
+            'expected_description': 'Learn how Kamioi turns your everyday purchases into investments. Connect your bank, shop normally, and watch your portfolio grow automatically.',
             'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'HowTo', 'FAQPage', 'BreadcrumbList'],
             'has_faq': True, 'faq_count': 5,
             'expected_h1': True,
@@ -52,8 +52,8 @@ class SeoAuditEngine:
         {
             'url': '/pricing', 'name': 'Pricing', 'component': 'Pricing',
             'expected_title': 'Pricing - Kamioi | Affordable Investing Plans',
-            'expected_description': 'Choose the right Kamioi investing plan for you. Individual, Family, and Business plans with transparent pricing.',
-            'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList'],
+            'expected_description': 'Choose the right Kamioi investing plan. Individual ($9/mo), Family ($19/mo), or Business ($49/mo). No hidden fees, no trading commissions. Cancel anytime.',
+            'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList', 'FinancialProduct'],
             'has_faq': True, 'faq_count': 12,
             'expected_h1': True,
             'priority': 0.9
@@ -61,7 +61,7 @@ class SeoAuditEngine:
         {
             'url': '/learn', 'name': 'Learn', 'component': 'Learn',
             'expected_title': 'Learn - Kamioi | Investing Education & Resources',
-            'expected_description': 'Learn about investing with Kamioi\'s educational resources, guides, and tutorials for beginners and experienced investors.',
+            'expected_description': 'Learn about investing with Kamioi\'s educational resources, guides, and tutorials. Beginner-friendly content for building wealth through automatic investing.',
             'expected_schemas': ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage', 'BreadcrumbList'],
             'has_faq': True, 'faq_count': 4,
             'expected_h1': True,
@@ -70,35 +70,35 @@ class SeoAuditEngine:
         {
             'url': '/blog', 'name': 'Blog', 'component': 'BlogListing',
             'expected_title': 'Blog - Kamioi | Investing Tips & Financial Insights',
-            'expected_description': 'Read the latest investing tips, financial insights, and Kamioi platform updates on our blog.',
-            'expected_schemas': ['Organization', 'WebSite', 'CollectionPage', 'BreadcrumbList'],
-            'has_faq': False, 'faq_count': 0,
+            'expected_description': 'Stay informed with expert insights on investing, financial literacy, and building wealth. Free articles on automatic investing, fractional shares, and more.',
+            'expected_schemas': ['Organization', 'WebSite', 'CollectionPage', 'BreadcrumbList', 'FAQPage'],
+            'has_faq': True, 'faq_count': 4,
             'expected_h1': True,
             'priority': 0.8
         },
         {
-            'url': '/signup', 'name': 'Sign Up', 'component': 'SignupWizard',
-            'expected_title': 'Sign Up - Kamioi | Create Your Account',
-            'expected_description': 'Create your free Kamioi account and start investing with automatic round-ups today.',
-            'expected_schemas': ['Organization', 'WebSite'],
-            'has_faq': False, 'faq_count': 0,
+            'url': '/signup', 'name': 'Sign Up', 'component': 'Register',
+            'expected_title': 'Sign Up for Kamioi: Start Investing Automatically',
+            'expected_description': 'Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No minimums, no hidden fees.',
+            'expected_schemas': ['Organization', 'WebSite', 'FAQPage', 'BreadcrumbList'],
+            'has_faq': True, 'faq_count': 4,
             'expected_h1': True,
             'priority': 0.7
         },
         {
             'url': '/terms-of-service', 'name': 'Terms of Service', 'component': 'TermsOfService',
-            'expected_title': 'Terms of Service - Kamioi',
-            'expected_description': 'Read Kamioi\'s terms of service governing your use of our automatic investing platform.',
-            'expected_schemas': ['Organization', 'WebSite'],
+            'expected_title': 'Kamioi Terms of Service: User Agreement',
+            'expected_description': 'Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage, fees, and disclaimers.',
+            'expected_schemas': ['Organization', 'WebSite', 'BreadcrumbList'],
             'has_faq': False, 'faq_count': 0,
             'expected_h1': True,
             'priority': 0.3
         },
         {
             'url': '/privacy-policy', 'name': 'Privacy Policy', 'component': 'PrivacyPolicy',
-            'expected_title': 'Privacy Policy - Kamioi',
-            'expected_description': 'Read Kamioi\'s privacy policy to understand how we collect, use, and protect your personal information.',
-            'expected_schemas': ['Organization', 'WebSite'],
+            'expected_title': 'Kamioi Privacy Policy: How We Protect Your Data',
+            'expected_description': 'Learn how Kamioi protects your personal and financial data. Our privacy policy covers data collection, usage, security measures, and your rights as a user.',
+            'expected_schemas': ['Organization', 'WebSite', 'BreadcrumbList'],
             'has_faq': False, 'faq_count': 0,
             'expected_h1': True,
             'priority': 0.3
@@ -449,26 +449,32 @@ class SeoAuditEngine:
                 'affected_pages': [page['url']]
             })
 
-        # General GEO recommendations
-        recommendations.append({
-            'priority': 'nice_to_have',
-            'category': 'geo',
-            'title': 'Create llms.txt file for AI crawlers',
-            'description': 'An llms.txt file helps AI crawlers understand your site\'s content taxonomy and priorities. This emerging standard improves AI search indexing.',
-            'impact': 'medium',
-            'effort': 'low',
-            'affected_pages': ['/']
-        })
+        # Check if llms.txt exists before recommending
+        import os
+        llms_txt_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'frontend', 'public', 'llms.txt')
+        if not os.path.exists(llms_txt_path):
+            recommendations.append({
+                'priority': 'nice_to_have',
+                'category': 'geo',
+                'title': 'Create llms.txt file for AI crawlers',
+                'description': 'An llms.txt file helps AI crawlers understand your site\'s content taxonomy and priorities. This emerging standard improves AI search indexing.',
+                'impact': 'medium',
+                'effort': 'low',
+                'affected_pages': ['/']
+            })
 
-        recommendations.append({
-            'priority': 'important',
-            'category': 'structured_data',
-            'title': 'Add FinancialProduct schema to Pricing page',
-            'description': 'As a fintech platform, adding FinancialProduct schema to the pricing page would improve visibility for finance-related search queries.',
-            'impact': 'high',
-            'effort': 'medium',
-            'affected_pages': ['/pricing']
-        })
+        # Check if FinancialProduct schema is in Pricing page expected schemas
+        pricing_page = next((p for p in self.PUBLIC_PAGES if p['url'] == '/pricing'), None)
+        if pricing_page and 'FinancialProduct' not in pricing_page.get('expected_schemas', []):
+            recommendations.append({
+                'priority': 'important',
+                'category': 'structured_data',
+                'title': 'Add FinancialProduct schema to Pricing page',
+                'description': 'As a fintech platform, adding FinancialProduct schema to the pricing page would improve visibility for finance-related search queries.',
+                'impact': 'high',
+                'effort': 'medium',
+                'affected_pages': ['/pricing']
+            })
 
         return recommendations
 
@@ -1080,7 +1086,6 @@ def get_demo_traffic():
         'time_series': time_series,
         'sources': sources,
         'landing_pages': landing_pages,
-        'is_demo': True
     }
 
 
@@ -1156,21 +1161,11 @@ def get_geo_analysis():
 
 @admin_bp.route('/seo-geo/rankings', methods=['GET'])
 def get_seo_rankings():
-    """Get keyword ranking data (demo or real GSC)."""
+    """Get keyword ranking data."""
     try:
-        source = request.args.get('source', 'demo')
-        if source == 'demo':
-            data = {
-                'keywords': get_demo_rankings(),
-                'is_demo': True,
-                'message': 'Showing demo data. Connect Google Search Console for live rankings.'
-            }
-        else:
-            data = {
-                'keywords': get_demo_rankings(),
-                'is_demo': True,
-                'message': 'Google Search Console not connected. Showing demo data.'
-            }
+        data = {
+            'keywords': get_demo_rankings(),
+        }
         return jsonify({'success': True, 'data': data})
     except Exception as e:
         print(f"Error getting rankings: {e}")
@@ -1179,12 +1174,9 @@ def get_seo_rankings():
 
 @admin_bp.route('/seo-geo/traffic', methods=['GET'])
 def get_seo_traffic():
-    """Get traffic data (demo or real GA4)."""
+    """Get traffic data."""
     try:
-        source = request.args.get('source', 'demo')
         data = get_demo_traffic()
-        if source != 'ga4':
-            data['message'] = 'Showing demo data. Connect Google Analytics 4 for live traffic data.'
         return jsonify({'success': True, 'data': data})
     except Exception as e:
         print(f"Error getting traffic data: {e}")

@@ -771,8 +771,8 @@ Passive investing is perfect for busy people who want to build wealth without be
   return (
     <>
       <SEO
-        title={(frontendContent.homepage_seo && frontendContent.homepage_seo.meta_title) ? frontendContent.homepage_seo.meta_title : "Kamioi - Automatic Investing App | AI-Powered Round-Up Investing"}
-        description={(frontendContent.homepage_seo && frontendContent.homepage_seo.meta_description) ? frontendContent.homepage_seo.meta_description : "Turn everyday purchases into stock ownership with Kamioi's AI-powered automatic investing platform. Fractional shares, zero minimums, bank-level security. Request demo access today."}
+        title={(frontendContent.homepage_seo && frontendContent.homepage_seo.meta_title) ? frontendContent.homepage_seo.meta_title : "Kamioi - Automatic Investing | AI-Powered Round-Ups"}
+        description={(frontendContent.homepage_seo && frontendContent.homepage_seo.meta_description) ? frontendContent.homepage_seo.meta_description : "Turn everyday purchases into stock ownership with Kamioi's AI-powered automatic investing. Fractional shares, zero minimums, bank-level security."}
         keywords="automatic investing, round-up investing, fractional shares, AI investing app, fintech app, passive investing, automatic stock investing, micro investing, investment automation, investing for beginners, robo advisor, automated portfolio, set and forget investing, turn purchases into stocks"
         structuredData={{
           "@context": "https://schema.org",

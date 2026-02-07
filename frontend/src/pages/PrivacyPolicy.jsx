@@ -8,9 +8,13 @@ const PrivacyPolicy = () => {
 
   return (
     <div className="min-h-screen gradient-bg">
-      <SEO 
-        title="Privacy Policy - Kamioi"
-        description="Privacy Policy for Kamioi - Smart Investment Platform"
+      <SEO
+        title="Kamioi Privacy Policy: How We Protect Your Data"
+        description="Learn how Kamioi protects your personal and financial data. Our privacy policy covers data collection, usage, security measures, and your rights as a user of our investing platform."
+        breadcrumbs={[
+          { name: "Home", url: "https://kamioi.com/" },
+          { name: "Privacy Policy", url: "https://kamioi.com/privacy-policy" }
+        ]}
       />
       
       {/* Header */}

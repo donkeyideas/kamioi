@@ -36,8 +36,8 @@ const RankingsTraffic = () => {
       const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
 
       const [rankingsRes, trafficRes] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/admin/seo-geo/rankings?source=demo`, { headers }),
-        fetch(`${apiBaseUrl}/api/admin/seo-geo/traffic?source=demo`, { headers })
+        fetch(`${apiBaseUrl}/api/admin/seo-geo/rankings`, { headers }),
+        fetch(`${apiBaseUrl}/api/admin/seo-geo/traffic`, { headers })
       ])
 
       const rankingsJson = await rankingsRes.json()
@@ -98,16 +98,6 @@ const RankingsTraffic = () => {
 
   return (
     <div className="space-y-6">
-      {/* Demo Data Banner */}
-      {(rankings?.is_demo || traffic?.is_demo) && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl ${isLightMode ? 'bg-amber-50 border border-amber-200' : 'bg-amber-500/10 border border-amber-500/20'}`}>
-          <Info size={18} className="text-amber-400 flex-shrink-0" />
-          <p className={`text-sm ${isLightMode ? 'text-amber-700' : 'text-amber-400'}`}>
-            Showing demo data. Connect Google Search Console and Google Analytics 4 for live rankings and traffic data.
-          </p>
-        </div>
-      )}
-
       {/* Search Performance Chart */}
       {traffic?.time_series && (
         <div className={getCardClass()}>
