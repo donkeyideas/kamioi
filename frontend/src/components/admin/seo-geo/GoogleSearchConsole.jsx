@@ -5,12 +5,24 @@ import { Search, Link2, ExternalLink, CheckCircle, AlertTriangle, Info, Globe, T
 const GoogleSearchConsole = () => {
   const { isLightMode } = useTheme()
   const [expandedSection, setExpandedSection] = useState(null)
+  const [gscStatus, setGscStatus] = useState({ connected: false, site_url: null })
 
   const getTextColor = () => isLightMode ? 'text-gray-800' : 'text-white'
   const getSubtextClass = () => isLightMode ? 'text-gray-600' : 'text-gray-400'
   const getCardClass = () => isLightMode
     ? 'bg-white/80 backdrop-blur-lg rounded-2xl p-6 border border-gray-200'
     : 'bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20'
+
+  useState(() => {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+    const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken')
+    fetch(`${apiBaseUrl}/api/admin/seo-geo/gsc-status`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    })
+      .then(r => r.json())
+      .then(json => { if (json.success) setGscStatus(json.data) })
+      .catch(() => {})
+  })
 
   const toggleSection = (id) => setExpandedSection(expandedSection === id ? null : id)
 
@@ -99,19 +111,29 @@ const GoogleSearchConsole = () => {
       <div className={getCardClass()}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${isLightMode ? 'bg-gray-300' : 'bg-gray-600'}`} />
+            <div className={`w-3 h-3 rounded-full ${gscStatus.connected ? 'bg-green-500' : isLightMode ? 'bg-gray-300' : 'bg-gray-600'}`} />
             <span className={`font-medium ${getTextColor()}`}>Connection Status</span>
           </div>
-          <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${isLightMode ? 'bg-gray-100 text-gray-600' : 'bg-white/10 text-gray-400'}`}>
-            Not Connected
+          <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
+            gscStatus.connected
+              ? isLightMode ? 'bg-green-100 text-green-700' : 'bg-green-500/20 text-green-400'
+              : isLightMode ? 'bg-gray-100 text-gray-600' : 'bg-white/10 text-gray-400'
+          }`}>
+            {gscStatus.connected ? `Connected — ${gscStatus.site_url}` : 'Not Connected'}
           </span>
         </div>
-        <div className={`mt-4 p-4 rounded-xl ${isLightMode ? 'bg-blue-50 border border-blue-100' : 'bg-blue-500/10 border border-blue-500/20'}`}>
+        <div className={`mt-4 p-4 rounded-xl ${
+          gscStatus.connected
+            ? isLightMode ? 'bg-green-50 border border-green-100' : 'bg-green-500/10 border border-green-500/20'
+            : isLightMode ? 'bg-blue-50 border border-blue-100' : 'bg-blue-500/10 border border-blue-500/20'
+        }`}>
           <div className="flex items-start gap-3">
-            <Info size={18} className="text-blue-400 flex-shrink-0 mt-0.5" />
+            <Info size={18} className={gscStatus.connected ? 'text-green-400' : 'text-blue-400'} />
             <p className={`text-sm ${getSubtextClass()}`}>
-              Once connected, real search data will replace the demo data in the <strong>Rankings & Traffic</strong> tab.
-              You'll get actual keyword positions, click-through rates, and search performance metrics.
+              {gscStatus.connected
+                ? 'Real search data from Google Search Console is now being displayed in the Rankings & Traffic tab.'
+                : <>Once connected, real search data will replace the demo data in the <strong>Rankings & Traffic</strong> tab. You'll get actual keyword positions, click-through rates, and search performance metrics.</>
+              }
             </p>
           </div>
         </div>

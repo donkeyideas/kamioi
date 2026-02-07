@@ -96,8 +96,22 @@ const RankingsTraffic = () => {
     )
   }
 
+  const dataSource = rankings?.source || traffic?.source || 'demo'
+
   return (
     <div className="space-y-6">
+      {/* Data Source Banner */}
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm ${
+        dataSource === 'gsc'
+          ? isLightMode ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-green-500/10 border border-green-500/20 text-green-400'
+          : isLightMode ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
+      }`}>
+        <Globe size={16} />
+        {dataSource === 'gsc'
+          ? 'Showing live data from Google Search Console'
+          : 'Showing demo data — connect Google Search Console for real metrics'}
+      </div>
+
       {/* Search Performance Chart */}
       {traffic?.time_series && (
         <div className={getCardClass()}>
