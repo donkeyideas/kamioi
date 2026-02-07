@@ -101,7 +101,9 @@ const GoogleSearchConsole = () => {
           <div>
             <h2 className={`text-xl font-bold ${getTextColor()}`}>Google Search Console</h2>
             <p className={`text-sm ${getSubtextClass()}`}>
-              Connect GSC to get real keyword rankings, search performance data, and indexing status
+              {gscStatus.connected
+                ? 'Live search data is being pulled from Google Search Console'
+                : 'Connect GSC to get real keyword rankings, search performance data, and indexing status'}
             </p>
           </div>
         </div>
@@ -139,53 +141,57 @@ const GoogleSearchConsole = () => {
         </div>
       </div>
 
-      {/* Setup Steps */}
-      <div className={getCardClass()}>
-        <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>Setup Guide</h3>
-        <div className="space-y-3">
-          {setupSteps.map((step) => {
-            const Icon = step.icon
-            const isExpanded = expandedSection === step.id
-            return (
-              <div key={step.id} className={`rounded-xl border ${isLightMode ? 'border-gray-100 bg-gray-50' : 'border-white/10 bg-white/5'}`}>
-                <div
-                  className="flex items-center justify-between p-4 cursor-pointer"
-                  onClick={() => toggleSection(step.id)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isLightMode ? 'bg-blue-100' : 'bg-blue-500/20'}`}>
-                      <Icon size={20} className="text-blue-400" />
+      {/* Setup Steps - only show when NOT connected */}
+      {!gscStatus.connected && (
+        <div className={getCardClass()}>
+          <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>Setup Guide</h3>
+          <div className="space-y-3">
+            {setupSteps.map((step) => {
+              const Icon = step.icon
+              const isExpanded = expandedSection === step.id
+              return (
+                <div key={step.id} className={`rounded-xl border ${isLightMode ? 'border-gray-100 bg-gray-50' : 'border-white/10 bg-white/5'}`}>
+                  <div
+                    className="flex items-center justify-between p-4 cursor-pointer"
+                    onClick={() => toggleSection(step.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isLightMode ? 'bg-blue-100' : 'bg-blue-500/20'}`}>
+                        <Icon size={20} className="text-blue-400" />
+                      </div>
+                      <div>
+                        <p className={`font-medium ${getTextColor()}`}>{step.title}</p>
+                        <p className={`text-xs ${getSubtextClass()}`}>{step.description}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className={`font-medium ${getTextColor()}`}>{step.title}</p>
-                      <p className={`text-xs ${getSubtextClass()}`}>{step.description}</p>
-                    </div>
+                    {isExpanded ? <ChevronUp size={18} className={getSubtextClass()} /> : <ChevronDown size={18} className={getSubtextClass()} />}
                   </div>
-                  {isExpanded ? <ChevronUp size={18} className={getSubtextClass()} /> : <ChevronDown size={18} className={getSubtextClass()} />}
+                  {isExpanded && (
+                    <div className={`px-4 pb-4 border-t ${isLightMode ? 'border-gray-100' : 'border-white/10'}`}>
+                      <ol className="mt-3 space-y-2">
+                        {step.details.map((detail, i) => (
+                          <li key={i} className={`flex items-start gap-2 text-sm ${getSubtextClass()}`}>
+                            <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${isLightMode ? 'bg-blue-100 text-blue-600' : 'bg-blue-500/20 text-blue-400'}`}>
+                              {String.fromCharCode(97 + i)}
+                            </span>
+                            {detail}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
                 </div>
-                {isExpanded && (
-                  <div className={`px-4 pb-4 border-t ${isLightMode ? 'border-gray-100' : 'border-white/10'}`}>
-                    <ol className="mt-3 space-y-2">
-                      {step.details.map((detail, i) => (
-                        <li key={i} className={`flex items-start gap-2 text-sm ${getSubtextClass()}`}>
-                          <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${isLightMode ? 'bg-blue-100 text-blue-600' : 'bg-blue-500/20 text-blue-400'}`}>
-                            {String.fromCharCode(97 + i)}
-                          </span>
-                          {detail}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Data Available */}
       <div className={getCardClass()}>
-        <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>Data Available After Connection</h3>
+        <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>
+          {gscStatus.connected ? 'Data Being Tracked' : 'Data Available After Connection'}
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {dataAvailable.map((item) => {
             const Icon = item.icon
@@ -202,24 +208,26 @@ const GoogleSearchConsole = () => {
         </div>
       </div>
 
-      {/* Environment Variables */}
-      <div className={getCardClass()}>
-        <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>Required Environment Variables</h3>
-        <div className="space-y-3">
-          {[
-            { key: 'GOOGLE_SEARCH_CONSOLE_KEY_FILE', value: 'path/to/service-account.json', desc: 'Path to Google Cloud service account JSON key' },
-            { key: 'GOOGLE_SEARCH_CONSOLE_SITE_URL', value: 'https://kamioi.com', desc: 'Your verified site URL in GSC' },
-          ].map((env) => (
-            <div key={env.key} className={`rounded-xl p-4 border ${isLightMode ? 'border-gray-100 bg-gray-50' : 'border-white/10 bg-white/5'}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <code className={`text-sm font-mono font-bold ${isLightMode ? 'text-purple-700' : 'text-purple-400'}`}>{env.key}</code>
+      {/* Environment Variables - only show when NOT connected */}
+      {!gscStatus.connected && (
+        <div className={getCardClass()}>
+          <h3 className={`text-lg font-semibold mb-4 ${getTextColor()}`}>Required Environment Variables</h3>
+          <div className="space-y-3">
+            {[
+              { key: 'GOOGLE_SEARCH_CONSOLE_KEY_FILE', value: 'path/to/service-account.json', desc: 'Path to Google Cloud service account JSON key' },
+              { key: 'GOOGLE_SEARCH_CONSOLE_SITE_URL', value: 'https://kamioi.com', desc: 'Your verified site URL in GSC' },
+            ].map((env) => (
+              <div key={env.key} className={`rounded-xl p-4 border ${isLightMode ? 'border-gray-100 bg-gray-50' : 'border-white/10 bg-white/5'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <code className={`text-sm font-mono font-bold ${isLightMode ? 'text-purple-700' : 'text-purple-400'}`}>{env.key}</code>
+                </div>
+                <code className={`text-xs font-mono ${isLightMode ? 'text-gray-500' : 'text-gray-500'}`}>{env.value}</code>
+                <p className={`text-xs mt-1 ${getSubtextClass()}`}>{env.desc}</p>
               </div>
-              <code className={`text-xs font-mono ${isLightMode ? 'text-gray-500' : 'text-gray-500'}`}>{env.value}</code>
-              <p className={`text-xs mt-1 ${getSubtextClass()}`}>{env.desc}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

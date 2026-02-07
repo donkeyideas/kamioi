@@ -344,8 +344,8 @@ const SeoOverviewDashboard = () => {
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className={`text-xl font-bold ${getTextColor()}`}>SEO & GEO Overview</h2>
-          <p className={`text-sm mt-0.5 ${getSubtextClass()}`}>
+          <h2 className="text-xl font-bold" style={{ color: isLightMode ? '#1f2937' : '#ffffff' }}>SEO & GEO Overview</h2>
+          <p className="text-sm mt-0.5" style={{ color: isLightMode ? '#4b5563' : '#9ca3af' }}>
             Consolidated view of search optimization health
           </p>
         </div>
