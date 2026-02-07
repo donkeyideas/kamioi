@@ -13,6 +13,7 @@ from .overview import *
 from .analytics import *
 # from .transactions import *
 from .llm_center import *
+from .seo_geo import *
 # from .crm_projects import *
 # from .ml_dashboard import *
 # from .llm_data_management import *

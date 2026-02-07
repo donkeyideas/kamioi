@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { LayoutDashboard, DollarSign, FileText, Brain, Users, Settings, Bell, Award, Megaphone, Globe, CreditCard, Zap, MessageSquare, Database, LogOut, Home, Building2, UserCog, TrendingUp, Cog, GripVertical, BookOpen, Activity, User, Bug, UserPlus, X } from 'lucide-react'
+import { LayoutDashboard, DollarSign, FileText, Brain, Users, Settings, Bell, Award, Megaphone, Globe, CreditCard, Zap, MessageSquare, Database, LogOut, Home, Building2, UserCog, TrendingUp, Cog, GripVertical, BookOpen, Activity, User, Bug, UserPlus, X, Search } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import prefetchRegistry from '../../services/prefetchRegistry'
 
@@ -22,6 +22,7 @@ const AdminSidebar = ({ activeTab, setActiveTab, user, onLogout, isMobileSidebar
     { id: 'financial', label: 'Financial Analytics', icon: DollarSign },
     { id: 'notifications', label: 'Notifications & Messaging', icon: Bell },
     { id: 'content', label: 'Content Management', icon: Globe },
+    { id: 'seo-geo', label: 'SEO & GEO', icon: Search },
     { id: 'advertisement', label: 'Advertisement', icon: Megaphone },
     { id: 'badges', label: 'Badges', icon: Award },
     { id: 'employees', label: 'Employee Management', icon: UserCog },

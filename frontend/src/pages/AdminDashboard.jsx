@@ -33,6 +33,7 @@ import APITrackingDashboard from '../components/admin/APITrackingDashboard'
 import AdminDatabaseManagement from './AdminDatabaseManagement'
 import ErrorTracking from '../components/admin/ErrorTracking'
 import DemoRequests from '../components/admin/DemoRequests'
+import SeoGeoAnalytics from '../components/admin/SeoGeoAnalytics'
 
 const AdminDashboard = () => {
   const navigate = useNavigate()
@@ -326,6 +327,8 @@ const AdminDashboard = () => {
         return <AdminDatabaseManagement />
       case 'error-tracking':
         return <ErrorTracking />
+      case 'seo-geo':
+        return <SeoGeoAnalytics />
       default:
         return <AdminOverview />
     }
