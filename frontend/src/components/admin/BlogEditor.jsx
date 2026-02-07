@@ -560,14 +560,17 @@ const BlogEditor = ({ post, onSave, onCancel, isEditing = false }) => {
           htmlLines.push('</ul>')
         }
         if (trimmed) {
-          // Only wrap in <p> if it doesn't already contain HTML tags
-          if (trimmed.match(/^<[^>]+>/)) {
+          // Convert markdown headings to HTML
+          const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/)
+          if (headingMatch) {
+            const level = headingMatch[1].length
+            htmlLines.push(`<h${level}>${headingMatch[2]}</h${level}>`)
+          } else if (trimmed.match(/^<[^>]+>/)) {
             htmlLines.push(trimmed)
           } else {
             htmlLines.push(`<div>${trimmed}</div>`)
           }
         } else if (htmlLines.length > 0) {
-          // Only add <br> if previous line wasn't empty
           htmlLines.push('<br />')
         }
       }
@@ -615,16 +618,18 @@ const BlogEditor = ({ post, onSave, onCancel, isEditing = false }) => {
       return '\n' + items.trim() + '\n'
     })
     
-    // Convert block elements - use single newline for divs, double for paragraphs
-    // Remove opening tags first
+    // Convert headings to markdown before stripping tags
+    markdown = markdown.replace(/<h([1-6])[^>]*>(.*?)<\/h\1>/gi, (match, level, text) => {
+      return '\n' + '#'.repeat(parseInt(level)) + ' ' + text + '\n'
+    })
+
+    // Convert block elements
     markdown = markdown.replace(/<p[^>]*>/gi, '')
     markdown = markdown.replace(/<div[^>]*>/gi, '')
-    markdown = markdown.replace(/<h[1-6][^>]*>/gi, '')
-    
+
     // Convert closing tags to newlines
     markdown = markdown.replace(/<\/p>/gi, '\n')
     markdown = markdown.replace(/<\/div>/gi, '\n')
-    markdown = markdown.replace(/<\/h[1-6]>/gi, '\n\n')
     
     // Convert <strong> to **
     markdown = markdown.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
