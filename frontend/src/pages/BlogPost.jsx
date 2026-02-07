@@ -160,23 +160,30 @@ const BlogPost = () => {
           inList = false
           htmlLines.push('</ul>')
         }
-        
+
         if (isEmpty) {
           // Skip empty lines - spacing will be handled by CSS margins
         } else {
-          // Check if this looks like a heading
-          // Headings are typically: short, contain bold placeholder, or end with colon, or are all caps
-          const hasBoldPlaceholder = /__BOLD_\d+__/.test(trimmed)
-          const isAllCaps = trimmed.length < 60 && trimmed === trimmed.toUpperCase() && trimmed.length > 3 && !hasBoldPlaceholder
-          const endsWithColon = trimmed.endsWith(':') && trimmed.length < 60
-          const isShortLine = trimmed.length < 60 && !trimmed.includes('.') && !trimmed.includes(',')
-          
-          const isHeading = (hasBoldPlaceholder && isShortLine) || (isAllCaps && isShortLine) || endsWithColon
-          
-          if (isHeading) {
-            htmlLines.push(`<h3 class="blog-heading">${trimmed}</h3>`)
+          // Check for markdown headings (## Heading, ### Heading, etc.)
+          const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/)
+          if (headingMatch) {
+            const level = headingMatch[1].length
+            const tag = `h${level}`
+            htmlLines.push(`<${tag} class="blog-heading">${headingMatch[2]}</${tag}>`)
           } else {
-            htmlLines.push(`<p>${trimmed}</p>`)
+            // Heuristic heading detection for non-markdown headings
+            const hasBoldPlaceholder = /__BOLD_\d+__/.test(trimmed)
+            const isAllCaps = trimmed.length < 60 && trimmed === trimmed.toUpperCase() && trimmed.length > 3 && !hasBoldPlaceholder
+            const endsWithColon = trimmed.endsWith(':') && trimmed.length < 60
+            const isShortLine = trimmed.length < 60 && !trimmed.includes('.') && !trimmed.includes(',')
+
+            const isHeading = (hasBoldPlaceholder && isShortLine) || (isAllCaps && isShortLine) || endsWithColon
+
+            if (isHeading) {
+              htmlLines.push(`<h3 class="blog-heading">${trimmed}</h3>`)
+            } else {
+              htmlLines.push(`<p>${trimmed}</p>`)
+            }
           }
         }
       }
@@ -479,6 +486,16 @@ const BlogPost = () => {
               }
               .blog-content p:last-child {
                 margin-bottom: 0;
+              }
+              .blog-content h2.blog-heading {
+                font-size: 1.75rem;
+                font-weight: 700;
+                margin: 36px 0 16px 0;
+                color: #ffffff;
+                line-height: 1.4;
+              }
+              .blog-content h2.blog-heading:first-child {
+                margin-top: 0;
               }
               .blog-content h3.blog-heading {
                 font-size: 1.4rem;
