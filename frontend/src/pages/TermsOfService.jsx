@@ -10,7 +10,7 @@ const TermsOfService = () => {
     <div className="min-h-screen gradient-bg">
       <SEO
         title="Kamioi Terms of Service: User Agreement"
-        description="Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage, fees, and investment disclaimers."
+        description="Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage and fees."
         breadcrumbs={[
           { name: "Home", url: "https://kamioi.com/" },
           { name: "Terms of Service", url: "https://kamioi.com/terms-of-service" }

@@ -79,7 +79,7 @@ class SeoAuditEngine:
         {
             'url': '/signup', 'name': 'Sign Up', 'component': 'Register',
             'expected_title': 'Sign Up for Kamioi: Start Investing Automatically',
-            'expected_description': 'Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No minimums, no hidden fees.',
+            'expected_description': 'Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No hidden fees.',
             'expected_schemas': ['Organization', 'WebSite', 'FAQPage', 'BreadcrumbList'],
             'has_faq': True, 'faq_count': 4,
             'expected_h1': True,
@@ -88,7 +88,7 @@ class SeoAuditEngine:
         {
             'url': '/terms-of-service', 'name': 'Terms of Service', 'component': 'TermsOfService',
             'expected_title': 'Kamioi Terms of Service: User Agreement',
-            'expected_description': 'Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage, fees, and disclaimers.',
+            'expected_description': 'Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage and fees.',
             'expected_schemas': ['Organization', 'WebSite', 'BreadcrumbList'],
             'has_faq': False, 'faq_count': 0,
             'expected_h1': True,
@@ -447,33 +447,6 @@ class SeoAuditEngine:
                 'impact': 'high',
                 'effort': 'medium',
                 'affected_pages': [page['url']]
-            })
-
-        # Check if llms.txt exists before recommending
-        import os
-        llms_txt_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'frontend', 'public', 'llms.txt')
-        if not os.path.exists(llms_txt_path):
-            recommendations.append({
-                'priority': 'nice_to_have',
-                'category': 'geo',
-                'title': 'Create llms.txt file for AI crawlers',
-                'description': 'An llms.txt file helps AI crawlers understand your site\'s content taxonomy and priorities. This emerging standard improves AI search indexing.',
-                'impact': 'medium',
-                'effort': 'low',
-                'affected_pages': ['/']
-            })
-
-        # Check if FinancialProduct schema is in Pricing page expected schemas
-        pricing_page = next((p for p in self.PUBLIC_PAGES if p['url'] == '/pricing'), None)
-        if pricing_page and 'FinancialProduct' not in pricing_page.get('expected_schemas', []):
-            recommendations.append({
-                'priority': 'important',
-                'category': 'structured_data',
-                'title': 'Add FinancialProduct schema to Pricing page',
-                'description': 'As a fintech platform, adding FinancialProduct schema to the pricing page would improve visibility for finance-related search queries.',
-                'impact': 'high',
-                'effort': 'medium',
-                'affected_pages': ['/pricing']
             })
 
         return recommendations

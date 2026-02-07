@@ -25847,11 +25847,11 @@ class SeoAuditEngine:
          'expected_schemas': ['Organization', 'WebSite', 'CollectionPage', 'BreadcrumbList', 'FAQPage'],
          'has_faq': True, 'faq_count': 4, 'expected_h1': True, 'priority': 0.8},
         {'url': '/signup', 'name': 'Sign Up', 'expected_title': 'Sign Up for Kamioi: Start Investing Automatically',
-         'expected_description': 'Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No minimums, no hidden fees.',
+         'expected_description': 'Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No hidden fees.',
          'expected_schemas': ['Organization', 'WebSite', 'FAQPage', 'BreadcrumbList'],
          'has_faq': True, 'faq_count': 4, 'expected_h1': True, 'priority': 0.7},
         {'url': '/terms-of-service', 'name': 'Terms of Service', 'expected_title': 'Kamioi Terms of Service: User Agreement',
-         'expected_description': "Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage, fees, and disclaimers.",
+         'expected_description': "Read the Kamioi Terms of Service. Understand your rights and responsibilities when using our automatic investing platform, including account usage and fees.",
          'expected_schemas': ['Organization', 'WebSite', 'BreadcrumbList'],
          'has_faq': False, 'faq_count': 0, 'expected_h1': True, 'priority': 0.3},
         {'url': '/privacy-policy', 'name': 'Privacy Policy', 'expected_title': 'Kamioi Privacy Policy: How We Protect Your Data',
@@ -26064,14 +26064,6 @@ class SeoAuditEngine:
                 'title': f'Add FAQ schema to {page["page_name"]}',
                 'description': f'Adding FAQ structured data to {page["url"]} would improve visibility in AI search results.',
                 'impact': 'high', 'effort': 'medium', 'affected_pages': [page['url']]})
-        recommendations.append({'priority': 'nice_to_have', 'category': 'geo',
-            'title': 'Create llms.txt file for AI crawlers',
-            'description': "An llms.txt file helps AI crawlers understand your site's content taxonomy.",
-            'impact': 'medium', 'effort': 'low', 'affected_pages': ['/']})
-        recommendations.append({'priority': 'important', 'category': 'structured_data',
-            'title': 'Add FinancialProduct schema to Pricing page',
-            'description': 'Adding FinancialProduct schema to the pricing page would improve visibility for finance-related queries.',
-            'impact': 'high', 'effort': 'medium', 'affected_pages': ['/pricing']})
         return recommendations
 
     def _issue_to_recommendation(self, issue, page_result):

@@ -130,7 +130,7 @@ const Register = () => {
     <>
     <SEO
       title="Sign Up for Kamioi: Start Investing Automatically"
-      description="Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No minimums, no hidden fees, bank-level security."
+      description="Create your free Kamioi account and start building wealth with automatic round-up investing. Choose Individual, Family, or Business plans. No hidden fees."
       keywords="sign up kamioi, create investing account, automatic investing signup, round-up investing registration"
       breadcrumbs={[
         { name: "Home", url: "https://kamioi.com/" },
