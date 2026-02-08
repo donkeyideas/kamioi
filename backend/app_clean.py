@@ -22411,6 +22411,24 @@ def admin_blog_ai_generate():
 
 Return a JSON object with these exact keys:
 - "content": Full blog post in markdown format (1000+ words). Use ## for section headings, **bold** for key terms, bullet lists with - prefix, and include statistics/data points. Write 5-7 sections with clear headings. Make it educational and actionable.
+
+IMPORTANT - Backlinks: You MUST include 6-10 hyperlinks naturally embedded in the content using markdown link syntax [anchor text](url):
+  * Internal links (3-5): Link to Kamioi pages where relevant. Available pages:
+    - https://kamioi.com/ (homepage — use for general Kamioi mentions)
+    - https://kamioi.com/features (features page — link when discussing app capabilities)
+    - https://kamioi.com/how-it-works (how it works — link when explaining round-ups or the investing process)
+    - https://kamioi.com/pricing (pricing — link when discussing costs or plans)
+    - https://kamioi.com/learn (learning center — link when mentioning education or guides)
+    - https://kamioi.com/blog (blog — link when referencing other articles)
+    - https://kamioi.com/signup (signup — use as call-to-action links like "start investing today")
+  * External authority links (3-5): Link to reputable sources to build credibility. Use sites like:
+    - SEC.gov (regulations, investor education)
+    - Investopedia.com (financial term definitions)
+    - Federal Reserve or Bureau of Labor Statistics (economic data, inflation stats)
+    - NerdWallet.com, Bankrate.com (personal finance comparisons)
+    - Major financial news (Bloomberg, CNBC, Reuters) for statistics or studies
+  Make the anchor text descriptive and natural (not "click here"). Spread links throughout all sections, not clustered in one place.
+
 - "excerpt": A compelling 2-sentence summary (under 160 characters)
 - "slug": URL-friendly slug derived from the title (lowercase, hyphens, no special chars)
 - "category": One category from: Investing, Finance, Education, Technology, Lifestyle, Savings, Beginners
