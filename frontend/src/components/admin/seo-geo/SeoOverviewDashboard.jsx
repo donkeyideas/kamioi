@@ -176,7 +176,6 @@ const SeoOverviewDashboard = () => {
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [gscStatus, setGscStatus] = useState(null)
-  const [ga4Status, setGa4Status] = useState(null)
 
   // Theme helpers
   const getTextColor = () => (isLightMode ? 'text-gray-800' : 'text-white')
@@ -233,12 +232,6 @@ const SeoOverviewDashboard = () => {
     })
       .then(r => r.json())
       .then(json => { if (json.success) setGscStatus(json.data) })
-      .catch(() => {})
-    fetch(`${apiBaseUrl}/api/admin/seo-geo/ga4-status`, {
-      headers: { 'Authorization': `Bearer ${tkn}`, 'Content-Type': 'application/json' }
-    })
-      .then(r => r.json())
-      .then(json => { if (json.success) setGa4Status(json.data) })
       .catch(() => {})
   }, [fetchData])
 
@@ -381,38 +374,22 @@ const SeoOverviewDashboard = () => {
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Connection Status Cards (GSC + GA4 side by side)                  */}
+      {/* GSC Connection Status                                             */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {gscStatus && (
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-xl text-sm ${
-            gscStatus.connected
-              ? isLightMode ? 'bg-green-50 border border-green-200' : 'bg-green-500/10 border border-green-500/20'
-              : isLightMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-yellow-500/10 border border-yellow-500/20'
-          }`}>
-            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${gscStatus.connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-            <span style={{ color: isLightMode ? '#374151' : '#d1d5db' }}>
-              {gscStatus.connected
-                ? <>Search Console connected — <strong>{gscStatus.site_url}</strong></>
-                : 'Search Console not connected'}
-            </span>
-          </div>
-        )}
-        {ga4Status && (
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-xl text-sm ${
-            ga4Status.connected
-              ? isLightMode ? 'bg-green-50 border border-green-200' : 'bg-green-500/10 border border-green-500/20'
-              : isLightMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-yellow-500/10 border border-yellow-500/20'
-          }`}>
-            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${ga4Status.connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-            <span style={{ color: isLightMode ? '#374151' : '#d1d5db' }}>
-              {ga4Status.connected
-                ? <>Google Analytics connected — <strong>Property {ga4Status.property_id}</strong></>
-                : 'Google Analytics not connected'}
-            </span>
-          </div>
-        )}
-      </div>
+      {gscStatus && (
+        <div className={`flex items-center gap-3 px-5 py-3 rounded-xl text-sm ${
+          gscStatus.connected
+            ? isLightMode ? 'bg-green-50 border border-green-200' : 'bg-green-500/10 border border-green-500/20'
+            : isLightMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-yellow-500/10 border border-yellow-500/20'
+        }`}>
+          <div className={`w-2.5 h-2.5 rounded-full ${gscStatus.connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
+          <span style={{ color: isLightMode ? '#374151' : '#d1d5db' }}>
+            {gscStatus.connected
+              ? <>Google Search Console connected — <strong>{gscStatus.site_url}</strong></>
+              : 'Google Search Console not connected — showing demo data'}
+          </span>
+        </div>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Circular Score Gauges                                             */}
