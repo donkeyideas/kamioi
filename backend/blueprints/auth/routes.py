@@ -66,9 +66,14 @@ def user_login():
         password_valid = False
         needs_hash_upgrade = False
 
-        # Check if password is hashed or plaintext
+        # Check if password is hashed (werkzeug), SHA256, or plaintext
         if stored_password and (stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:')):
             password_valid = check_password_hash(stored_password, password)
+        elif stored_password and len(stored_password) == 64:
+            # SHA256 hash (used by app_clean.py)
+            import hashlib
+            password_hash = hashlib.sha256(password.encode()).hexdigest()
+            password_valid = (stored_password == password_hash)
         else:
             # Legacy plaintext password
             password_valid = (stored_password == password)
@@ -333,9 +338,14 @@ def admin_login():
         password_valid = False
         needs_hash_upgrade = False
 
-        # Check if password is hashed or plaintext
+        # Check if password is hashed (werkzeug), SHA256, or plaintext
         if stored_password and (stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:')):
             password_valid = check_password_hash(stored_password, password)
+        elif stored_password and len(stored_password) == 64:
+            # SHA256 hash (used by app_clean.py)
+            import hashlib
+            password_hash = hashlib.sha256(password.encode()).hexdigest()
+            password_valid = (stored_password == password_hash)
         else:
             password_valid = (stored_password == password)
             if password_valid:
