@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react'
-import { Building, Activity, DollarSign, TrendingUp, Users, CheckCircle, Trash2, Settings, BarChart3, User } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Building, Activity, DollarSign, TrendingUp, Users, CheckCircle, Trash2, Settings, BarChart3, User, Globe } from 'lucide-react'
 import RechartsChart from '../common/RechartsChart'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTheme } from '../../context/ThemeContext'
 import { useData } from '../../context/DataContext'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -26,7 +27,11 @@ const AdminOverview = ({ user }) => {
   const { addNotification } = useNotifications()
   const { clearAllData } = useData()
   const { isLightMode, isDarkMode, isCloudMode } = useTheme()
-  
+
+  // Website traffic data for SEO/GEO chart
+  const [trafficData, setTrafficData] = useState(null)
+  const [trafficLoading, setTrafficLoading] = useState(true)
+
   // 🚀 PERFORMANCE FIX: Single aggregated endpoint - all calculations done on backend
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-overview'],
@@ -116,6 +121,30 @@ const AdminOverview = ({ user }) => {
     }
   }, [data, isLoading])
 
+  // Fetch SEO/GEO traffic data for overview chart
+  useEffect(() => {
+    const fetchTraffic = async () => {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('admin_token_3') || localStorage.getItem('authToken')
+      if (!token) { setTrafficLoading(false); return }
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/admin/seo-geo/traffic`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        })
+        if (res.ok) {
+          const result = await res.json()
+          if (result.success && result.data) {
+            setTrafficData(result.data)
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch traffic data:', e)
+      }
+      setTrafficLoading(false)
+    }
+    fetchTraffic()
+  }, [])
+
   // 🚀 PERFORMANCE FIX: All data pre-calculated by backend - no frontend processing
   const stats = data?.stats || {
     totalTransactions: 0,
@@ -170,15 +199,6 @@ const AdminOverview = ({ user }) => {
     }
   ]
   
-  // 🚀 PERFORMANCE FIX: Revenue trend - backend should provide this, fallback for now
-  const revenueTrend = data?.revenueTrend || {
-    current_month: stats.totalRevenue,
-    growth_percentage: stats.totalRevenue > 0 ? 100 : 0,
-    previous_month: 0,
-    trend: stats.totalRevenue > 0 ? 'growing' : 'stable',
-    weekData: [0, 0, 0, 0, stats.totalRevenue] // Backend should calculate this
-  }
-
   const getTextClass = () => {
     if (isLightMode) return 'text-gray-800'
     return 'text-white'
@@ -311,19 +331,91 @@ const AdminOverview = ({ user }) => {
         </div>
 
         <div className={getCardClass()}>
-          <h3 className={`text-xl font-semibold ${getTextClass()} mb-4`}>Revenue Trend</h3>
-          <RechartsChart 
-            type="line" 
-            height={250}
-            data={[
-              { name: 'Week 1', value: revenueTrend.weekData[0] },
-              { name: 'Week 2', value: revenueTrend.weekData[1] },
-              { name: 'Week 3', value: revenueTrend.weekData[2] },
-              { name: 'Week 4', value: revenueTrend.weekData[3] },
-              { name: 'Today', value: revenueTrend.weekData[4] }
-            ]}
-            series={[{ dataKey: 'value', name: 'Revenue ($)' }]}
-          />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-blue-400" />
+              <div>
+                <h3 className={`text-lg font-semibold ${getTextClass()}`}>Website Traffic</h3>
+                <p className={`text-xs ${getSubtextClass()}`}>
+                  {trafficData?.source === 'gsc' ? 'Google Search Console — Last 30 days' : 'Search traffic — Last 30 days'}
+                </p>
+              </div>
+            </div>
+            {trafficData?.time_series?.length > 0 && (
+              <div className="flex gap-4 text-right">
+                <div>
+                  <p className="text-lg font-bold text-blue-400">
+                    {trafficData.time_series.reduce((sum, d) => sum + (d.clicks || 0), 0).toLocaleString()}
+                  </p>
+                  <p className={`text-xs ${getSubtextClass()}`}>Clicks</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-emerald-400">
+                    {trafficData.time_series.reduce((sum, d) => sum + (d.impressions || 0), 0).toLocaleString()}
+                  </p>
+                  <p className={`text-xs ${getSubtextClass()}`}>Impressions</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {trafficLoading ? (
+            <div className="flex items-center justify-center h-[250px]">
+              <p className={getSubtextClass()}>Loading traffic data...</p>
+            </div>
+          ) : trafficData?.time_series?.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={trafficData.time_series.map(d => ({
+                ...d,
+                label: new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              }))}>
+                <defs>
+                  <linearGradient id="trafficGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={isLightMode ? '#e5e7eb' : '#374151'} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: isLightMode ? '#374151' : '#d1d5db', fontSize: 11 }}
+                  axisLine={{ stroke: isLightMode ? '#e5e7eb' : '#374151' }}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fill: isLightMode ? '#374151' : '#d1d5db', fontSize: 11 }}
+                  axisLine={{ stroke: isLightMode ? '#e5e7eb' : '#374151' }}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: isLightMode ? '#fff' : '#1f2937',
+                    border: `1px solid ${isLightMode ? '#e5e7eb' : '#374151'}`,
+                    borderRadius: '8px',
+                    color: isLightMode ? '#374151' : '#d1d5db',
+                    fontSize: '13px'
+                  }}
+                  formatter={(value, name) => [value.toLocaleString(), name === 'clicks' ? 'Clicks' : 'Impressions']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="clicks"
+                  stroke="#3b82f6"
+                  fill="url(#trafficGradient)"
+                  strokeWidth={2}
+                  name="clicks"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[250px]">
+              <div className="text-center">
+                <Globe className={`w-8 h-8 mx-auto mb-2 ${getSubtextClass()}`} />
+                <p className={`${getSubtextClass()} mb-1`}>No traffic data yet</p>
+                <p className={`${getSubtextClass()} text-xs`}>Data will appear as your site gets indexed by Google</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
