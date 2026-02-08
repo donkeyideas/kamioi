@@ -4,7 +4,7 @@ import prefetchRegistry from '../../services/prefetchRegistry'
 import prefetchService from '../../services/prefetchService'
 import { Brain, CheckCircle, XCircle, BarChart3, Eye, Trash2, Clock, User, Building, Settings, Search, Upload, Plus, RefreshCw, Database, TrendingUp, AlertTriangle, Filter, Download, Edit, Save, RotateCcw, Zap, Target, MapPin, Globe, Shield, Activity, Users, DollarSign, PieChart, LineChart, Calendar, FileText, Hash, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Star, Flag, Bookmark, Tag, Layers, Grid, List, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Minus, Maximize2, Minimize2, Copy, ExternalLink, X, GitBranch, ArrowRightCircle, Info } from 'lucide-react'
 import CompanyLogo from '../common/CompanyLogo'
-import GlassModal from '../common/GlassModal'
+import GlassModal from '../ui/GlassModal'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query' // 🚀 PERFORMANCE FIX: Import React Query
 

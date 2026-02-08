@@ -316,14 +316,10 @@ allowed_origins = [origin.strip() for origin in allowed_origins]
 CORS(app,
      origins=allowed_origins,
      methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-CSRF-Token'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
      supports_credentials=True,
      automatic_options=True,
      max_age=3600)
-
-# Initialize rate limiter
-from services.rate_limit_service import init_limiter
-limiter = init_limiter(app)
 
 # Register blueprints AFTER CORS configuration
 # Note: stripe_bp has its own CORS configuration to avoid conflicts
@@ -373,13 +369,19 @@ def handle_preflight():
 def after_request_handler(response):
     """Add CORS headers to ALL responses - always override to ensure they're present"""
     try:
+        # Always set headers (overwrite if Flask-CORS already set them)
+        # This ensures headers are present even on error responses
         if response is not None:
             response.headers['Access-Control-Allow-Origin'] = '*'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Admin-Token, X-User-Token'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
             response.headers['Access-Control-Allow-Credentials'] = 'false'
+            # Debug logging
+            sys.stdout.write(f"[CORS] Added headers to {request.method} {request.path}\n")
+            sys.stdout.flush()
         return response
     except Exception as e:
+        # If modifying response fails, log and return original response
         sys.stdout.write(f"[ERROR] after_request_handler error: {e}\n")
         sys.stdout.flush()
         import traceback
@@ -17346,174 +17348,6 @@ def admin_delete_blog_post(post_id):
         sys.stdout.write(f"[ERROR] Delete blog post error: {error_msg}\n")
         sys.stdout.write(f"[ERROR] Traceback: {traceback_str}\n")
         sys.stdout.flush()
-        return jsonify({'success': False, 'error': error_msg}), 500
-
-@app.route('/api/admin/blog/ai-generate', methods=['POST'])
-def admin_blog_ai_generate():
-    """Generate blog content using DeepSeek AI with internal backlinks"""
-    ok, res = require_role('admin')
-    if ok is False:
-        return res
-
-    try:
-        data = request.get_json()
-        title = data.get('title', '').strip()
-        if not title:
-            return jsonify({'success': False, 'error': 'Title is required'}), 400
-
-        import urllib.request
-        import socket
-        from datetime import datetime as dt
-
-        api_key = os.environ.get('DEEPSEEK_API_KEY')
-        if not api_key:
-            return jsonify({'success': False, 'error': 'DeepSeek API key not configured'}), 500
-
-        start_time = dt.now()
-
-        # Fetch existing published blog posts for internal backlinks
-        existing_posts = []
-        try:
-            conn = db_manager.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT title, slug, category
-                FROM blog_posts
-                WHERE status = 'published'
-                ORDER BY created_at DESC
-                LIMIT 50
-            """)
-            rows = cursor.fetchall()
-            conn.close()
-            for row in rows:
-                existing_posts.append({
-                    'title': row[0],
-                    'slug': row[1],
-                    'category': row[2] or ''
-                })
-        except Exception as db_err:
-            sys.stdout.write(f"[WARNING] Could not fetch existing posts for backlinks: {db_err}\n")
-            sys.stdout.flush()
-
-        # Build internal links instruction for the prompt
-        internal_links_instruction = ""
-        if existing_posts:
-            links_list = "\n".join([
-                f"- \"{p['title']}\" -> https://kamioi.com/blog/{p['slug']} (Category: {p['category']})"
-                for p in existing_posts
-            ])
-            internal_links_instruction = f"""
-
-INTERNAL LINKING INSTRUCTIONS:
-You MUST include 2-4 internal backlinks to relevant existing Kamioi blog posts within the content.
-Place them naturally within paragraphs where they add value to the reader (not in a separate section).
-Use markdown link format: [descriptive anchor text](url)
-Choose the most contextually relevant posts from this list:
-
-{links_list}
-
-Only link to posts that are genuinely relevant to the topic. Use descriptive anchor text (not "click here").
-Do NOT create a separate "Related Posts" section - weave the links naturally into the body content."""
-
-        system_prompt = (
-            "You are an expert SEO content writer for Kamioi, an AI-powered micro-investing fintech platform "
-            "that turns everyday purchases into stock ownership through automatic round-up investing. "
-            "Write engaging, informative content optimized for search engines. "
-            "Always respond in valid JSON format only."
-        )
-
-        user_prompt = f"""Write a complete, SEO-optimized blog post with the title: "{title}"
-
-Return a JSON object with these exact keys:
-- "content": Full blog post in markdown format (1000+ words). Use ## for section headings, **bold** for key terms, bullet lists with - prefix, and include statistics/data points. Write 5-7 sections with clear headings. Make it educational and actionable.
-- "excerpt": A compelling 2-sentence summary (under 160 characters)
-- "slug": URL-friendly slug derived from the title (lowercase, hyphens, no special chars)
-- "category": One category from: Investing, Finance, Education, Technology, Lifestyle, Savings, Beginners
-- "tags": Array of 4-6 relevant tags as strings
-- "seo_title": SEO-optimized title (30-60 characters, include primary keyword)
-- "seo_description": Meta description (120-160 characters, include call-to-action)
-- "seo_keywords": Comma-separated focus keywords (5-8 keywords)
-- "og_title": Open Graph title (concise, engaging)
-- "og_description": Open Graph description (compelling, under 200 chars)
-- "schema_markup": Valid Article JSON-LD schema as a JSON string with @context, @type Article, headline, description, datePublished (use today's date), author object with @type Person and name Kamioi Team
-
-Important: The content should relate to personal finance, investing, micro-investing, round-ups, fractional shares, or wealth building. Make it valuable for beginners.{internal_links_instruction}"""
-
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4000,
-            "response_format": {"type": "json_object"}
-        }
-
-        headers_api = {
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
-        }
-
-        socket.setdefaulttimeout(90)
-        try:
-            req = urllib.request.Request(
-                'https://api.deepseek.com/v1/chat/completions',
-                data=json.dumps(payload).encode('utf-8'),
-                headers=headers_api
-            )
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                response_text = resp.read().decode('utf-8')
-                api_response = json.loads(response_text)
-        finally:
-            socket.setdefaulttimeout(None)
-
-        # Parse response
-        content_raw = api_response.get('choices', [{}])[0].get('message', {}).get('content', '')
-        content_clean = content_raw.strip()
-        if content_clean.startswith('```json'):
-            content_clean = content_clean[7:]
-        if content_clean.startswith('```'):
-            content_clean = content_clean[3:]
-        if content_clean.endswith('```'):
-            content_clean = content_clean[:-3]
-        generated = json.loads(content_clean.strip())
-
-        # Track API usage
-        processing_time = int((dt.now() - start_time).total_seconds() * 1000)
-        usage = api_response.get('usage', {})
-        try:
-            from services.api_usage_tracker import APIUsageTracker
-            tracker = APIUsageTracker()
-            tracker.record_api_call(
-                endpoint='/api/admin/blog/ai-generate',
-                model='deepseek-chat',
-                prompt_tokens=usage.get('prompt_tokens', 0),
-                completion_tokens=usage.get('completion_tokens', 0),
-                total_tokens=usage.get('total_tokens', 0),
-                processing_time_ms=processing_time,
-                success=True,
-                user_id=1,
-                page_tab='Blog AI Generation',
-                request_data=json.dumps({'title': title}),
-                response_data=content_raw[:2000]
-            )
-        except Exception as track_err:
-            print(f"Warning: Could not track API usage: {track_err}")
-
-        return jsonify({
-            'success': True,
-            'generated': generated,
-            'processing_time_ms': processing_time,
-            'tokens_used': usage.get('total_tokens', 0)
-        })
-
-    except json.JSONDecodeError as e:
-        return jsonify({'success': False, 'error': f'Failed to parse AI response: {str(e)}'}), 500
-    except Exception as e:
-        error_msg = str(e)
-        if 'timed out' in error_msg.lower():
-            return jsonify({'success': False, 'error': 'AI generation timed out. Please try again.'}), 504
         return jsonify({'success': False, 'error': error_msg}), 500
 
 @app.route('/api/admin/blog/ai-seo-optimize', methods=['POST'])
