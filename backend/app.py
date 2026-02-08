@@ -345,8 +345,47 @@ app.register_blueprint(family_bp)
 app.register_blueprint(business_bp)
 app.register_blueprint(admin_bp)
 
-# Flask-CORS handles all CORS headers (preflight and responses) via config above.
-# No manual header overrides needed - wildcard overrides were removed for security.
+# Global OPTIONS handler for CORS preflight requests
+@app.before_request
+def handle_preflight():
+    try:
+        if request.method == "OPTIONS":
+            sys.stdout.write(f"[CORS] Handling OPTIONS preflight for {request.path}\n")
+            sys.stdout.flush()
+            response = make_response()
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Admin-Token, X-User-Token'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Credentials'] = 'false'
+            return response
+        return None
+    except Exception as e:
+        sys.stdout.write(f"[ERROR] handle_preflight error: {e}\n")
+        sys.stdout.flush()
+        import traceback
+        sys.stdout.write(traceback.format_exc())
+        sys.stdout.flush()
+        return None
+
+# Global after_request handler to ALWAYS add CORS headers
+# This ensures headers are present even if Flask-CORS fails or on error responses
+@app.after_request
+def after_request_handler(response):
+    """Add CORS headers to ALL responses - always override to ensure they're present"""
+    try:
+        if response is not None:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Admin-Token, X-User-Token'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Credentials'] = 'false'
+        return response
+    except Exception as e:
+        sys.stdout.write(f"[ERROR] after_request_handler error: {e}\n")
+        sys.stdout.flush()
+        import traceback
+        sys.stdout.write(traceback.format_exc())
+        sys.stdout.flush()
+    return response
 
 # Error handler for HTTP exceptions (404, 500, etc.) - ensure CORS headers are present
 @app.errorhandler(HTTPException)
