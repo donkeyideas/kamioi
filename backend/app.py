@@ -16740,6 +16740,322 @@ def admin_delete_demo_request(request_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ===== CONTACT MESSAGES =====
+
+def _ensure_contact_messages_table(conn, use_postgresql):
+    """Create contact_messages table if it doesn't exist"""
+    if use_postgresql:
+        from sqlalchemy import text
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                subject VARCHAR(500) NOT NULL,
+                message TEXT NOT NULL,
+                status VARCHAR(50) DEFAULT 'unread',
+                admin_notes TEXT,
+                admin_reply TEXT,
+                replied_at TIMESTAMP,
+                ip_address VARCHAR(50),
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.commit()
+    else:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT DEFAULT 'unread',
+                admin_notes TEXT,
+                admin_reply TEXT,
+                replied_at TIMESTAMP,
+                ip_address TEXT,
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+@app.route('/api/contact', methods=['POST'])
+def submit_contact_message():
+    """Submit a contact message (public endpoint)"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        if not data.get('name') or not data.get('email') or not data.get('subject') or not data.get('message'):
+            return jsonify({'success': False, 'error': 'Name, email, subject, and message are required'}), 400
+
+        # Basic email validation
+        import re
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', data['email']):
+            return jsonify({'success': False, 'error': 'Invalid email address'}), 400
+
+        # Honeypot check
+        if data.get('website'):
+            return jsonify({'success': True, 'message': 'Thank you for contacting us!'})
+
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+        _ensure_contact_messages_table(conn, use_postgresql)
+
+        ip_address = request.remote_addr or ''
+        user_agent = request.headers.get('User-Agent', '')
+
+        if use_postgresql:
+            from sqlalchemy import text
+            result = conn.execute(text("""
+                INSERT INTO contact_messages (name, email, subject, message, status, ip_address, user_agent, created_at, updated_at)
+                VALUES (:name, :email, :subject, :message, 'unread', :ip_address, :user_agent, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                RETURNING id
+            """), {
+                'name': data.get('name'),
+                'email': data.get('email'),
+                'subject': data.get('subject'),
+                'message': data.get('message'),
+                'ip_address': ip_address,
+                'user_agent': user_agent
+            })
+            new_id = result.fetchone()[0]
+            conn.commit()
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO contact_messages (name, email, subject, message, status, ip_address, user_agent, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'unread', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """, (
+                data.get('name'),
+                data.get('email'),
+                data.get('subject'),
+                data.get('message'),
+                ip_address,
+                user_agent
+            ))
+            new_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Thank you for contacting us! We will get back to you shortly.',
+            'data': {'id': new_id}
+        })
+    except Exception as e:
+        sys.stdout.write(f"[ERROR] Submit contact message error: {str(e)}\n")
+        sys.stdout.flush()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/contact-messages', methods=['GET'])
+def admin_get_contact_messages():
+    """Get all contact messages (admin only)"""
+    ok, res = require_role('admin')
+    if ok is False:
+        return res
+
+    try:
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+        _ensure_contact_messages_table(conn, use_postgresql)
+
+        status_filter = request.args.get('status', '')
+
+        if use_postgresql:
+            from sqlalchemy import text
+            if status_filter:
+                result = conn.execute(text("""
+                    SELECT id, name, email, subject, message, status, admin_notes, admin_reply, replied_at, ip_address, created_at, updated_at
+                    FROM contact_messages
+                    WHERE status = :status
+                    ORDER BY created_at DESC
+                """), {'status': status_filter})
+            else:
+                result = conn.execute(text("""
+                    SELECT id, name, email, subject, message, status, admin_notes, admin_reply, replied_at, ip_address, created_at, updated_at
+                    FROM contact_messages
+                    ORDER BY created_at DESC
+                """))
+            rows = result.fetchall()
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            if status_filter:
+                cursor.execute("""
+                    SELECT id, name, email, subject, message, status, admin_notes, admin_reply, replied_at, ip_address, created_at, updated_at
+                    FROM contact_messages
+                    WHERE status = ?
+                    ORDER BY created_at DESC
+                """, (status_filter,))
+            else:
+                cursor.execute("""
+                    SELECT id, name, email, subject, message, status, admin_notes, admin_reply, replied_at, ip_address, created_at, updated_at
+                    FROM contact_messages
+                    ORDER BY created_at DESC
+                """)
+            rows = cursor.fetchall()
+            conn.close()
+
+        messages_list = []
+        for row in rows:
+            messages_list.append({
+                'id': row[0],
+                'name': row[1],
+                'email': row[2],
+                'subject': row[3],
+                'message': row[4],
+                'status': row[5],
+                'admin_notes': row[6],
+                'admin_reply': row[7],
+                'replied_at': row[8].isoformat() if hasattr(row[8], 'isoformat') else row[8],
+                'ip_address': row[9],
+                'created_at': row[10].isoformat() if hasattr(row[10], 'isoformat') else row[10],
+                'updated_at': row[11].isoformat() if hasattr(row[11], 'isoformat') else row[11]
+            })
+
+        return jsonify({
+            'success': True,
+            'data': messages_list
+        })
+    except Exception as e:
+        sys.stdout.write(f"[ERROR] Get contact messages error: {str(e)}\n")
+        sys.stdout.flush()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/contact-messages/unread-count', methods=['GET'])
+def admin_get_unread_contact_messages_count():
+    """Get count of unread contact messages (for notification badge)"""
+    ok, res = require_role('admin')
+    if ok is False:
+        return res
+
+    try:
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+        _ensure_contact_messages_table(conn, use_postgresql)
+
+        if use_postgresql:
+            from sqlalchemy import text
+            result = conn.execute(text("SELECT COUNT(*) FROM contact_messages WHERE status = 'unread'"))
+            count = result.fetchone()[0]
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM contact_messages WHERE status = 'unread'")
+            count = cursor.fetchone()[0]
+            conn.close()
+
+        return jsonify({
+            'success': True,
+            'data': {'count': count}
+        })
+    except Exception as e:
+        return jsonify({'success': True, 'data': {'count': 0}})
+
+@app.route('/api/admin/contact-messages/<int:message_id>', methods=['PUT'])
+def admin_update_contact_message(message_id):
+    """Update a contact message (status, notes, reply)"""
+    ok, res = require_role('admin')
+    if ok is False:
+        return res
+
+    try:
+        data = request.get_json()
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+
+        new_status = data.get('status', 'read')
+        admin_notes = data.get('admin_notes', '')
+        admin_reply = data.get('admin_reply', '')
+
+        if use_postgresql:
+            from sqlalchemy import text
+            if new_status == 'replied' and admin_reply:
+                conn.execute(text("""
+                    UPDATE contact_messages
+                    SET status = :status, admin_notes = :admin_notes, admin_reply = :admin_reply, replied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                """), {
+                    'status': new_status,
+                    'admin_notes': admin_notes,
+                    'admin_reply': admin_reply,
+                    'id': message_id
+                })
+            else:
+                conn.execute(text("""
+                    UPDATE contact_messages
+                    SET status = :status, admin_notes = :admin_notes, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                """), {
+                    'status': new_status,
+                    'admin_notes': admin_notes,
+                    'id': message_id
+                })
+            conn.commit()
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            if new_status == 'replied' and admin_reply:
+                cursor.execute("""
+                    UPDATE contact_messages
+                    SET status = ?, admin_notes = ?, admin_reply = ?, replied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (new_status, admin_notes, admin_reply, message_id))
+            else:
+                cursor.execute("""
+                    UPDATE contact_messages
+                    SET status = ?, admin_notes = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (new_status, admin_notes, message_id))
+            conn.commit()
+            conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Contact message updated successfully'
+        })
+    except Exception as e:
+        sys.stdout.write(f"[ERROR] Update contact message error: {str(e)}\n")
+        sys.stdout.flush()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/contact-messages/<int:message_id>', methods=['DELETE'])
+def admin_delete_contact_message(message_id):
+    """Delete a contact message"""
+    ok, res = require_role('admin')
+    if ok is False:
+        return res
+
+    try:
+        conn = db_manager.get_connection()
+        use_postgresql = getattr(db_manager, '_use_postgresql', False)
+
+        if use_postgresql:
+            from sqlalchemy import text
+            conn.execute(text("DELETE FROM contact_messages WHERE id = :id"), {'id': message_id})
+            conn.commit()
+            db_manager.release_connection(conn)
+        else:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM contact_messages WHERE id = ?", (message_id,))
+            conn.commit()
+            conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Contact message deleted successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # Frontend Content Management
 @app.route('/api/admin/frontend-content', methods=['GET'])
 def admin_get_frontend_content():

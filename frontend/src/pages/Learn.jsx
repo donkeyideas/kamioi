@@ -433,19 +433,25 @@ const Learn = () => {
                 >
                   Blog
                 </button>
-                <button 
+                <button
                   onClick={() => navigate('/pricing')}
                   className="text-white/80 hover:text-white transition-colors"
                 >
                   Pricing
                 </button>
-                <button 
+                <button
+                  onClick={() => navigate('/contact')}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  Contact
+                </button>
+                <button
                   onClick={() => navigate('/login')}
                   className="text-white/80 hover:text-white transition-colors"
                 >
                   Login
                 </button>
-                <button 
+                <button
                   onClick={() => navigate('/signup')}
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-300 flex items-center space-x-2 shadow-lg"
                 >
@@ -506,7 +512,7 @@ const Learn = () => {
                 >
                   Blog
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     navigate('/pricing')
                     setMenuOpen(false)
@@ -515,7 +521,16 @@ const Learn = () => {
                 >
                   Pricing
                 </button>
-                <button 
+                <button
+                  onClick={() => {
+                    navigate('/contact')
+                    setMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white/80 hover:text-white hover:bg-white/10"
+                >
+                  Contact
+                </button>
+                <button
                   onClick={() => {
                     navigate('/login')
                     setMenuOpen(false)
@@ -524,7 +539,7 @@ const Learn = () => {
                 >
                   Login
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     navigate('/signup')
                     setMenuOpen(false)

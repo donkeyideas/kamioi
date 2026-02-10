@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react'
-import { Sun, Moon, Cloud, Search, Bell, Settings, User, UserPlus, Menu } from 'lucide-react'
+import { Sun, Moon, Cloud, Search, Bell, Settings, User, UserPlus, Menu, Mail } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -10,6 +10,7 @@ const AdminHeader = ({ activeTab, onToggleMobileSidebar }) => {
   const { unreadCount } = useNotifications()
   const [searchQuery, setSearchQuery] = useState('')
   const [demoRequestCount, setDemoRequestCount] = useState(0)
+  const [contactMessageCount, setContactMessageCount] = useState(0)
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5111'
 
@@ -31,12 +32,34 @@ const AdminHeader = ({ activeTab, onToggleMobileSidebar }) => {
     }
   }, [apiBaseUrl])
 
+  // Fetch unread contact message count
+  const fetchContactMessageCount = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const response = await fetch(`${apiBaseUrl}/api/admin/contact-messages/unread-count`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await response.json()
+      if (data.success && data.data) {
+        setContactMessageCount(data.data.count || 0)
+      }
+    } catch (err) {
+      // Silently fail
+    }
+  }, [apiBaseUrl])
+
   useEffect(() => {
     fetchDemoRequestCount()
-    // Poll every 30 seconds for new demo requests
-    const interval = setInterval(fetchDemoRequestCount, 30000)
+    fetchContactMessageCount()
+    // Poll every 30 seconds
+    const interval = setInterval(() => {
+      fetchDemoRequestCount()
+      fetchContactMessageCount()
+    }, 30000)
     return () => clearInterval(interval)
-  }, [fetchDemoRequestCount])
+  }, [fetchDemoRequestCount, fetchContactMessageCount])
 
   const getHeaderClass = () => {
     if (isBlackMode) return 'bg-black/20 backdrop-blur-lg rounded-2xl p-4 mb-6 mx-6 mt-4 border border-gray-800'
@@ -158,6 +181,25 @@ const AdminHeader = ({ activeTab, onToggleMobileSidebar }) => {
             {demoRequestCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-green-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
                 {demoRequestCount > 99 ? '99+' : demoRequestCount}
+              </span>
+            )}
+          </button>
+
+          {/* Contact Messages */}
+          <button
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('setActiveTab', { detail: 'notifications' }))
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('setNotificationSubTab', { detail: 'inbox' }))
+              }, 200)
+            }}
+            className={`${getIconClass()} relative`}
+            title={`Contact Messages${contactMessageCount > 0 ? ` (${contactMessageCount} unread)` : ''}`}
+          >
+            <Mail className="w-5 h-5" />
+            {contactMessageCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-orange-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                {contactMessageCount > 99 ? '99+' : contactMessageCount}
               </span>
             )}
           </button>

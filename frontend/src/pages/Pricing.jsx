@@ -407,13 +407,19 @@ const Pricing = () => {
                 >
                   Blog
                 </button>
-                <button 
+                <button
                   onClick={() => navigate('/pricing')}
                   className="text-white font-semibold transition-colors"
                 >
                   Pricing
                 </button>
-                <button 
+                <button
+                  onClick={() => navigate('/contact')}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  Contact
+                </button>
+                <button
                   onClick={() => navigate('/login')}
                   className="text-white/80 hover:text-white transition-colors"
                 >
@@ -480,7 +486,7 @@ const Pricing = () => {
                 >
                   Blog
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     navigate('/pricing')
                     setMenuOpen(false)
@@ -489,7 +495,16 @@ const Pricing = () => {
                 >
                   Pricing
                 </button>
-                <button 
+                <button
+                  onClick={() => {
+                    navigate('/contact')
+                    setMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white/80 hover:text-white hover:bg-white/10"
+                >
+                  Contact
+                </button>
+                <button
                   onClick={() => {
                     navigate('/login')
                     setMenuOpen(false)

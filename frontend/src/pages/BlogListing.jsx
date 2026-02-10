@@ -102,6 +102,7 @@ const BlogListing = () => {
               <a href="/#educational-content" className="text-white/80 hover:text-white transition-colors text-lg">Learn</a>
               <a href="/#pricing" className="text-white/80 hover:text-white transition-colors text-lg">Pricing</a>
               <a href="/blog" className="text-white font-semibold text-lg">Blog</a>
+              <a href="/contact" className="text-white/80 hover:text-white transition-colors text-lg">Contact</a>
               <button onClick={() => navigate('/login')} className="text-white/80 hover:text-white transition-colors text-lg">Login</button>
               <button
                 onClick={() => navigate('/signup')}
@@ -163,6 +164,15 @@ const BlogListing = () => {
                 className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white hover:bg-white/10"
               >
                 Blog
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/contact')
+                  setMenuOpen(false)
+                }}
+                className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white/80 hover:text-white hover:bg-white/10"
+              >
+                Contact
               </button>
               <button
                 onClick={() => {

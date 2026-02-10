@@ -70,6 +70,7 @@ const Features = lazy(() => import('./pages/Features'))
 const HowItWorks = lazy(() => import('./pages/HowItWorks'))
 const Learn = lazy(() => import('./pages/Learn'))
 const Pricing = lazy(() => import('./pages/Pricing'))
+const ContactUs = lazy(() => import('./pages/ContactUs'))
 const SubscriptionSuccess = lazy(() => import('./pages/SubscriptionSuccess'))
 const SubscriptionCancel = lazy(() => import('./pages/SubscriptionCancel'))
 const SignupWizard = lazy(() => import('./components/signup/SignupWizard'))
@@ -286,6 +287,7 @@ const AppRoutes = () => {
         <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/learn" element={<Learn />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/contact" element={<ContactUs />} />
         <Route path="/subscription/success" element={<SubscriptionSuccess />} />
         <Route path="/subscription/cancel" element={<SubscriptionCancel />} />
 

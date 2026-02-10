@@ -26,6 +26,12 @@ const NotificationsCenter = ({ user }) => {
   const [messageFilter, setMessageFilter] = useState('all')
   const [messageSearchTerm, setMessageSearchTerm] = useState('')
 
+  // Contact Inbox state
+  const [selectedContactMessage, setSelectedContactMessage] = useState(null)
+  const [contactReplyText, setContactReplyText] = useState('')
+  const [contactFilter, setContactFilter] = useState('all')
+  const [contactSearchTerm, setContactSearchTerm] = useState('')
+
   // Campaign form state
   const [campaignForm, setCampaignForm] = useState({
     name: '',
@@ -167,6 +173,105 @@ const NotificationsCenter = ({ user }) => {
 
   const deliveryLogs = deliveryLogsData?.logs || []
   const deliveryStats = deliveryLogsData?.stats || { totalSent: 0, delivered: 0, bounced: 0, failed: 0 }
+
+  // Contact Inbox data
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5111'
+  const { data: contactMessagesData, isLoading: isContactLoading } = useQuery({
+    queryKey: ['admin-contact-messages'],
+    queryFn: async () => {
+      try {
+        const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+        const response = await fetch(`${apiBaseUrl}/api/admin/contact-messages`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          return data.success ? data.data : []
+        }
+        return []
+      } catch (error) {
+        console.error('Failed to load contact messages:', error)
+        return []
+      }
+    },
+    staleTime: 30000,
+    gcTime: 300000,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: false,
+    enabled: activeTab === 'inbox'
+  })
+
+  const contactMessages = contactMessagesData || []
+
+  const contactReplyMutation = useMutation({
+    mutationFn: async ({ messageId, reply, status, adminNotes }) => {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const response = await fetch(`${apiBaseUrl}/api/admin/contact-messages/${messageId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status, admin_reply: reply || '', admin_notes: adminNotes || '' })
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-contact-messages'] })
+      setSelectedContactMessage(null)
+      setContactReplyText('')
+    }
+  })
+
+  const contactDeleteMutation = useMutation({
+    mutationFn: async (messageId) => {
+      const token = localStorage.getItem('kamioi_admin_token') || localStorage.getItem('authToken') || 'admin_token_3'
+      const response = await fetch(`${apiBaseUrl}/api/admin/contact-messages/${messageId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-contact-messages'] })
+      setSelectedContactMessage(null)
+    }
+  })
+
+  const contactStats = useMemo(() => {
+    return {
+      total: contactMessages.length,
+      unread: contactMessages.filter(m => m.status === 'unread').length,
+      replied: contactMessages.filter(m => m.status === 'replied').length,
+      archived: contactMessages.filter(m => m.status === 'archived').length
+    }
+  }, [contactMessages])
+
+  const filteredContactMessages = useMemo(() => {
+    let msgs = [...contactMessages]
+    if (contactFilter !== 'all') {
+      msgs = msgs.filter(m => m.status === contactFilter)
+    }
+    if (contactSearchTerm) {
+      const term = contactSearchTerm.toLowerCase()
+      msgs = msgs.filter(m =>
+        m.name?.toLowerCase().includes(term) ||
+        m.email?.toLowerCase().includes(term) ||
+        m.subject?.toLowerCase().includes(term) ||
+        m.message?.toLowerCase().includes(term)
+      )
+    }
+    return msgs
+  }, [contactMessages, contactFilter, contactSearchTerm])
+
+  // Listen for sub-tab navigation from header
+  useEffect(() => {
+    const handleSetSubTab = (e) => {
+      if (e.detail) setActiveTab(e.detail)
+    }
+    window.addEventListener('setNotificationSubTab', handleSetSubTab)
+    return () => window.removeEventListener('setNotificationSubTab', handleSetSubTab)
+  }, [])
 
   // 🚀 PERFORMANCE FIX: Dispatch page load completion event when data is loaded
   useEffect(() => {
@@ -440,6 +545,7 @@ const NotificationsCenter = ({ user }) => {
         <div className={`flex space-x-1 rounded-lg p-1 ${isLightMode ? 'bg-gray-100' : 'bg-white/5'}`}>
           {[
             { id: 'notifications', label: 'Notifications', icon: Bell },
+            { id: 'inbox', label: 'Inbox', icon: Mail },
             { id: 'messaging', label: 'Messaging Center', icon: MessageSquare },
             { id: 'composer', label: 'Composer' },
             { id: 'campaigns', label: 'Campaigns' },
@@ -538,6 +644,220 @@ const NotificationsCenter = ({ user }) => {
                 ))
               )}
             </div>
+        </div>
+      )}
+
+      {activeTab === 'inbox' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className={`text-2xl font-bold ${getTextClass()} mb-2`}>Contact Inbox</h3>
+            <p className={getSubtextClass()}>Messages submitted through the contact form</p>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {[
+              { label: 'Total Messages', value: contactStats.total, icon: Mail, color: 'blue' },
+              { label: 'Unread', value: contactStats.unread, icon: AlertCircle, color: 'red' },
+              { label: 'Replied', value: contactStats.replied, icon: CheckCircle, color: 'green' },
+              { label: 'Archived', value: contactStats.archived, icon: Shield, color: 'gray' }
+            ].map((stat, i) => (
+              <div key={i} className={getCardClass() + ' rounded-xl p-4'}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={getSubtextClass() + ' text-sm'}>{stat.label}</p>
+                    <p className={`text-2xl font-bold ${stat.color === 'red' && stat.value > 0 ? 'text-red-400' : stat.color === 'green' ? 'text-green-400' : getTextClass()}`}>
+                      {stat.value}
+                    </p>
+                  </div>
+                  <stat.icon className={`w-8 h-8 ${stat.color === 'blue' ? 'text-blue-400' : stat.color === 'red' ? 'text-red-400' : stat.color === 'green' ? 'text-green-400' : 'text-gray-400'} opacity-60`} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex items-center space-x-2">
+              <Filter className={`w-4 h-4 ${getSubtextClass()}`} />
+              <select
+                value={contactFilter}
+                onChange={(e) => setContactFilter(e.target.value)}
+                className={`${isLightMode ? 'bg-white border-gray-300 text-gray-800' : 'bg-white/10 border-white/20 text-white'} border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              >
+                <option value="all">All Messages</option>
+                <option value="unread">Unread</option>
+                <option value="read">Read</option>
+                <option value="replied">Replied</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div className="flex-1 relative">
+              <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${getSubtextClass()}`} />
+              <input
+                type="text"
+                placeholder="Search messages..."
+                value={contactSearchTerm}
+                onChange={(e) => setContactSearchTerm(e.target.value)}
+                className={`w-full pl-10 pr-4 py-2 ${isLightMode ? 'bg-white border-gray-300 text-gray-800 placeholder-gray-400' : 'bg-white/10 border-white/20 text-white placeholder-gray-500'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              />
+            </div>
+          </div>
+
+          {/* Messages List */}
+          <div className={getCardClass() + ' rounded-xl p-6'}>
+            <h4 className={`text-lg font-semibold ${getTextClass()} mb-4`}>Messages</h4>
+            {isContactLoading ? (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className={getSubtextClass()}>Loading messages...</p>
+              </div>
+            ) : filteredContactMessages.length === 0 ? (
+              <div className="text-center py-8">
+                <Mail className={`w-12 h-12 mx-auto mb-3 ${getSubtextClass()} opacity-40`} />
+                <p className={getSubtextClass()}>No contact messages found</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredContactMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`p-4 rounded-lg cursor-pointer transition-all duration-200 ${
+                      isLightMode
+                        ? `hover:bg-gray-100 ${msg.status === 'unread' ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-gray-50'}`
+                        : `hover:bg-white/10 ${msg.status === 'unread' ? 'bg-blue-500/10 border-l-4 border-blue-500' : 'bg-white/5'}`
+                    }`}
+                    onClick={() => setSelectedContactMessage(msg)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-3 flex-1 min-w-0">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 ${
+                          msg.status === 'unread' ? 'bg-gradient-to-br from-blue-500 to-purple-500' : 'bg-gradient-to-br from-gray-500 to-gray-600'
+                        }`}>
+                          {msg.name?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className={`font-semibold ${msg.status === 'unread' ? getTextClass() : getSubtextClass()}`}>{msg.name}</span>
+                            <span className={`text-xs ${getSubtextClass()}`}>{msg.email}</span>
+                          </div>
+                          <p className={`font-medium text-sm mb-1 ${getTextClass()}`}>{msg.subject}</p>
+                          <p className={`text-sm truncate ${getSubtextClass()}`}>{msg.message}</p>
+                          <div className="flex items-center space-x-3 mt-2">
+                            <span className={`text-xs ${getSubtextClass()}`}>
+                              {msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              msg.status === 'unread' ? 'bg-blue-500/20 text-blue-400' :
+                              msg.status === 'read' ? 'bg-yellow-500/20 text-yellow-400' :
+                              msg.status === 'replied' ? 'bg-green-500/20 text-green-400' :
+                              msg.status === 'archived' ? 'bg-gray-500/20 text-gray-400' : ''
+                            }`}>
+                              {msg.status?.charAt(0)?.toUpperCase() + msg.status?.slice(1)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Message Detail / Reply Modal */}
+          {selectedContactMessage && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedContactMessage(null)}>
+              <div className={`${isLightMode ? 'bg-white' : 'bg-gray-900'} rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className={`text-xl font-bold ${getTextClass()}`}>{selectedContactMessage.subject}</h3>
+                    <p className={getSubtextClass()}>From: {selectedContactMessage.name} ({selectedContactMessage.email})</p>
+                    <p className={`text-xs ${getSubtextClass()}`}>
+                      {selectedContactMessage.created_at ? new Date(selectedContactMessage.created_at).toLocaleString() : ''}
+                    </p>
+                  </div>
+                  <button onClick={() => setSelectedContactMessage(null)} className={`${getSubtextClass()} hover:${getTextClass()}`}>
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className={`p-4 rounded-lg mb-4 ${isLightMode ? 'bg-gray-50' : 'bg-white/5'}`}>
+                  <p className={`${getTextClass()} whitespace-pre-wrap`}>{selectedContactMessage.message}</p>
+                </div>
+
+                {selectedContactMessage.admin_reply && (
+                  <div className={`p-4 rounded-lg mb-4 border-l-4 border-green-500 ${isLightMode ? 'bg-green-50' : 'bg-green-500/10'}`}>
+                    <p className={`text-sm font-semibold ${getTextClass()} mb-1`}>Your Reply:</p>
+                    <p className={`${getTextClass()} whitespace-pre-wrap text-sm`}>{selectedContactMessage.admin_reply}</p>
+                    {selectedContactMessage.replied_at && (
+                      <p className={`text-xs mt-2 ${getSubtextClass()}`}>Replied: {new Date(selectedContactMessage.replied_at).toLocaleString()}</p>
+                    )}
+                  </div>
+                )}
+
+                {selectedContactMessage.status !== 'replied' && (
+                  <div className="mb-4">
+                    <label className={`block text-sm font-medium ${getTextClass()} mb-2`}>Reply</label>
+                    <textarea
+                      value={contactReplyText}
+                      onChange={(e) => setContactReplyText(e.target.value)}
+                      placeholder="Type your reply..."
+                      rows={4}
+                      className={`w-full p-3 rounded-lg ${isLightMode ? 'bg-gray-50 border-gray-300 text-gray-800 placeholder-gray-400' : 'bg-white/5 border-white/20 text-white placeholder-gray-500'} border focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none`}
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {selectedContactMessage.status === 'unread' && (
+                    <button
+                      onClick={() => contactReplyMutation.mutate({ messageId: selectedContactMessage.id, status: 'read' })}
+                      className="px-4 py-2 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 rounded-lg text-sm transition-colors"
+                    >
+                      Mark as Read
+                    </button>
+                  )}
+                  {selectedContactMessage.status !== 'replied' && (
+                    <button
+                      onClick={() => {
+                        if (contactReplyText.trim()) {
+                          contactReplyMutation.mutate({
+                            messageId: selectedContactMessage.id,
+                            reply: contactReplyText,
+                            status: 'replied'
+                          })
+                        }
+                      }}
+                      disabled={!contactReplyText.trim() || contactReplyMutation.isPending}
+                      className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>{contactReplyMutation.isPending ? 'Sending...' : 'Send Reply'}</span>
+                    </button>
+                  )}
+                  {selectedContactMessage.status !== 'archived' && (
+                    <button
+                      onClick={() => contactReplyMutation.mutate({ messageId: selectedContactMessage.id, status: 'archived' })}
+                      className="px-4 py-2 bg-gray-500/20 text-gray-400 hover:bg-gray-500/30 rounded-lg text-sm transition-colors"
+                    >
+                      Archive
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete this message?')) {
+                        contactDeleteMutation.mutate(selectedContactMessage.id)
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
