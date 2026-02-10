@@ -25954,6 +25954,247 @@ def delete_demo_request(request_id):
 
 
 # ============================================================================
+# CONTACT MESSAGES ENDPOINTS
+# ============================================================================
+
+@app.route('/api/contact', methods=['POST'])
+def submit_contact_message():
+    """Submit a contact message (public endpoint)"""
+    try:
+        data = request.get_json() or {}
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip().lower()
+        subject = data.get('subject', '').strip()
+        message = data.get('message', '').strip()
+
+        if not name or not email or not subject or not message:
+            return jsonify({'success': False, 'error': 'Name, email, subject, and message are required'}), 400
+
+        import re
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+            return jsonify({'success': False, 'error': 'Invalid email address'}), 400
+
+        # Honeypot check
+        if data.get('website'):
+            return jsonify({'success': True, 'message': 'Thank you for contacting us!'})
+
+        ip_address = request.remote_addr or ''
+        user_agent = request.headers.get('User-Agent', '')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Create contact_messages table if not exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                subject VARCHAR(500) NOT NULL,
+                message TEXT NOT NULL,
+                status VARCHAR(50) DEFAULT 'unread',
+                admin_notes TEXT,
+                admin_reply TEXT,
+                replied_at TIMESTAMP,
+                ip_address VARCHAR(50),
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        cursor.execute("""
+            INSERT INTO contact_messages (name, email, subject, message, status, ip_address, user_agent, updated_at)
+            VALUES (%s, %s, %s, %s, 'unread', %s, %s, CURRENT_TIMESTAMP)
+            RETURNING id
+        """, (name, email, subject, message, ip_address, user_agent))
+
+        new_id = cursor.fetchone()[0]
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Thank you for contacting us! We will get back to you shortly.',
+            'data': {'id': new_id}
+        })
+
+    except Exception as e:
+        print(f"Error submitting contact message: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/contact-messages', methods=['GET'])
+def get_contact_messages():
+    """Get all contact messages (admin only)"""
+    try:
+        conn = get_db_connection()
+        cursor = get_db_cursor(conn, dict_cursor=True)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                subject VARCHAR(500) NOT NULL,
+                message TEXT NOT NULL,
+                status VARCHAR(50) DEFAULT 'unread',
+                admin_notes TEXT,
+                admin_reply TEXT,
+                replied_at TIMESTAMP,
+                ip_address VARCHAR(50),
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        status_filter = request.args.get('status', '')
+
+        if status_filter:
+            cursor.execute("""
+                SELECT id, name, email, subject, message, status, admin_notes, admin_reply, replied_at, ip_address, created_at, updated_at
+                FROM contact_messages
+                WHERE status = %s
+                ORDER BY created_at DESC
+            """, (status_filter,))
+        else:
+            cursor.execute("""
+                SELECT id, name, email, subject, message, status, admin_notes, admin_reply, replied_at, ip_address, created_at, updated_at
+                FROM contact_messages
+                ORDER BY created_at DESC
+            """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        messages_list = []
+        for row in rows:
+            messages_list.append({
+                'id': row['id'],
+                'name': row['name'],
+                'email': row['email'],
+                'subject': row['subject'],
+                'message': row['message'],
+                'status': row['status'],
+                'admin_notes': row['admin_notes'],
+                'admin_reply': row['admin_reply'],
+                'replied_at': row['replied_at'].isoformat() if row['replied_at'] else None,
+                'ip_address': row['ip_address'],
+                'created_at': row['created_at'].isoformat() if row['created_at'] else None,
+                'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None
+            })
+
+        return jsonify({
+            'success': True,
+            'data': messages_list
+        })
+
+    except Exception as e:
+        print(f"Error getting contact messages: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/contact-messages/unread-count', methods=['GET'])
+def get_unread_contact_messages_count():
+    """Get count of unread contact messages (for notification badge)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                subject VARCHAR(500) NOT NULL,
+                message TEXT NOT NULL,
+                status VARCHAR(50) DEFAULT 'unread',
+                admin_notes TEXT,
+                admin_reply TEXT,
+                replied_at TIMESTAMP,
+                ip_address VARCHAR(50),
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        cursor.execute("SELECT COUNT(*) FROM contact_messages WHERE status = 'unread'")
+        count = cursor.fetchone()[0]
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'data': {'count': count}
+        })
+
+    except Exception as e:
+        return jsonify({'success': True, 'data': {'count': 0}})
+
+
+@app.route('/api/admin/contact-messages/<int:message_id>', methods=['PUT'])
+def update_contact_message(message_id):
+    """Update a contact message (status, notes, reply)"""
+    try:
+        data = request.get_json() or {}
+        new_status = data.get('status', 'read')
+        admin_notes = data.get('admin_notes', '')
+        admin_reply = data.get('admin_reply', '')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        if new_status == 'replied' and admin_reply:
+            cursor.execute("""
+                UPDATE contact_messages
+                SET status = %s, admin_notes = %s, admin_reply = %s, replied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (new_status, admin_notes, admin_reply, message_id))
+        else:
+            cursor.execute("""
+                UPDATE contact_messages
+                SET status = %s, admin_notes = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (new_status, admin_notes, message_id))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Contact message updated successfully'
+        })
+
+    except Exception as e:
+        print(f"Error updating contact message: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/contact-messages/<int:message_id>', methods=['DELETE'])
+def delete_contact_message(message_id):
+    """Delete a contact message"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM contact_messages WHERE id = %s", (message_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Contact message deleted successfully'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
 # SEO & GEO ANALYTICS ENDPOINTS
 # ============================================================================
 
