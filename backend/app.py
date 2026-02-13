@@ -16845,6 +16845,29 @@ def submit_contact_message():
             conn.commit()
             conn.close()
 
+        # Forward to Donkey Ideas centralized inbox
+        try:
+            import requests as req
+            donkey_api_key = os.environ.get('DONKEY_IDEAS_CONTACT_API_KEY', '')
+            if donkey_api_key:
+                req.post(
+                    'https://www.donkeyideas.com/api/contact',
+                    json={
+                        'name': data.get('name', '').strip(),
+                        'email': data.get('email', '').strip().lower(),
+                        'message': f"[{data.get('subject', '')}] {data.get('message', '').strip()}",
+                        'source': 'kamioi',
+                    },
+                    headers={
+                        'Content-Type': 'application/json',
+                        'x-api-key': donkey_api_key,
+                    },
+                    timeout=5,
+                )
+        except Exception as fwd_err:
+            sys.stdout.write(f"[WARN] Forward to Donkey Ideas failed: {str(fwd_err)}\n")
+            sys.stdout.flush()
+
         return jsonify({
             'success': True,
             'message': 'Thank you for contacting us! We will get back to you shortly.',
